@@ -80,4 +80,11 @@ export const fileService = {
   async deleteFile(fileId: string): Promise<void> {
     await API.delete<ApiResponse<void>>(`/files/${encodeURIComponent(fileId)}`)
   },
+
+  /**
+   * Generates the API content endpoint URL for a given file ID.
+   */
+  getFileContentUrl(fileId: string): string {
+    return `/api/files/${encodeURIComponent(fileId)}/content`
+  },
 }

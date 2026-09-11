@@ -81,7 +81,7 @@ public class FileServiceImpl implements FileService {
 
     @Override
     @NonNull
-    public FileContent getFileContent(@NonNull String fileId, @NonNull String authenticatedUserId) {
+    public FileContent getFileContent(@NonNull String fileId) {
         FileMetadata metadata = findFileMetadataById(fileId);
         Path filePath = Paths.get(metadata.getStoragePath()).toAbsolutePath().normalize();
 
@@ -98,6 +98,12 @@ public class FileServiceImpl implements FileService {
             log.error("Failed to load file resource for path [{}]: {}", filePath, e.getMessage());
             throw new InternalServerException("Could not read file resource.");
         }
+    }
+
+    @Override
+    @NonNull
+    public FileContent getFileContent(@NonNull String fileId, @NonNull String authenticatedUserId) {
+        return getFileContent(fileId);
     }
 
     @Override

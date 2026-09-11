@@ -8,6 +8,7 @@ export interface FileMetadata {
   storageType: FileStorageType
   ownerId: string
   createdAt: string
-  updatedAt: string
   expiresAt: string | null
 }
+
+export type FileResponse = FileMetadata

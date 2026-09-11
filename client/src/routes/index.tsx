@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import {
   Card,
   CardContent,
@@ -7,8 +7,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { CheckCircle2 } from "lucide-react"
+import { buttonVariants } from "@/components/ui/button"
+import { CheckCircle2, Edit3, Shield } from "lucide-react"
 import { Logo } from "@/components/logo"
 
 export const Route = createFileRoute("/")({
@@ -39,12 +39,28 @@ function HomeComponent() {
             shadcn UI.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Backend infrastructure and modern React frontend initialized and
-            ready for development.
+            Backend infrastructure, File Module, Monaco Markdown Editor, and
+            Assessment Platform frontend initialized.
           </p>
-          <Button className="w-full">Get Started</Button>
+          <div className="flex flex-col gap-2 pt-2">
+            <Link
+              to="/workspace"
+              className={buttonVariants({ className: "w-full gap-2" })}
+            >
+              <Edit3 className="h-4 w-4" /> Open Markdown Workspace
+            </Link>
+            <Link
+              to="/admin/login"
+              className={buttonVariants({
+                variant: "outline",
+                className: "w-full gap-2",
+              })}
+            >
+              <Shield className="h-4 w-4" /> Admin Portal
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </main>

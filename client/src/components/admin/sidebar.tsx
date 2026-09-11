@@ -13,6 +13,7 @@ import {
 import { Logo } from "@/components/logo"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { useAdmin } from "@/stores/auth-store"
 import { useLogout } from "@/hooks/use-auth"
 
@@ -150,7 +151,17 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => logoutMutation.mutate()}
+          onClick={() => {
+            logoutMutation.mutate(undefined, {
+              onSettled: () => {
+                toast.add({
+                  title: "Signed Out",
+                  description: "You have been signed out.",
+                  type: "info",
+                })
+              },
+            })
+          }}
           disabled={logoutMutation.isPending}
           className="w-full gap-2 border-border text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
         >

@@ -81,15 +81,12 @@ public class FileController {
     }
 
     /**
-     * Stream or download file contents.
+     * Stream or download file contents (public access for embedded browser media).
      */
     @GetMapping("/{id}/content")
     @NonNull
-    public ResponseEntity<Resource> getContent(
-            @PathVariable("id") @NonNull String id,
-            @NonNull Authentication authentication) {
-        String userId = getAuthenticatedUserId(authentication);
-        FileContent content = fileService.getFileContent(id, userId);
+    public ResponseEntity<Resource> getContent(@PathVariable("id") @NonNull String id) {
+        FileContent content = fileService.getFileContent(id);
 
         HttpHeaders headers = new HttpHeaders();
         try {

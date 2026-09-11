@@ -55,7 +55,8 @@ public class SecurityConfig {
                                 "/api/auth/admin/login",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
-                                "/actuator/health")
+                                "/actuator/health",
+                                "/api/files/*/content")
                         .permitAll()
                         .requestMatchers("/api/auth/me").authenticated()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

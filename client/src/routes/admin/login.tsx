@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAppForm } from "@/hooks/form/create-form-hooks"
 import { useLogin } from "@/hooks/use-auth"
 import { adminLoginSchema, emailSchema, passwordSchema } from "@/schemas/auth"
+import { toast } from "@/components/ui/toast"
 import type { ApiError } from "@/types/api"
 
 export const Route = createFileRoute("/admin/login")({
@@ -38,17 +39,27 @@ export function AdminLoginPage() {
     onSubmit: async ({ value }) => {
       setErrorMessage(null)
       try {
-        await loginMutation.mutateAsync({
+        const res = await loginMutation.mutateAsync({
           email: value.email,
           password: value.password,
+        })
+        toast.add({
+          title: "Welcome Back",
+          description: `Signed in as ${res?.admin?.name || "Administrator"}.`,
+          type: "success",
         })
         await navigate({ to: "/admin" })
       } catch (err: unknown) {
         const apiError = err as ApiError
-        setErrorMessage(
+        const message =
           apiError?.message ||
-            "Invalid credentials. Please verify and try again."
-        )
+          "Invalid credentials. Please verify and try again."
+        setErrorMessage(message)
+        toast.add({
+          title: "Authentication Failed",
+          description: message,
+          type: "error",
+        })
       }
     },
   })

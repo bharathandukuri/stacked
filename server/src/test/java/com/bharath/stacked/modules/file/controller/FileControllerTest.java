@@ -67,8 +67,8 @@ class FileControllerTest {
         when(fileService.uploadTemporaryFile(any(), eq("user-123"))).thenReturn(response);
 
         mockMvc.perform(multipart("/api/files/temporary")
-                        .file(file)
-                        .principal(auth))
+                .file(file)
+                .principal(auth))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value("file-1"))
@@ -89,8 +89,8 @@ class FileControllerTest {
         when(fileService.uploadPermanentFile(any(), eq("user-123"))).thenReturn(response);
 
         mockMvc.perform(multipart("/api/files/permanent")
-                        .file(file)
-                        .principal(auth))
+                .file(file)
+                .principal(auth))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value("file-2"))
@@ -108,7 +108,7 @@ class FileControllerTest {
         when(fileService.makePermanent("file-1", "user-123")).thenReturn(response);
 
         mockMvc.perform(post("/api/files/file-1/make-permanent")
-                        .principal(auth))
+                .principal(auth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.storageType").value("PERMANENT"));
@@ -125,22 +125,21 @@ class FileControllerTest {
         when(fileService.getFileMetadata("file-1", "user-123")).thenReturn(response);
 
         mockMvc.perform(get("/api/files/file-1")
-                        .principal(auth))
+                .principal(auth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value("file-1"));
     }
 
     @Test
-    @DisplayName("GET /api/files/{id}/content streams file resource")
+    @DisplayName("GET /api/files/{id}/content streams file resource without authentication")
     void getContent_Success() throws Exception {
         byte[] contentBytes = "file-binary-stream-data".getBytes();
         ByteArrayResource resource = new ByteArrayResource(contentBytes);
         FileContent fileContent = new FileContent(resource, "text/plain", "notes.txt", contentBytes.length);
 
-        when(fileService.getFileContent("file-1", "user-123")).thenReturn(fileContent);
+        when(fileService.getFileContent("file-1")).thenReturn(fileContent);
 
-        mockMvc.perform(get("/api/files/file-1/content")
-                        .principal(auth))
+        mockMvc.perform(get("/api/files/file-1/content"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "text/plain"))
                 .andExpect(header().string("Content-Length", String.valueOf(contentBytes.length)))
@@ -153,7 +152,7 @@ class FileControllerTest {
         doNothing().when(fileService).deleteFile("file-1", "user-123");
 
         mockMvc.perform(delete("/api/files/file-1")
-                        .principal(auth))
+                .principal(auth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
