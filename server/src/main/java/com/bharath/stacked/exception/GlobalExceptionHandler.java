@@ -6,6 +6,7 @@ import com.bharath.stacked.common.api.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.LinkedHashMap;
@@ -30,7 +32,9 @@ public class GlobalExceptionHandler {
      * Handles all custom application business exceptions.
      */
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex, HttpServletRequest request) {
+    @NonNull
+    public ResponseEntity<ApiResponse<Void>> handleAppException(@NonNull AppException ex,
+            @NonNull HttpServletRequest request) {
         log.warn("Application exception at [{} {}]: {} ({})",
                 request.getMethod(), request.getRequestURI(), ex.getMessage(), ex.getErrorCode().name());
 
@@ -49,8 +53,9 @@ public class GlobalExceptionHandler {
      * failures.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleMethodArgumentNotValid(
-            MethodArgumentNotValidException ex, HttpServletRequest request) {
+            @NonNull MethodArgumentNotValidException ex, @NonNull HttpServletRequest request) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
             fieldErrors.put(error.getField(), error.getDefaultMessage());
@@ -67,8 +72,9 @@ public class GlobalExceptionHandler {
      * (@RequestParam, @PathVariable).
      */
     @ExceptionHandler(HandlerMethodValidationException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleHandlerMethodValidation(
-            HandlerMethodValidationException ex, HttpServletRequest request) {
+            @NonNull HandlerMethodValidationException ex, @NonNull HttpServletRequest request) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         ex.getAllErrors().forEach(error -> {
             String field = error instanceof FieldError fe ? fe.getField() : "parameter";
@@ -87,8 +93,9 @@ public class GlobalExceptionHandler {
      * service layer or @Validated controllers).
      */
     @ExceptionHandler(ConstraintViolationException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(
-            ConstraintViolationException ex, HttpServletRequest request) {
+            @NonNull ConstraintViolationException ex, @NonNull HttpServletRequest request) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         ex.getConstraintViolations().forEach(violation -> {
             String propertyPath = violation.getPropertyPath().toString();
@@ -105,8 +112,9 @@ public class GlobalExceptionHandler {
      * Handles malformed or unparseable JSON payloads.
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(
-            HttpMessageNotReadableException ex, HttpServletRequest request) {
+            @NonNull HttpMessageNotReadableException ex, @NonNull HttpServletRequest request) {
         log.warn("Malformed HTTP message at [{} {}]: {}", request.getMethod(), request.getRequestURI(),
                 ex.getMessage());
 
@@ -123,8 +131,9 @@ public class GlobalExceptionHandler {
      * expected).
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatch(
-            MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+            @NonNull MethodArgumentTypeMismatchException ex, @NonNull HttpServletRequest request) {
         String requiredType = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown";
         String message = String.format("Parameter '%s' should be of type '%s'", ex.getName(), requiredType);
         log.warn("Parameter type mismatch at [{} {}]: {}", request.getMethod(), request.getRequestURI(), message);
@@ -137,8 +146,9 @@ public class GlobalExceptionHandler {
      * Handles HTTP method not supported (405).
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(
-            HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+            @NonNull HttpRequestMethodNotSupportedException ex, @NonNull HttpServletRequest request) {
         String message = String.format("HTTP method '%s' is not supported for this endpoint.", ex.getMethod());
         log.warn("Method not supported at [{} {}]: {}", request.getMethod(), request.getRequestURI(), message);
 
@@ -150,8 +160,9 @@ public class GlobalExceptionHandler {
      * Handles unsupported media types (415).
      */
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(
-            HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+            @NonNull HttpMediaTypeNotSupportedException ex, @NonNull HttpServletRequest request) {
         String message = String.format("Content-Type '%s' is not supported.", ex.getContentType());
         log.warn("Media type not supported at [{} {}]: {}", request.getMethod(), request.getRequestURI(), message);
 
@@ -163,8 +174,9 @@ public class GlobalExceptionHandler {
      * Handles Spring 404 NoResourceFoundException when a path is not matched.
      */
     @ExceptionHandler(NoResourceFoundException.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(
-            NoResourceFoundException ex, HttpServletRequest request) {
+            @NonNull NoResourceFoundException ex, @NonNull HttpServletRequest request) {
         String message = String.format("The requested path '%s' was not found on this server.",
                 request.getRequestURI());
         log.warn("No resource found for [{} {}]", request.getMethod(), request.getRequestURI());
@@ -174,11 +186,27 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles multipart file uploads exceeding the configured maximum size limit.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @NonNull
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceeded(
+            @NonNull MaxUploadSizeExceededException ex, @NonNull HttpServletRequest request) {
+        String message = "Uploaded file exceeds the maximum allowed size limit.";
+        log.warn("Max upload size exceeded at [{} {}]: {}", request.getMethod(), request.getRequestURI(),
+                ex.getMessage());
+
+        ApiError apiError = ApiError.of(ErrorCode.BAD_REQUEST.name(), message, request.getRequestURI());
+        return ApiResponse.error(apiError, HttpStatus.CONTENT_TOO_LARGE);
+    }
+
+    /**
      * Catch-all handler for unexpected internal server errors.
      */
     @ExceptionHandler(Exception.class)
+    @NonNull
     public ResponseEntity<ApiResponse<Void>> handleGenericException(
-            Exception ex, HttpServletRequest request) {
+            @NonNull Exception ex, @NonNull HttpServletRequest request) {
         log.error("Unhandled internal server error at [{} {}]: ", request.getMethod(), request.getRequestURI(), ex);
 
         ApiError apiError = ApiError.of(

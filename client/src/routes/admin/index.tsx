@@ -108,7 +108,7 @@ export function AdminDashboardPage() {
         {/* Dashboard Body */}
         <div className="space-y-6 p-8">
           {/* Welcome Banner */}
-          <div className="rounded-xl border border-border bg-gradient-to-r from-primary/10 via-background to-background p-6 shadow-sm">
+          <div className="rounded-xl border border-border bg-linear-to-r from-primary/10 via-background to-background p-6 shadow-sm">
             <div className="flex flex-col gap-1">
               <span className="text-xs font-semibold tracking-wider text-primary uppercase">
                 Administrator Portal
