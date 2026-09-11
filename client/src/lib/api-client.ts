@@ -2,13 +2,15 @@ import axios, {
   type AxiosError,
   type AxiosInstance,
   type AxiosResponse,
+  type InternalAxiosRequestConfig,
 } from "axios"
 import type { ApiError, ApiResponse } from "@/types/api"
+import { useAuthStore } from "@/stores/auth-store"
 
 /**
- * Default API Base URL. Uses environment variable or defaults to /api/v1.
+ * Default API Base URL. Uses environment variable or defaults to /api.
  */
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1"
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api"
 
 /**
  * Configured Axios instance with production defaults
@@ -16,6 +18,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1"
 export const API: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
+  withCredentials: true, // Enables sending and receiving HTTP-only cookies
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -72,9 +75,44 @@ function normalizeApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
 }
 
 /**
- * Response Interceptor
- * - Unwraps Axios response
- * - Emits auth:unauthorized event on 401
+ * Request Interceptor:
+ * Automatically attaches the Bearer token from the auth store.
+ */
+API.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = useAuthStore.getState().accessToken
+    if (token && !config.headers.get("Authorization")) {
+      config.headers.set("Authorization", `Bearer ${token}`)
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+/**
+ * Token Refresh Queue State
+ */
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}> = []
+
+const processQueue = (error: unknown, token: string | null = null) => {
+  failedQueue.forEach((promise) => {
+    if (error) {
+      promise.reject(error)
+    } else if (token) {
+      promise.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
+/**
+ * Response Interceptor:
+ * - Unwraps response
+ * - Handles token refresh mutex/queue on 401
  * - Normalizes errors into ApiError
  */
 API.interceptors.response.use(
@@ -87,12 +125,61 @@ API.interceptors.response.use(
     }
     return response
   },
-  (error: AxiosError<ApiResponse<unknown>>) => {
+  async (error: AxiosError<ApiResponse<unknown>>) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean
+    }
+
+    const isAuthEndpoint =
+      originalRequest?.url?.includes("/auth/admin/login") ||
+      originalRequest?.url?.includes("/auth/refresh")
+
+    // Attempt token refresh on 401 for protected endpoints
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthEndpoint
+    ) {
+      if (isRefreshing) {
+        return new Promise<string>((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        })
+          .then((newToken) => {
+            originalRequest.headers.set("Authorization", `Bearer ${newToken}`)
+            return API(originalRequest)
+          })
+          .catch((err) => Promise.reject(err))
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        const refreshResponse = await axios.post<
+          ApiResponse<{ accessToken: string }>
+        >(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true })
+
+        const newAccessToken = refreshResponse.data.data.accessToken
+        useAuthStore.getState().actions.setAccessToken(newAccessToken)
+
+        processQueue(null, newAccessToken)
+        originalRequest.headers.set("Authorization", `Bearer ${newAccessToken}`)
+        return API(originalRequest)
+      } catch (refreshErr) {
+        processQueue(refreshErr, null)
+        useAuthStore.getState().actions.clearAuth()
+        window.dispatchEvent(new CustomEvent("auth:unauthorized"))
+        return Promise.reject(normalizeApiError(error))
+      } finally {
+        isRefreshing = false
+      }
+    }
+
     const apiError = normalizeApiError(error)
 
-    if (error.response?.status === 401) {
-      localStorage.removeItem("auth_token")
-      window.dispatchEvent(new CustomEvent("auth:unauthorized"))
+    if (error.response?.status === 401 && isAuthEndpoint) {
+      useAuthStore.getState().actions.clearAuth()
     }
 
     if (import.meta.env.DEV) {
