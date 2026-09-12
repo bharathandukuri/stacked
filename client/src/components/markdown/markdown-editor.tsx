@@ -7,8 +7,6 @@ import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import type * as monaco from "monaco-editor"
-import { MonacoEditor } from "@/components/monaco"
-import type { MonacoEditorRef } from "@/components/monaco/types"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +34,7 @@ import {
 import { parseTanstackHotkeyToMonaco } from "./utils/hotkey-monaco"
 import { fileService } from "@/services/file-service"
 import { UploadCloud } from "lucide-react"
+import { MonacoEditor, type MonacoEditorRef } from "../monaco-editor"
 
 export function MarkdownEditor({
   value,
@@ -63,7 +62,6 @@ export function MarkdownEditor({
   const monacoRef = useRef<MonacoEditorRef | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Internal state when uncontrolled
   const [internalState, setInternalState] = useState<MarkdownEditorValue>(
     () => {
       if (value !== undefined) {
@@ -82,7 +80,6 @@ export function MarkdownEditor({
     }
   )
 
-  // Controlled vs uncontrolled resolution
   const isControlled = value !== undefined
   const currentState: MarkdownEditorValue = useMemo(() => {
     if (!isControlled) return internalState
@@ -95,19 +92,16 @@ export function MarkdownEditor({
     return value
   }, [isControlled, value, internalState])
 
-  // Ref tracking latest state to prevent closures from evaluating stale render state
   const latestStateRef = useRef<MarkdownEditorValue>(currentState)
   useEffect(() => {
     latestStateRef.current = currentState
   }, [currentState])
 
-  // Flag to suppress Monaco's onChange during programmatic insertions (images, links)
   const isProgrammaticEditRef = useRef(false)
 
   const content = currentState.content
   const uploadedImages = currentState.uploadedImages
 
-  // Dialog visibility states
   const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false)
   const [isImageUploadDialogOpen, setIsImageUploadDialogOpen] = useState(false)
   const [editingImageFile, setEditingImageFile] = useState<File | null>(null)
@@ -116,7 +110,6 @@ export function MarkdownEditor({
   const [selectedTextForLink, setSelectedTextForLink] = useState("")
   const [isUploadingDrop, setIsUploadingDrop] = useState(false)
 
-  // Sync state updater helper
   const updateState = useCallback(
     (updater: (prev: MarkdownEditorValue) => MarkdownEditorValue) => {
       const prevState = latestStateRef.current
@@ -139,7 +132,6 @@ export function MarkdownEditor({
     [updateState]
   )
 
-  // Execute toolbar action
   const handleExecuteAction = useCallback((action: ToolbarActionDef) => {
     const editor = monacoRef.current
     if (!editor) return
@@ -156,7 +148,6 @@ export function MarkdownEditor({
     if (action.type === "heading" && action.level) {
       const hashes = "#".repeat(action.level) + " "
       editor.replaceCurrentLine((line) => {
-        // Remove existing heading hashes if any
         const cleanLine = line.replace(/^#{1,6}\s*/, "")
         return `${hashes}${cleanLine || action.fallback || ""}`
       })
@@ -182,7 +173,6 @@ export function MarkdownEditor({
     }
   }, [])
 
-  // Open dialog helpers (wrapped in useCallback to safely use without ref access in render)
   const handleOpenLinkDialog = useCallback(() => {
     const text = monacoRef.current?.getSelectedText() ?? ""
     setSelectedTextForLink(text)
@@ -193,13 +183,11 @@ export function MarkdownEditor({
     setIsImageUploadDialogOpen(true)
   }, [])
 
-  // Native Monaco editor mount handler for instant keystroke binding
   const handleEditorMount = useCallback(
     (
       editor: monaco.editor.IStandaloneCodeEditor,
       monacoInstance: typeof monaco
     ) => {
-      // Dynamically register all defined toolbar action shortcuts into Monaco
       for (const action of TOOLBAR_ACTIONS) {
         if (action.shortcut) {
           const monacoKey = parseTanstackHotkeyToMonaco(
@@ -214,19 +202,16 @@ export function MarkdownEditor({
         }
       }
 
-      // Link dialog shortcut (Mod+K)
       const linkKey = parseTanstackHotkeyToMonaco(monacoInstance, "Mod+K")
       if (linkKey !== null) {
         editor.addCommand(linkKey, handleOpenLinkDialog)
       }
 
-      // Image upload dialog shortcut (Mod+Alt+I)
       const imageKey = parseTanstackHotkeyToMonaco(monacoInstance, "Mod+Alt+I")
       if (imageKey !== null) {
         editor.addCommand(imageKey, handleOpenImageDialog)
       }
 
-      // Save document shortcut (Mod+S)
       if (onSave) {
         const saveKey = parseTanstackHotkeyToMonaco(monacoInstance, "Mod+S")
         if (saveKey !== null) {
@@ -239,14 +224,12 @@ export function MarkdownEditor({
     [handleExecuteAction, handleOpenLinkDialog, handleOpenImageDialog, onSave]
   )
 
-  // Intelligent markdown keydown interceptor (list continuation, empty list exit, tab indent/outdent)
   const handleEditorKeyDown = useCallback(
     (
       e: monaco.IKeyboardEvent,
       editor: monaco.editor.IStandaloneCodeEditor,
       monacoInstance: typeof monaco
     ) => {
-      // Enter key: Intelligent Markdown list and blockquote continuation
       if (
         e.keyCode === monacoInstance.KeyCode.Enter &&
         !e.shiftKey &&
@@ -262,7 +245,6 @@ export function MarkdownEditor({
         }
       }
 
-      // Tab / Shift+Tab key on list items: Indent / Outdent
       if (
         e.keyCode === monacoInstance.KeyCode.Tab &&
         !e.ctrlKey &&
@@ -280,7 +262,6 @@ export function MarkdownEditor({
     []
   )
 
-  // Hotkey handlers using TanStack Hotkeys (with ignoreInputs: false so they fire across inputs/editor)
   useHotkeys(
     [
       ...TOOLBAR_ACTIONS.filter((a) => Boolean(a.shortcut)).map((action) => ({
@@ -320,7 +301,6 @@ export function MarkdownEditor({
     { ignoreInputs: false }
   )
 
-  // Helper to insert text into Monaco and immediately synchronize document content and tracked images
   const handleInsertText = useCallback(
     (textToInsert: string, newImage?: UploadedImage) => {
       const editor = monacoRef.current
@@ -361,7 +341,6 @@ export function MarkdownEditor({
     [updateState]
   )
 
-  // Handle image upload from files (drag-drop, paste, or dialog)
   const handleUploadImageFile = useCallback(
     async (file: File) => {
       if (!file.type.startsWith("image/")) {
@@ -379,7 +358,6 @@ export function MarkdownEditor({
         const fileResponse = await fileService.uploadTemporary(file)
         const newImage = createUploadedImageFromFileResponse(fileResponse)
 
-        // Insert markdown image tag and sync state
         const markdownTag = `\n![${file.name.replace(/\.[^/.]+$/, "")}](${newImage.url})\n`
         handleInsertText(markdownTag, newImage)
 
@@ -408,7 +386,6 @@ export function MarkdownEditor({
     [handleInsertText]
   )
 
-  // Drag and drop image upload handlers
   const handleDragOver = (e: React.DragEvent) => {
     if (readOnly) return
     if (e.dataTransfer.types.includes("Files")) {
@@ -431,7 +408,6 @@ export function MarkdownEditor({
     }
   }
 
-  // Paste image handler
   const handlePaste = async (e: React.ClipboardEvent) => {
     if (readOnly) return
     const items = e.clipboardData?.items
@@ -449,7 +425,6 @@ export function MarkdownEditor({
     }
   }
 
-  // Image insertion from ImageUploadDialog
   const handleImageDialogSubmit = useCallback(
     (result: ImageInsertResult) => {
       const imgMarkdown = result.markdown.startsWith("\n")
@@ -460,7 +435,6 @@ export function MarkdownEditor({
     [handleInsertText]
   )
 
-  // Delete image from session
   const handleDeleteSessionImage = useCallback(
     (fileId: string) => {
       updateState((prev) => ({
@@ -473,7 +447,6 @@ export function MarkdownEditor({
     [updateState]
   )
 
-  // Stats calculation
   const stats = useMemo(() => {
     const chars = content.length
     const words = content.trim() ? content.trim().split(/\s+/).length : 0
@@ -503,7 +476,6 @@ export function MarkdownEditor({
           className
         )}
       >
-        {/* Label & Description Header */}
         {(label || description || labelAction) && (
           <div className="flex shrink-0 items-center justify-between pb-1.5">
             <div className="space-y-0.5">
@@ -526,14 +498,12 @@ export function MarkdownEditor({
           </div>
         )}
 
-        {/* Editor Main Container */}
         <div
           className={cn(
             "relative flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-colors focus-within:border-primary/60",
             height === "100%" && "h-full min-h-0 flex-1"
           )}
         >
-          {/* Toolbar */}
           <MarkdownToolbar
             toolbar={toolbar}
             onExecuteAction={handleExecuteAction}
@@ -544,7 +514,6 @@ export function MarkdownEditor({
             disabled={readOnly || isLoading}
           />
 
-          {/* Editor Body */}
           <div
             style={{
               height: height === "100%" ? undefined : effectiveHeight,
@@ -577,7 +546,6 @@ export function MarkdownEditor({
               }}
             />
 
-            {/* Uploading Drag & Drop Overlay */}
             {isUploadingDrop && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-xs">
                 <Spinner className="h-6 w-6 text-primary" />
@@ -588,7 +556,6 @@ export function MarkdownEditor({
               </div>
             )}
 
-            {/* Loading Overlay */}
             {isLoading && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-xs">
                 <Spinner className="h-6 w-6 text-primary" />
@@ -596,7 +563,6 @@ export function MarkdownEditor({
             )}
           </div>
 
-          {/* Footer Status Bar */}
           <div className="flex flex-wrap items-center justify-between border-t border-border/80 bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground select-none">
             <div className="flex items-center gap-3">
               <span>{stats.lines} lines</span>
@@ -636,10 +602,8 @@ export function MarkdownEditor({
           </div>
         </div>
 
-        {/* Validator Message Slot */}
         {validator && <div className="pt-1">{validator}</div>}
 
-        {/* Dialogs */}
         <LinkDialog
           isOpen={isLinkDialogOpen}
           onClose={() => setIsLinkDialogOpen(false)}

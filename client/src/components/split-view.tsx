@@ -4,7 +4,22 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable"
 import { cn } from "@/lib/utils"
-import type { SplitViewProps } from "./types"
+
+export interface SplitViewProps {
+  firstPane: React.ReactNode
+  secondPane: React.ReactNode
+  orientation?: "horizontal" | "vertical"
+  defaultSize?: number
+  minSize?: number
+  maxSize?: number
+  withHandle?: boolean
+  collapsibleFirst?: boolean
+  collapsibleSecond?: boolean
+  onResize?: (sizes: number[]) => void
+  className?: string
+  firstPaneClassName?: string
+  secondPaneClassName?: string
+}
 
 export function SplitView({
   firstPane,

@@ -6,15 +6,7 @@ import rehypeKatex from "rehype-katex"
 import rehypeRaw from "rehype-raw"
 import "katex/dist/katex.min.css"
 import { cn } from "@/lib/utils"
-import {
-  CodeBlock,
-  TableRenderer,
-  TableHeaderRenderer,
-  TableRowRenderer,
-  TableHeadCellRenderer,
-  TableCellRenderer,
-  ImageRenderer,
-} from "./renderers"
+
 import {
   Info,
   CheckCircle2,
@@ -28,7 +20,24 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip"
-import type { MarkdownPreviewProps } from "./types"
+import {
+  TableCellRenderer,
+  TableHeadCellRenderer,
+  TableHeaderRenderer,
+  TableRenderer,
+  TableRowRenderer,
+} from "./renderers/table-renderer"
+import { ImageRenderer } from "./renderers/image-renderer"
+import { CodeBlock } from "./renderers/code-block"
+
+export interface MarkdownPreviewProps {
+  content?: string
+  value?: string
+  className?: string
+  emptyMessage?: string
+  allowHtml?: boolean
+  bordered?: boolean
+}
 
 export function MarkdownPreview({
   value,
@@ -95,7 +104,6 @@ export function MarkdownPreview({
             img: ImageRenderer,
 
             blockquote({ children, className, ...props }) {
-              // Check for GitHub-style alerts: > [!NOTE], > [!TIP], > [!WARNING], > [!IMPORTANT], > [!CAUTION]
               const childrenArray = React.Children.toArray(children)
               const firstChild = childrenArray[0]
               let firstLine = ""

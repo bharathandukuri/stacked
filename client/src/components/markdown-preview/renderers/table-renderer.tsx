@@ -70,7 +70,7 @@ export function TableHeadCellRenderer({
   return (
     <th
       className={cn(
-        "h-9 px-3 text-left align-middle text-xs font-bold text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-9 px-3 text-left align-middle text-xs font-bold text-foreground has-[[role=checkbox]]:pr-0",
         className
       )}
       {...props}
@@ -88,7 +88,7 @@ export function TableCellRenderer({
   return (
     <td
       className={cn(
-        "p-2.5 align-middle text-xs text-foreground/90 [&:has([role=checkbox])]:pr-0",
+        "p-2.5 align-middle text-xs text-foreground/90 has-[[role=checkbox]]:pr-0",
         className
       )}
       {...props}

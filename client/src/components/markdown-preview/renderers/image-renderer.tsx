@@ -86,7 +86,7 @@ export function ImageRenderer({
                   setHasError(true)
                 }}
                 className={cn(
-                  "inline-block h-auto max-h-[520px] max-w-full rounded-md border border-border bg-muted/20 object-contain shadow-xs transition-opacity duration-200",
+                  "inline-block h-auto max-h-130 max-w-full rounded-md border border-border bg-muted/20 object-contain shadow-xs transition-opacity duration-200",
                   isLoading ? "opacity-40" : "opacity-100",
                   className
                 )}

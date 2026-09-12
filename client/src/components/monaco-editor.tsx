@@ -4,7 +4,52 @@ import type * as monaco from "monaco-editor"
 import { Loader2 } from "lucide-react"
 import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
-import type { MonacoEditorProps, MonacoEditorRef } from "./types"
+
+export type MonacoTheme = "vs-dark" | "light" | "vs" | "hc-black" | "auto"
+
+export interface MonacoEditorRef {
+  getEditor: () => monaco.editor.IStandaloneCodeEditor | null
+  getValue: () => string
+  setValue: (value: string) => void
+  focus: () => void
+  getSelection: () => monaco.Selection | null
+  getSelectedText: () => string
+  setSelection: (selection: monaco.IRange) => void
+  insertText: (text: string) => void
+  wrapSelection: (before: string, after: string, defaultText?: string) => void
+  replaceCurrentLine: (updater: (lineText: string) => string) => void
+  triggerAction: (actionId: string) => void
+}
+
+export interface MonacoEditorProps {
+  value?: string
+  defaultValue?: string
+  onChange?: (value: string) => void
+  onBlur?: () => void
+  language?: string
+  theme?: MonacoTheme
+  readOnly?: boolean
+  height?: string | number
+  width?: string | number
+  placeholder?: string
+  options?: monaco.editor.IStandaloneEditorConstructionOptions
+  onMount?: (
+    editor: monaco.editor.IStandaloneCodeEditor,
+    monacoInstance: typeof monaco
+  ) => void
+  keybindings?: Array<{
+    key: number
+    handler: (editor: monaco.editor.IStandaloneCodeEditor) => void
+  }>
+  onKeyDown?: (
+    e: monaco.IKeyboardEvent,
+    editor: monaco.editor.IStandaloneCodeEditor,
+    monacoInstance: typeof monaco
+  ) => void
+  className?: string
+  bordered?: boolean
+  isLoading?: boolean
+}
 
 export const MonacoEditor = React.forwardRef<
   MonacoEditorRef,
@@ -39,7 +84,6 @@ export const MonacoEditor = React.forwardRef<
   const [contentLeft, setContentLeft] = React.useState(54)
   const { theme: appTheme } = useTheme()
 
-  // Determine resolved Monaco theme
   const resolvedTheme = React.useMemo(() => {
     if (themeProp && themeProp !== "auto") {
       return themeProp
@@ -55,7 +99,6 @@ export const MonacoEditor = React.forwardRef<
     return "light"
   }, [themeProp, appTheme])
 
-  // Imperative ref methods
   React.useImperativeHandle(
     ref,
     () => ({
@@ -142,7 +185,6 @@ export const MonacoEditor = React.forwardRef<
         ])
         editor.pushUndoStop()
 
-        // Position cursor/selection inside wrapped text if no initial selection
         if (!selectedText) {
           const startCol = selection.startColumn + before.length
           const endCol = startCol + textToWrap.length
@@ -195,28 +237,24 @@ export const MonacoEditor = React.forwardRef<
     editorRef.current = editor
     monacoRef.current = monacoInstance
 
-    // Bind custom keybindings if provided
     if (keybindings && keybindings.length > 0) {
       for (const kb of keybindings) {
         editor.addCommand(kb.key, () => kb.handler(editor))
       }
     }
 
-    // Register blur handler
     if (onBlur) {
       editor.onDidBlurEditorText(() => {
         onBlur()
       })
     }
 
-    // Register keydown handler
     if (onKeyDown) {
       editor.onKeyDown((e) => {
         onKeyDown(e, editor, monacoInstance)
       })
     }
 
-    // Update content offset for placeholder alignment
     const initialLayout = editor.getLayoutInfo()
     if (initialLayout.contentLeft > 0) {
       setContentLeft(initialLayout.contentLeft)
@@ -227,7 +265,6 @@ export const MonacoEditor = React.forwardRef<
       }
     })
 
-    // Ensure editor updates layout when container is resized (window resize, split-view drag)
     const resizeObserver = new ResizeObserver(() => {
       editor.layout()
     })
@@ -304,7 +341,7 @@ export const MonacoEditor = React.forwardRef<
           onChange={(val) => onChange?.(val ?? "")}
           onMount={handleEditorMount}
           loading={
-            <div className="flex h-full min-h-[200px] w-full items-center justify-center bg-muted/10 text-xs text-muted-foreground">
+            <div className="flex h-full min-h-50 w-full items-center justify-center bg-muted/10 text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span>Loading Editor...</span>
