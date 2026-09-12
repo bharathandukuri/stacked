@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
   const port = Number(env.PORT || env.VITE_PORT || 3000)
 
   return {
-    plugins: [react(), tailwindcss(), tanstackRouter()],
+    plugins: [tanstackRouter(), react(), tailwindcss()],
     resolve: {
       alias: {
         "@": path.resolve(import.meta.dirname, "./src"),

@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   ShieldCheck,
+  Code2,
 } from "lucide-react"
 
 import { Logo } from "@/components/logo"
@@ -31,6 +32,12 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
       icon: LayoutDashboard,
       to: "/admin",
       active: currentPath === "/admin",
+    },
+    {
+      title: "Problem Studio",
+      icon: Code2,
+      to: "/admin/coding-problem/studio/new",
+      active: currentPath.startsWith("/admin/coding-problem/studio"),
     },
     {
       title: "Assessments",

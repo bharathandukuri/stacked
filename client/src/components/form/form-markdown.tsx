@@ -2,15 +2,15 @@ import { useState } from "react"
 import { Edit3, Columns, Eye } from "lucide-react"
 import { FormBase, type FormControlProps } from "@/components/form/form-base"
 import { useFieldContext } from "@/hooks/form/create-form-hooks"
-import {
-  MarkdownEditor,
-  type MarkdownEditorValue,
-  type MarkdownViewMode,
-  type ToolbarConfig,
-} from "@/components/markdown"
-import { MarkdownPreview } from "@/components/markdown-preview"
-import { SplitView } from "@/components/split-view"
+import { SplitView } from "../split-view"
+import type {
+  MarkdownEditorValue,
+  MarkdownViewMode,
+  ToolbarConfig,
+} from "../markdown/types"
 import { cn } from "@/lib/utils"
+import { MarkdownEditor } from "../markdown/markdown-editor"
+import { MarkdownPreview } from "../markdown-preview/markdown-preview"
 
 export interface FormMarkdownProps extends FormControlProps {
   placeholder?: string

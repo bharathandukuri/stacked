@@ -46,10 +46,10 @@ function HomeComponent() {
           </p>
           <div className="flex flex-col gap-2 pt-2">
             <Link
-              to="/workspace"
+              to="/admin/coding-problem/studio/new"
               className={buttonVariants({ className: "w-full gap-2" })}
             >
-              <Edit3 className="h-4 w-4" /> Open Markdown Workspace
+              <Edit3 className="h-4 w-4" /> Coding Problem Studio
             </Link>
             <Link
               to="/admin/login"
