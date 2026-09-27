@@ -48,10 +48,66 @@ services:
       retries: 5
       start_period: 5s
 
+  # ----------------------------------------------------------------------------
+  # Docker Sandbox Service (Docker-in-Docker Daemon)
+  # Provides isolated container sandboxing on port 2375 without requiring host docker setup
+  # ----------------------------------------------------------------------------
+  docker-sandbox:
+    image: docker:27-dind
+    container_name: stacked-docker-sandbox
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    ports:
+      - "${JUDGE_DOCKER_PORT:-2375}:2375"
+    volumes:
+      - docker_sandbox_data:/var/lib/docker
+      - judge_workspace:/tmp/stacked/workspace
+    networks:
+      - stacked-network
+    command:
+      - "dockerd"
+      - "--host=tcp://0.0.0.0:2375"
+      - "--tls=false"
+
+  # ----------------------------------------------------------------------------
+  # Firecracker Sandbox Service (Linux KVM MicroVM Runner)
+  # Provides sub-second hardware-isolated microVM sandboxing over REST API on port 8085
+  # ----------------------------------------------------------------------------
+  firecracker-sandbox:
+    build:
+      context: ./infra/firecracker
+      dockerfile: Dockerfile
+    container_name: stacked-firecracker-sandbox
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - "/dev/kvm:/dev/kvm"
+    ports:
+      - "${JUDGE_FIRECRACKER_PORT:-8085}:8085"
+    volumes:
+      - firecracker_sockets:/tmp/firecracker
+      - firecracker_rootfs:/var/lib/firecracker/rootfs
+      - firecracker_kernel:/var/lib/firecracker/kernel
+      - judge_workspace:/tmp/stacked/workspace
+    networks:
+      - stacked-network
+
 volumes:
   mongodb_data:
     driver: local
   redis_data:
+    driver: local
+  docker_sandbox_data:
+    driver: local
+  firecracker_sockets:
+    driver: local
+  firecracker_rootfs:
+    driver: local
+  firecracker_kernel:
+    driver: local
+  judge_workspace:
     driver: local
 
 networks:

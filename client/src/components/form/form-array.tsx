@@ -4,6 +4,11 @@ import { FormBase, type FormControlProps } from "@/components/form/form-base"
 import { useFieldContext } from "@/hooks/form/create-form-hooks"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 export interface FormArrayProps extends FormControlProps {
@@ -115,17 +120,23 @@ export function FormArray({
                     className="h-8 flex-1 text-xs"
                   />
 
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    disabled={items.length <= minItems}
-                    onClick={() => handleRemoveItem(index)}
-                    className="shrink-0 text-muted-foreground hover:text-destructive cursor-pointer disabled:opacity-30"
-                    title="Remove item"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          disabled={items.length <= minItems}
+                          onClick={() => handleRemoveItem(index)}
+                          className="shrink-0 cursor-pointer text-muted-foreground hover:text-destructive disabled:opacity-30"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>Remove item</TooltipContent>
+                  </Tooltip>
                 </div>
               )
             })}

@@ -1,20 +1,15 @@
-import { useState } from "react"
-import {
-  Plus,
-  Trash2,
-  Lightbulb,
-  ChevronUp,
-  ChevronDown,
-  Eye,
-  EyeOff,
-} from "lucide-react"
+import { Plus, Trash2, Lightbulb, ChevronUp, ChevronDown } from "lucide-react"
 import { FormBase, type FormControlProps } from "@/components/form/form-base"
 import { useFieldContext } from "@/hooks/form/create-form-hooks"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { MarkdownPreview } from "@/components/markdown-preview/markdown-preview"
 
 export interface FormHintsProps extends FormControlProps {
   placeholder?: string
@@ -28,16 +23,6 @@ export function FormHints({
 }: FormHintsProps) {
   const field = useFieldContext<string[]>()
   const hints = field.state.value ?? []
-
-  // Track which hints are currently showing markdown preview
-  const [previewingIndexes, setPreviewingIndexes] = useState<Record<number, boolean>>({})
-
-  const togglePreview = (index: number) => {
-    setPreviewingIndexes((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }))
-  }
 
   const handleAddHint = () => {
     field.handleChange([...hints, ""])
@@ -62,13 +47,6 @@ export function FormHints({
     next[fromIndex] = next[toIndex]
     next[toIndex] = item
     field.handleChange(next)
-
-    // Also swap preview states
-    setPreviewingIndexes((prev) => ({
-      ...prev,
-      [fromIndex]: prev[toIndex],
-      [toIndex]: prev[fromIndex],
-    }))
   }
 
   return (
@@ -100,7 +78,7 @@ export function FormHints({
       <div className={cn("space-y-3", className)}>
         {hints.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/20 p-6 text-center text-xs text-muted-foreground">
-            <Lightbulb className="size-5 text-amber-500 mb-1" />
+            <Lightbulb className="mb-1 size-5 text-amber-500" />
             <p>No hints added yet. Hints assist learners when stuck.</p>
             <Button
               type="button"
@@ -116,14 +94,13 @@ export function FormHints({
         ) : (
           <div className="space-y-3">
             {hints.map((hint, index) => {
-              const isPreview = Boolean(previewingIndexes[index])
               const isFirst = index === 0
               const isLast = index === hints.length - 1
 
               return (
                 <div
                   key={index}
-                  className="space-y-2.5 rounded-xl border border-border/70 bg-card p-3.5 shadow-2xs"
+                  className="space-y-2 rounded-xl border border-border/70 bg-card p-3 shadow-2xs"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -137,85 +114,69 @@ export function FormHints({
 
                     <div className="flex items-center gap-1">
                       {/* Reorder Buttons */}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        disabled={isFirst}
-                        onClick={() => handleMoveHint(index, -1)}
-                        className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30"
-                        title="Move Up"
-                      >
-                        <ChevronUp className="size-3.5" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              disabled={isFirst}
+                              onClick={() => handleMoveHint(index, -1)}
+                              className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground disabled:opacity-30"
+                            >
+                              <ChevronUp className="size-3.5" />
+                            </Button>
+                          }
+                        />
+                        <TooltipContent>Move Up</TooltipContent>
+                      </Tooltip>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        disabled={isLast}
-                        onClick={() => handleMoveHint(index, 1)}
-                        className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30"
-                        title="Move Down"
-                      >
-                        <ChevronDown className="size-3.5" />
-                      </Button>
-
-                      {/* Markdown Preview Toggle */}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => togglePreview(index)}
-                        className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                        title={isPreview ? "Edit markdown" : "Preview markdown"}
-                      >
-                        {isPreview ? (
-                          <>
-                            <EyeOff className="size-3" />
-                            <span>Edit</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="size-3" />
-                            <span>Preview</span>
-                          </>
-                        )}
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              disabled={isLast}
+                              onClick={() => handleMoveHint(index, 1)}
+                              className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground disabled:opacity-30"
+                            >
+                              <ChevronDown className="size-3.5" />
+                            </Button>
+                          }
+                        />
+                        <TooltipContent>Move Down</TooltipContent>
+                      </Tooltip>
 
                       {/* Delete */}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => handleRemoveHint(index)}
-                        className="h-6 w-6 text-muted-foreground hover:text-destructive cursor-pointer"
-                        title={`Remove Hint ${index + 1}`}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() => handleRemoveHint(index)}
+                              className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          }
+                        />
+                        <TooltipContent>Remove Hint {index + 1}</TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
 
-                  {isPreview ? (
-                    <div className="min-h-16 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs">
-                      {hint.trim() ? (
-                        <MarkdownPreview value={hint} />
-                      ) : (
-                        <span className="italic text-muted-foreground">
-                          No content to preview.
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <Textarea
-                      value={hint}
-                      rows={2}
-                      onChange={(e) => handleUpdateHint(index, e.target.value)}
-                      placeholder={placeholder}
-                      className="min-h-16 text-xs bg-background font-mono"
-                    />
-                  )}
+                  <Textarea
+                    value={hint}
+                    rows={2}
+                    onChange={(e) => handleUpdateHint(index, e.target.value)}
+                    placeholder={placeholder}
+                    className="min-h-16 bg-background font-mono text-xs"
+                  />
                 </div>
               )
             })}
