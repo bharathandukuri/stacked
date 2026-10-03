@@ -4,8 +4,14 @@ import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequ
 import com.bharath.stacked.modules.execution.dto.response.SimpleCodeExecutionResult;
 import com.bharath.stacked.modules.execution.enums.CodeExecutionStatus;
 import com.bharath.stacked.modules.execution.enums.IsolateExecutionStatus;
+import com.bharath.stacked.modules.execution.exception.DockerContainerCreationException;
+import com.bharath.stacked.modules.execution.exception.DockerContainerDeletionException;
+import com.bharath.stacked.modules.execution.exception.DockerContainerNotFoundException;
+import com.bharath.stacked.modules.execution.exception.DockerContainerStopException;
 import com.bharath.stacked.modules.execution.exception.DockerExecutionException;
+import com.bharath.stacked.modules.execution.exception.IsolateCleanupException;
 import com.bharath.stacked.modules.execution.exception.IsolateExecutionException;
+import com.bharath.stacked.modules.execution.exception.IsolateInitializationException;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
 import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
@@ -62,6 +68,8 @@ class CodeExecutionServiceImplTest {
     void setUp() {
         testContainer = new DockerContainerDetails("cnt-12345", "test-container");
         testSandbox = new IsolateSandBoxDetails(42, testContainer);
+        lenient().when(dockerExecutionService.execContainer(anyString(), anyList()))
+                .thenReturn(new DockerExecutionResult(0L, "", ""));
     }
 
     @Test
@@ -577,6 +585,414 @@ class CodeExecutionServiceImplTest {
         assertThat(result.stderr()).contains("Table 'non_existing_table' doesn't exist");
 
         verifyNoInteractions(isolateExecutionService);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Database execution handles null code, negative constraints, and defaults time limit to 5000ms")
+    void executeDatabaseNullCodeAndNegativeConstraints() {
+        Language mysql = languageFactory.create("mysql-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mysql)
+                .code(null)
+                .fileName(null)
+                .constraints(new CodeExecutionConstraints(-500L))
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
+                .thenReturn(new DockerExecutionResult(0L, "Query OK", ""));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("Query OK");
+
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/solution.sql"), eq(""));
+        verify(dockerExecutionService).execContainer(eq(testContainer.id()), anyList(), eq(5000L));
+        verifyNoInteractions(isolateExecutionService);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Database execution returns SYSTEM_ERROR when container creation fails and does not attempt cleanup")
+    void executeDatabaseContainerCreationThrowsException() {
+        Language postgres = languageFactory.create("postgresql-16");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(postgres)
+                .code("SELECT 1;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenThrow(new DockerContainerCreationException("Failed to allocate container port or cgroup"));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(result.logs()).contains("Failed to allocate container port or cgroup");
+
+        verifyNoInteractions(isolateExecutionService);
+        verify(dockerExecutionService, never()).stopContainer(anyString());
+        verify(dockerExecutionService, never()).deleteContainer(anyString());
+    }
+
+    @Test
+    @DisplayName("Database execution returns SYSTEM_ERROR when startContainer fails and cleans up container")
+    void executeDatabaseStartContainerThrowsExceptionWithCleanup() {
+        Language mysql = languageFactory.create("mysql-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mysql)
+                .code("SELECT 1;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doThrow(new DockerContainerNotFoundException("Container cnt-12345 not found"))
+                .when(dockerExecutionService).startContainer(testContainer.id());
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(result.logs()).contains("Container cnt-12345 not found");
+
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Database execution returns SYSTEM_ERROR when writing SQL script fails and cleans up container")
+    void executeDatabaseWriteFileThrowsExceptionWithCleanup() {
+        Language mysql = languageFactory.create("mysql-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mysql)
+                .code("SELECT 1;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        doThrow(new DockerExecutionException("Disk full in docker container"))
+                .when(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/solution.sql"), anyString());
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(result.logs()).contains("Disk full in docker container");
+
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Database execution returns SUCCESS even if stopContainer and deleteContainer throw in finally")
+    void executeDatabaseCleanupThrowsExceptionsDoesNotMaskSuccess() {
+        Language mysql = languageFactory.create("mysql-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mysql)
+                .code("SELECT 42;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
+                .thenReturn(new DockerExecutionResult(0L, "42\n", ""));
+
+        doThrow(new DockerContainerStopException("Failed to stop", new RuntimeException()))
+                .when(dockerExecutionService).stopContainer(testContainer.id());
+        doThrow(new DockerContainerDeletionException("Failed to delete", new RuntimeException()))
+                .when(dockerExecutionService).deleteContainer(testContainer.id());
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("42\n");
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Compiled execution returns SYSTEM_ERROR when Isolate sandbox initialization fails and cleans up container")
+    void executeCompiledLanguageSandboxInitFails() {
+        Language cpp = languageFactory.create("cpp-23");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(cpp)
+                .code("int main() { return 0; }")
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer))
+                .thenThrow(new IsolateInitializationException("Failed to initialize cgroup in isolate"));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(result.logs()).contains("Failed to initialize cgroup in isolate");
+
+        verify(isolateExecutionService, never()).cleanup(any());
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Compiled execution returns SYSTEM_ERROR when compiler execution throws DockerExecutionException")
+    void executeCompiledLanguageCompilationThrowsUnexpectedException() {
+        Language cpp = languageFactory.create("cpp-23");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(cpp)
+                .code("int main() { return 0; }")
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+                .thenThrow(new DockerExecutionException("Docker exec socket broken during compile"));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(result.logs()).contains("Docker exec socket broken during compile");
+
+        verify(isolateExecutionService, never()).executeWithConstraints(any(), anyList(), anyString(), any());
+        verify(isolateExecutionService).cleanup(testSandbox);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Compiled execution handles null code and null stdin gracefully")
+    void executeCompiledLanguageEmptyCodeAndNullStdin() {
+        Language c = languageFactory.create("c-17");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(c)
+                .code(null)
+                .fileName("main.c")
+                .stdin(null)
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+                .thenReturn(new DockerExecutionResult(0L, "", ""));
+
+        IsolateExecutionResult isolateResult = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS,
+                "",
+                "",
+                0.01,
+                0.01,
+                1000L,
+                0L,
+                0L,
+                false,
+                1L,
+                1L);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq(""), any()))
+                .thenReturn(isolateResult);
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/main.c"), eq(""));
+        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), anyList(), eq(""), any());
+        verify(isolateExecutionService).cleanup(testSandbox);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Compiled execution maps killed by signal (e.g. SIGSEGV 11) to RUNTIME_ERROR with exitSignal captured")
+    void executeCompiledLanguageSignalKillMapsCorrectly() {
+        Language cpp = languageFactory.create("cpp-23");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(cpp)
+                .code("int main() { int* p = nullptr; *p = 1; }")
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+                .thenReturn(new DockerExecutionResult(0L, "", ""));
+
+        IsolateExecutionResult isolateResult = new IsolateExecutionResult(
+                IsolateExecutionStatus.RUNTIME_ERROR,
+                "",
+                "Segmentation fault",
+                0.01,
+                0.01,
+                4000L,
+                null,
+                11L,
+                false,
+                10L,
+                2L);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), anyString(), any()))
+                .thenReturn(isolateResult);
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.RUNTIME_ERROR);
+        assertThat(result.exitSignal()).isEqualTo(11L);
+        assertThat(result.stderr()).contains("Segmentation fault");
+    }
+
+    @Test
+    @DisplayName("Compiled execution preserves COMPILATION_ERROR even if sandbox cleanup and container stop fail")
+    void executeCompiledLanguageCleanupExceptionsDoNotMaskCompilationError() {
+        Language java = languageFactory.create("java-21");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(java)
+                .code("invalid syntax")
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+                .thenReturn(new DockerExecutionResult(1L, "", "error: class, interface, enum, or record expected"));
+
+        doThrow(new IsolateCleanupException("Cleanup failed", new RuntimeException()))
+                .when(isolateExecutionService).cleanup(testSandbox);
+        doThrow(new DockerContainerStopException("Stop failed", new RuntimeException()))
+                .when(dockerExecutionService).stopContainer(testContainer.id());
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.COMPILATION_ERROR);
+        assertThat(result.stderr()).contains("error: class, interface, enum, or record expected");
+        verify(isolateExecutionService).cleanup(testSandbox);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Interpreted execution returns SYSTEM_ERROR when writing script to sandbox fails and cleans up")
+    void executeInterpretedLanguageWriteFileThrowsException() {
+        Language python = languageFactory.create("python-3.12");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(python)
+                .code("print('hello')")
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+        doThrow(new DockerExecutionException("No space left on device"))
+                .when(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.py"), anyString());
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(result.logs()).contains("No space left on device");
+
+        verify(isolateExecutionService, never()).executeWithConstraints(any(), anyList(), anyString(), any());
+        verify(isolateExecutionService).cleanup(testSandbox);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Interpreted execution applies default constraints when non-positive constraints provided")
+    void executeInterpretedLanguageZeroAndNegativeConstraintsFallBackToDefaults() {
+        Language python = languageFactory.create("python-3.12");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(python)
+                .code("print(1)")
+                .constraints(new CodeExecutionConstraints(-1000L, -50000L))
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+
+        IsolateExecutionResult isolateResult = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS, "1\n", "", 0.01, 0.01, 5000L, 0L, 0L, false, 1L, 1L);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), anyString(), any()))
+                .thenReturn(isolateResult);
+
+        codeExecutionService.run(request);
+
+        ArgumentCaptor<IsolateExecutionConstraints> constraintsCaptor =
+                ArgumentCaptor.forClass(IsolateExecutionConstraints.class);
+        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), anyList(), anyString(),
+                constraintsCaptor.capture());
+        IsolateExecutionConstraints captured = constraintsCaptor.getValue();
+        assertThat(captured.cpuTimeSeconds()).isEqualTo(2.0);
+        assertThat(captured.wallTimeSeconds()).isEqualTo(5.0);
+        assertThat(captured.memoryKb()).isEqualTo(262144L);
+    }
+
+    @Test
+    @DisplayName("Interpreted Node.js execution sets memoryKb to null to prevent V8 CodeRange address space crash")
+    void executeInterpretedLanguageNodeJsExemptFromIsolateMemoryLimit() {
+        Language node = languageFactory.create("javascript-node-20");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(node)
+                .code("console.log('node');")
+                .constraints(new CodeExecutionConstraints(3500L, 131072L))
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+
+        IsolateExecutionResult isolateResult = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS, "node\n", "", 0.02, 0.03, 25000L, 0L, 0L, false, 5L, 1L);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), anyString(), any()))
+                .thenReturn(isolateResult);
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("node\n");
+
+        verify(dockerExecutionService, never()).execContainer(anyString(), anyList());
+
+        ArgumentCaptor<IsolateExecutionConstraints> constraintsCaptor =
+                ArgumentCaptor.forClass(IsolateExecutionConstraints.class);
+        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), anyList(), anyString(),
+                constraintsCaptor.capture());
+        IsolateExecutionConstraints captured = constraintsCaptor.getValue();
+        assertThat(captured.cpuTimeSeconds()).isEqualTo(3.5);
+        assertThat(captured.wallTimeSeconds()).isEqualTo(7.0);
+        assertThat(captured.memoryKb()).isNull();
+    }
+
+    @Test
+    @DisplayName("Interpreted execution preserves SUCCESS even if Isolate cleanup throws exception")
+    void executeInterpretedLanguageIsolateCleanupFailsDoesNotCrashSuccessResult() {
+        Language python = languageFactory.create("python-3.12");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(python)
+                .code("print('ok')")
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+
+        IsolateExecutionResult isolateResult = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS, "ok\n", "", 0.01, 0.01, 8000L, 0L, 0L, false, 1L, 1L);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), anyString(), any()))
+                .thenReturn(isolateResult);
+
+        doThrow(new IsolateCleanupException("Failed to remove sandbox directory", new RuntimeException()))
+                .when(isolateExecutionService).cleanup(testSandbox);
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("ok\n");
+
+        verify(isolateExecutionService).cleanup(testSandbox);
         verify(dockerExecutionService).stopContainer(testContainer.id());
         verify(dockerExecutionService).deleteContainer(testContainer.id());
     }

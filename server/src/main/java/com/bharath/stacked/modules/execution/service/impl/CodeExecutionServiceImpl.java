@@ -157,6 +157,7 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
             DatabaseContainerConstraints constraints = DatabaseContainerConstraints.defaults();
             dockerContainer = dockerExecutionService.createContainer(dockerImage, constraints);
             dockerExecutionService.startContainer(dockerContainer.id());
+            waitForDatabaseReady(dockerContainer.id(), language);
 
             String fileName = resolveFileName(request);
             String code = request.getCode() != null ? request.getCode() : "";
@@ -179,7 +180,12 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
 
             CodeExecutionStatus status;
             if (execResult.exitCode() == 0L) {
-                status = CodeExecutionStatus.SUCCESS;
+                if (execResult.stderr() != null && !execResult.stderr().isBlank()
+                        && (execResult.stderr().contains("ERROR:") || execResult.stderr().contains("ERROR "))) {
+                    status = CodeExecutionStatus.RUNTIME_ERROR;
+                } else {
+                    status = CodeExecutionStatus.SUCCESS;
+                }
             } else if (execResult.exitCode() == 124L) {
                 status = CodeExecutionStatus.TIME_LIMIT_EXCEEDED;
             } else {
@@ -217,6 +223,37 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                 }
             }
         }
+    }
+
+    private void waitForDatabaseReady(String containerId, Language language) {
+        String langId = language != null && language.id() != null ? language.id().toLowerCase() : "";
+        List<String> readyCmd;
+        if (langId.contains("postgres")) {
+            readyCmd = List.of("psql", "-U", "postgres", "-d", "stacked_judge_db", "-c", "SELECT 1;");
+        } else if (langId.contains("mysql")) {
+            readyCmd = List.of("mysql", "-u", "root", "-pstacked_judge", "stacked_judge_db", "-e", "SELECT 1;");
+        } else {
+            return;
+        }
+
+        long deadline = System.currentTimeMillis() + 15000L;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                DockerExecutionResult result = dockerExecutionService.execContainer(containerId, readyCmd);
+                if (result != null && result.exitCode() == 0L) {
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                Thread.sleep(150L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        log.warn("Database container [{}] did not become ready within timeout for language [{}]", containerId,
+                language != null ? language.id() : "unknown");
     }
 
     private static @NonNull List<String> getBashCompileCmd(CompiledLanguage language, String fileName, String boxDir) {

@@ -300,4 +300,209 @@ class CodeExecutionServiceIntegrationTest {
         assertThat(result.exitCode()).isEqualTo(0L);
         assertThat(result.stdout()).contains("JS_SUM=100");
     }
+
+    @Test
+    @DisplayName("PostgreSQL 16: successfully executes SQL query and cleans up container")
+    void executePostgres16LiveSuccess() {
+        Language pg = languageRegistry.get("postgresql-16");
+        assumeLanguageImageAvailable(pg);
+
+        String code = "SELECT 42 * 3 AS res;";
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(pg)
+                .code(code)
+                .fileName("solution.sql")
+                .constraints(new CodeExecutionConstraints(10000L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus())
+                .withFailMessage("STDERR: [%s], STDOUT: [%s]", result.stderr(), result.stdout())
+                .isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.exitCode()).isEqualTo(0L);
+        assertThat(result.stdout()).contains("126");
+    }
+
+    @Test
+    @DisplayName("PostgreSQL 16: SQL syntax/schema error returns RUNTIME_ERROR with database error message")
+    void executePostgres16LiveSyntaxError() {
+        Language pg = languageRegistry.get("postgresql-16");
+        assumeLanguageImageAvailable(pg);
+
+        String code = "SELECT * FROM non_existing_table_xyz;";
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(pg)
+                .code(code)
+                .fileName("solution.sql")
+                .constraints(new CodeExecutionConstraints(10000L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.RUNTIME_ERROR);
+        assertThat(result.stderr()).contains("relation \"non_existing_table_xyz\" does not exist");
+    }
+
+    @Test
+    @DisplayName("PostgreSQL 16: long-running query times out and returns TIME_LIMIT_EXCEEDED (124)")
+    void executePostgres16LiveTimeout() {
+        Language pg = languageRegistry.get("postgresql-16");
+        assumeLanguageImageAvailable(pg);
+
+        String code = "SELECT pg_sleep(5);";
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(pg)
+                .code(code)
+                .fileName("solution.sql")
+                .constraints(new CodeExecutionConstraints(1000L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.TIME_LIMIT_EXCEEDED);
+        assertThat(result.exitCode()).isEqualTo(124L);
+    }
+
+    @Test
+    @DisplayName("C++ 23: infinite loop triggers TIME_LIMIT_EXCEEDED in Isolate sandbox")
+    void executeCpp23LiveInfiniteLoopTimeout() {
+        Language cpp = languageRegistry.get("cpp-23");
+        assumeLanguageImageAvailable(cpp);
+
+        String code = """
+                int main() {
+                    volatile int i = 0;
+                    while (true) {
+                        i++;
+                    }
+                    return 0;
+                }
+                """;
+
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(cpp)
+                .code(code)
+                .fileName("solution.cpp")
+                .constraints(new CodeExecutionConstraints(1000L, 131072L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.TIME_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    @DisplayName("Python 3.12: infinite loop triggers TIME_LIMIT_EXCEEDED in Isolate sandbox")
+    void executePython312LiveInfiniteLoopTimeout() {
+        Language python = languageRegistry.get("python-3.12");
+        assumeLanguageImageAvailable(python);
+
+        String code = "while True: pass";
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(python)
+                .code(code)
+                .fileName("solution.py")
+                .constraints(new CodeExecutionConstraints(1000L, 131072L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.TIME_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    @DisplayName("C++ 23: excessive memory allocation triggers MEMORY_LIMIT_EXCEEDED or RUNTIME_ERROR")
+    void executeCpp23LiveMemoryLimitExceeded() {
+        Language cpp = languageRegistry.get("cpp-23");
+        assumeLanguageImageAvailable(cpp);
+
+        String code = """
+                #include <vector>
+                int main() {
+                    std::vector<char> v(100 * 1024 * 1024, 1);
+                    return 0;
+                }
+                """;
+
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(cpp)
+                .code(code)
+                .fileName("solution.cpp")
+                .constraints(new CodeExecutionConstraints(3000L, 32768L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isIn(
+                CodeExecutionStatus.MEMORY_LIMIT_EXCEEDED,
+                CodeExecutionStatus.RUNTIME_ERROR
+        );
+        assertThat(result.exitSignal() != null || (result.exitCode() != null && result.exitCode() != 0L)).isTrue();
+    }
+
+    @Test
+    @DisplayName("C++ 23: segmentation fault returns RUNTIME_ERROR with exitSignal 11")
+    void executeCpp23LiveSegmentationFault() {
+        Language cpp = languageRegistry.get("cpp-23");
+        assumeLanguageImageAvailable(cpp);
+
+        String code = """
+                int main() {
+                    int* p = nullptr;
+                    *p = 42;
+                    return 0;
+                }
+                """;
+
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(cpp)
+                .code(code)
+                .fileName("solution.cpp")
+                .constraints(new CodeExecutionConstraints(3000L, 131072L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.RUNTIME_ERROR);
+        assertThat(result.exitSignal()).isEqualTo(11L);
+    }
+
+    @Test
+    @DisplayName("Java 21: high-throughput large stdout stream executes and captures output")
+    void executeJava21LiveLargeOutput() {
+        Language java = languageRegistry.get("java-21");
+        assumeLanguageImageAvailable(java);
+
+        String code = """
+                public class Solution {
+                    public static void main(String[] args) {
+                        for (int i = 0; i < 5000; i++) {
+                            System.out.println("LINE_" + i);
+                        }
+                    }
+                }
+                """;
+
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(java)
+                .code(code)
+                .fileName("Solution.java")
+                .constraints(new CodeExecutionConstraints(5000L, 524288L))
+                .build();
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.exitCode()).isEqualTo(0L);
+        assertThat(result.stdout()).contains("LINE_0").contains("LINE_4999");
+    }
 }
