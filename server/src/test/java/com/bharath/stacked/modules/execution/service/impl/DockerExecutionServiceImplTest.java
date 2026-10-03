@@ -11,6 +11,7 @@ import com.github.dockerjava.api.command.*;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.BuildResponseItem;
 import com.github.dockerjava.api.model.Frame;
+import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.ResponseItem;
 import com.github.dockerjava.api.model.StreamType;
 import org.junit.jupiter.api.BeforeEach;
@@ -271,6 +272,8 @@ class DockerExecutionServiceImplTest {
 
         when(dockerClient.createContainerCmd("stacked/isolate:1.0")).thenReturn(createCmd);
         when(createCmd.withName(anyString())).thenReturn(createCmd);
+        when(createCmd.withTty(anyBoolean())).thenReturn(createCmd);
+        when(createCmd.withHostConfig(any(HostConfig.class))).thenReturn(createCmd);
         when(createCmd.exec()).thenReturn(createResponse);
 
         DockerContainerDetails container = service.createContainer(details);
@@ -282,6 +285,10 @@ class DockerExecutionServiceImplTest {
         ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
         verify(createCmd).withName(nameCaptor.capture());
         assertThat(nameCaptor.getValue()).startsWith("stacked-execution-");
+        verify(createCmd).withTty(true);
+        ArgumentCaptor<HostConfig> hostConfigCaptor = ArgumentCaptor.forClass(HostConfig.class);
+        verify(createCmd).withHostConfig(hostConfigCaptor.capture());
+        assertThat(hostConfigCaptor.getValue().getPrivileged()).isTrue();
     }
 
     @Test
@@ -310,6 +317,8 @@ class DockerExecutionServiceImplTest {
         CreateContainerCmd createCmd = mock(CreateContainerCmd.class);
         when(dockerClient.createContainerCmd("stacked/isolate:1.0")).thenReturn(createCmd);
         when(createCmd.withName(anyString())).thenReturn(createCmd);
+        when(createCmd.withTty(anyBoolean())).thenReturn(createCmd);
+        when(createCmd.withHostConfig(any(HostConfig.class))).thenReturn(createCmd);
         when(createCmd.exec()).thenThrow(new RuntimeException("Docker daemon out of disk"));
 
         assertThatThrownBy(() -> service.createContainer(details))
@@ -399,10 +408,12 @@ class DockerExecutionServiceImplTest {
 
         StopContainerCmd stopCmd = mock(StopContainerCmd.class);
         when(dockerClient.stopContainerCmd("cnt-stop")).thenReturn(stopCmd);
+        when(stopCmd.withTimeout(anyInt())).thenReturn(stopCmd);
 
         service.stopContainer("cnt-stop");
 
         verify(dockerClient).stopContainerCmd("cnt-stop");
+        verify(stopCmd).withTimeout(1);
         verify(stopCmd).exec();
     }
 
@@ -427,6 +438,7 @@ class DockerExecutionServiceImplTest {
 
         StopContainerCmd stopCmd = mock(StopContainerCmd.class);
         when(dockerClient.stopContainerCmd("cnt-stop-fail")).thenReturn(stopCmd);
+        when(stopCmd.withTimeout(anyInt())).thenReturn(stopCmd);
         when(stopCmd.exec()).thenThrow(new RuntimeException("Timeout stopping container"));
 
         assertThatThrownBy(() -> service.stopContainer("cnt-stop-fail"))
@@ -653,5 +665,186 @@ class DockerExecutionServiceImplTest {
         assertThatThrownBy(() -> service.deleteContainer("container-broken"))
                 .isInstanceOf(DockerContainerDeletionException.class)
                 .hasMessageContaining("Failed to delete Docker container: container-broken");
+    }
+
+    // =========================================================================
+    // Read & Write File Tests
+    // =========================================================================
+
+    @Test
+    @DisplayName("readFile returns file contents when cat command succeeds")
+    void readFileSuccess() {
+        String containerId = "cnt-read";
+        String path = "/tmp/data.txt";
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-cat-1");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd("cat", path)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-cat-1")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> cb = invocation.getArgument(0);
+            cb.onNext(new Frame(StreamType.STDOUT, "file content here\n".getBytes(StandardCharsets.UTF_8)));
+            cb.onComplete();
+            return cb;
+        });
+
+        InspectExecCmd inspectExecCmd = mock(InspectExecCmd.class);
+        InspectExecResponse inspectExecResponse = mock(InspectExecResponse.class);
+        when(inspectExecResponse.getExitCodeLong()).thenReturn(0L);
+        when(dockerClient.inspectExecCmd("exec-cat-1")).thenReturn(inspectExecCmd);
+        when(inspectExecCmd.exec()).thenReturn(inspectExecResponse);
+
+        String content = service.readFile(containerId, path);
+
+        assertThat(content).isEqualTo("file content here\n");
+    }
+
+    @Test
+    @DisplayName("readFile throws DockerExecutionException when cat exits with non-zero exit code")
+    void readFileFailureNonZeroExit() {
+        String containerId = "cnt-read-fail";
+        String path = "/missing/file.txt";
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-cat-fail");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd("cat", path)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-cat-fail")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> cb = invocation.getArgument(0);
+            cb.onNext(new Frame(StreamType.STDERR, "cat: /missing/file.txt: No such file or directory".getBytes(StandardCharsets.UTF_8)));
+            cb.onComplete();
+            return cb;
+        });
+
+        InspectExecCmd inspectExecCmd = mock(InspectExecCmd.class);
+        InspectExecResponse inspectExecResponse = mock(InspectExecResponse.class);
+        when(inspectExecResponse.getExitCodeLong()).thenReturn(1L);
+        when(dockerClient.inspectExecCmd("exec-cat-fail")).thenReturn(inspectExecCmd);
+        when(inspectExecCmd.exec()).thenReturn(inspectExecResponse);
+
+        assertThatThrownBy(() -> service.readFile(containerId, path))
+                .isInstanceOf(DockerExecutionException.class)
+                .hasMessageContaining("Failed to read file [" + path + "] from container [" + containerId + "]")
+                .hasMessageContaining("No such file or directory");
+    }
+
+    @Test
+    @DisplayName("writeFile encodes payload to Base64 and writes successfully via bash pipe")
+    void writeFileSuccess() {
+        String containerId = "cnt-write";
+        String path = "/workspace/main.cpp";
+        String code = "int main() { return 0; }";
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-write-1");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd(any(String[].class))).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-write-1")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> cb = invocation.getArgument(0);
+            cb.onComplete();
+            return cb;
+        });
+
+        InspectExecCmd inspectExecCmd = mock(InspectExecCmd.class);
+        InspectExecResponse inspectExecResponse = mock(InspectExecResponse.class);
+        when(inspectExecResponse.getExitCodeLong()).thenReturn(0L);
+        when(dockerClient.inspectExecCmd("exec-write-1")).thenReturn(inspectExecCmd);
+        when(inspectExecCmd.exec()).thenReturn(inspectExecResponse);
+
+        service.writeFile(containerId, path, code);
+
+        ArgumentCaptor<String[]> cmdCaptor = ArgumentCaptor.forClass(String[].class);
+        verify(execCreateCmd).withCmd(cmdCaptor.capture());
+        String[] capturedArgs = cmdCaptor.getValue();
+        assertThat(capturedArgs).hasSize(3);
+        assertThat(capturedArgs[0]).isEqualTo("bash");
+        assertThat(capturedArgs[1]).isEqualTo("-c");
+        assertThat(capturedArgs[2]).contains("base64 -d > '" + path + "'");
+    }
+
+    @Test
+    @DisplayName("writeFile throws DockerExecutionException when base64 write command fails")
+    void writeFileFailureNonZeroExit() {
+        String containerId = "cnt-write-fail";
+        String path = "/root/secret.txt";
+        String content = "hello";
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-write-fail");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd(any(String[].class))).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-write-fail")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> cb = invocation.getArgument(0);
+            cb.onNext(new Frame(StreamType.STDERR, "bash: /root/secret.txt: Permission denied".getBytes(StandardCharsets.UTF_8)));
+            cb.onComplete();
+            return cb;
+        });
+
+        InspectExecCmd inspectExecCmd = mock(InspectExecCmd.class);
+        InspectExecResponse inspectExecResponse = mock(InspectExecResponse.class);
+        when(inspectExecResponse.getExitCodeLong()).thenReturn(1L);
+        when(dockerClient.inspectExecCmd("exec-write-fail")).thenReturn(inspectExecCmd);
+        when(inspectExecCmd.exec()).thenReturn(inspectExecResponse);
+
+        assertThatThrownBy(() -> service.writeFile(containerId, path, content))
+                .isInstanceOf(DockerExecutionException.class)
+                .hasMessageContaining("Failed to write file [" + path + "] to container [" + containerId + "]")
+                .hasMessageContaining("Permission denied");
     }
 }

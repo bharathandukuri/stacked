@@ -15,6 +15,7 @@ import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.BuildResponseItem;
 import com.github.dockerjava.api.model.Frame;
+import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.StreamType;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -223,6 +225,11 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             CreateContainerResponse response = dockerClient
                     .createContainerCmd(image)
                     .withName(containerName)
+                    .withTty(true)
+                    .withHostConfig(
+                            HostConfig.newHostConfig()
+                                    .withPrivileged(true)
+                    )
                     .exec();
 
             log.info(
@@ -311,6 +318,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
         try {
             dockerClient
                     .stopContainerCmd(containerId)
+                    .withTimeout(1)
                     .exec();
 
             log.info(
@@ -396,6 +404,63 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             );
         }
     }
+
+    @Override
+    public String readFile(
+            String containerId,
+            String path
+    ) throws DockerExecutionException {
+
+        DockerExecutionResult result =
+                execContainer(
+                        containerId,
+                        List.of("cat", path)
+                );
+
+        if (result.exitCode() != 0) {
+            throw new DockerExecutionException(
+                    "Failed to read file [" + path + "] from container ["
+                            + containerId + "]: "
+                            + result.stderr()
+            );
+        }
+
+        return result.stdout();
+    }
+
+    @Override
+    public void writeFile(
+            String containerId,
+            String path,
+            String content
+    ) throws DockerExecutionException {
+
+        String encodedContent =
+                Base64.getEncoder()
+                        .encodeToString(
+                                content.getBytes(StandardCharsets.UTF_8)
+                        );
+
+        DockerExecutionResult result =
+                execContainer(
+                        containerId,
+                        List.of(
+                                "bash",
+                                "-c",
+                                "echo '" + encodedContent
+                                        + "' | base64 -d > '" + path + "'"
+                        )
+                );
+
+        if (result.exitCode() != 0) {
+            throw new DockerExecutionException(
+                    "Failed to write file [" + path + "] to container ["
+                            + containerId + "]: "
+                            + result.stderr()
+            );
+        }
+    }
+
     @Override
     public void deleteContainer(String containerId)
             throws DockerContainerDeletionException {

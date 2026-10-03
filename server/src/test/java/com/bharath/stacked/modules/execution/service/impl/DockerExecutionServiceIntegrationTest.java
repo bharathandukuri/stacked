@@ -22,9 +22,9 @@ class DockerExecutionServiceIntegrationTest {
     private static DockerExecutionService executionService;
     private static boolean dockerAvailable;
 
-    // Use an image that is available locally
+    // Use the isolate image which contains bash and isolate
     private final DockerImageDetails testImage =
-            new DockerImageDetails("redis", "8-alpine", "docker/isolate-1_0");
+            com.bharath.stacked.modules.execution.registry.DockerImageRegistry.ISOLATE_1_0.dockerImage();
 
     private final List<String> containersToCleanup = new ArrayList<>();
 
@@ -125,5 +125,29 @@ class DockerExecutionServiceIntegrationTest {
 
         // 9. Verify container no longer exists
         assertThat(executionService.isContainerExists(container.id())).isFalse();
+    }
+
+    @Test
+    @DisplayName("Write file with Base64 encoding and read back file contents in running container")
+    void writeAndReadFileLive() {
+        DockerContainerDetails container = executionService.createContainer(testImage);
+        containersToCleanup.add(container.id());
+        executionService.startContainer(container.id());
+
+        String targetPath = "/tmp/test_file.txt";
+        String payload = "System.out.println(\"Hello Stacked Judge\");\nLine 2 payload with special chars: ' \" $";
+
+        // 1. Write file
+        executionService.writeFile(container.id(), targetPath, payload);
+
+        // 2. Read file back
+        String readBack = executionService.readFile(container.id(), targetPath);
+        assertThat(readBack).isEqualTo(payload);
+
+        // 3. Reading non-existent file throws DockerExecutionException
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.bharath.stacked.modules.execution.exception.DockerExecutionException.class,
+                () -> executionService.readFile(container.id(), "/nonexistent/path/never_created.txt")
+        );
     }
 }

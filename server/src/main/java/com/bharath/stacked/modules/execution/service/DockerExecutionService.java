@@ -25,4 +25,15 @@ public interface DockerExecutionService {
             throws DockerContainerStopException;
 
     DockerExecutionResult execContainer(String containerId, List<String> command) throws DockerExecutionException;
+
+    String readFile(
+            String containerId,
+            String path
+    ) throws DockerExecutionException;
+
+    void writeFile(
+            String containerId,
+            String path,
+            String content
+    ) throws DockerExecutionException;
 }

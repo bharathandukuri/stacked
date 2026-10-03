@@ -72,6 +72,12 @@ class ExecutionModelsAndExceptionsTest {
 
         assertThat(DockerImageRegistry.valueOf("ISOLATE_1_0")).isEqualTo(DockerImageRegistry.ISOLATE_1_0);
         assertThat(DockerImageRegistry.valueOf("JAVA_21")).isEqualTo(DockerImageRegistry.JAVA_21);
+        assertThat(DockerImageRegistry.valueOf("PYTHON_3_12")).isEqualTo(DockerImageRegistry.PYTHON_3_12);
+        assertThat(DockerImageRegistry.valueOf("C_17")).isEqualTo(DockerImageRegistry.C_17);
+        assertThat(DockerImageRegistry.valueOf("CPP_23")).isEqualTo(DockerImageRegistry.CPP_23);
+        assertThat(DockerImageRegistry.valueOf("JAVASCRIPT_NODE_20")).isEqualTo(DockerImageRegistry.JAVASCRIPT_NODE_20);
+        assertThat(DockerImageRegistry.valueOf("MYSQL_8_0")).isEqualTo(DockerImageRegistry.MYSQL_8_0);
+        assertThat(DockerImageRegistry.valueOf("POSTGRES_16")).isEqualTo(DockerImageRegistry.POSTGRES_16);
     }
 
     @Test
