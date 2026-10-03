@@ -1,6 +1,7 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
+import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.bharath.stacked.modules.execution.dto.IsolateExecutionConstraints;
@@ -43,13 +44,17 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                     .build();
         }
 
+        Language language = request.getLanguage();
+        DockerImageDetails dockerImage = language.dockerImageDetails();
+
+        if (language.type() == LanguageType.DATABASE) {
+            return executeDatabase(request, language, dockerImage);
+        }
+
         DockerContainerDetails dockerContainer = null;
         IsolateSandBoxDetails sandBoxDetails = null;
 
         try {
-            Language language = request.getLanguage();
-            DockerImageDetails dockerImage = language.dockerImageDetails();
-
             dockerContainer = dockerExecutionService.createContainer(dockerImage);
             dockerExecutionService.startContainer(dockerContainer.id());
 
@@ -143,6 +148,77 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
         }
     }
 
+    private SimpleCodeExecutionResult executeDatabase(
+            SimpleCodeExecutionRequest request,
+            Language language,
+            DockerImageDetails dockerImage) {
+        DockerContainerDetails dockerContainer = null;
+        try {
+            DatabaseContainerConstraints constraints = DatabaseContainerConstraints.defaults();
+            dockerContainer = dockerExecutionService.createContainer(dockerImage, constraints);
+            dockerExecutionService.startContainer(dockerContainer.id());
+
+            String fileName = resolveFileName(request);
+            String code = request.getCode() != null ? request.getCode() : "";
+            String targetPath = "/tmp/" + fileName;
+
+            dockerExecutionService.writeFile(
+                    dockerContainer.id(),
+                    targetPath,
+                    code);
+
+            long timeLimitMs = (request.getConstraints() != null && request.getConstraints().timeLimitMs() > 0)
+                    ? request.getConstraints().timeLimitMs()
+                    : 5000L;
+
+            List<String> runCommand = language.run(targetPath);
+            DockerExecutionResult execResult = dockerExecutionService.execContainer(
+                    dockerContainer.id(),
+                    runCommand,
+                    timeLimitMs);
+
+            CodeExecutionStatus status;
+            if (execResult.exitCode() == 0L) {
+                status = CodeExecutionStatus.SUCCESS;
+            } else if (execResult.exitCode() == 124L) {
+                status = CodeExecutionStatus.TIME_LIMIT_EXCEEDED;
+            } else {
+                status = CodeExecutionStatus.RUNTIME_ERROR;
+            }
+
+            return SimpleCodeExecutionResult.builder()
+                    .stdout(execResult.stdout())
+                    .stderr(execResult.stderr())
+                    .exitCode(execResult.exitCode())
+                    .exitSignal(0L)
+                    .executionStatus(status)
+                    .logs(List.of("Database execution completed with exit code: " + execResult.exitCode()))
+                    .build();
+
+        } catch (Exception e) {
+            log.error("Failed to run database code execution.", e);
+            return SimpleCodeExecutionResult.builder()
+                    .executionStatus(CodeExecutionStatus.SYSTEM_ERROR)
+                    .logs(List.of(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()))
+                    .build();
+
+        } finally {
+            if (dockerContainer != null) {
+                try {
+                    dockerExecutionService.stopContainer(dockerContainer.id());
+                } catch (Exception e) {
+                    log.warn("Failed to stop Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
+                }
+
+                try {
+                    dockerExecutionService.deleteContainer(dockerContainer.id());
+                } catch (Exception e) {
+                    log.warn("Failed to delete Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
+                }
+            }
+        }
+    }
+
     private static @NonNull List<String> getBashCompileCmd(CompiledLanguage language, String fileName, String boxDir) {
         List<String> compileCommand = language.compile(fileName);
 
@@ -180,14 +256,14 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                 cpuTime = constraints.timeLimitMs() / 1000.0;
                 wallTime = Math.max(cpuTime * 2.0, cpuTime + 1.0);
             }
-            if (constraints.memoryLimitKb() > 0) {
+            if (constraints.memoryLimitKb() != null && constraints.memoryLimitKb() > 0) {
                 memoryKb = constraints.memoryLimitKb();
             }
         }
 
         // JVM and Node.js V8 runtimes pre-allocate large virtual address spaces
         // for JIT code caches, GC card tables, and pointer compression. Setting RLIMIT_AS (--mem)
-        // starves virtual memory and causes initialization crash. We rely on container memory isolation.
+        // starves virtual address space and causes initialization crash.
         String langId = language != null && language.id() != null ? language.id().toLowerCase() : "";
         if (langId.contains("java") || langId.contains("node") || langId.contains("javascript")) {
             memoryKb = null;

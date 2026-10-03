@@ -1,10 +1,12 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerProperties;
-import com.bharath.stacked.modules.execution.exception.*;
+import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
+import com.bharath.stacked.modules.execution.exception.*;
+import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.*;
@@ -325,6 +327,77 @@ class DockerExecutionServiceImplTest {
                 .hasMessageContaining("Failed to create Docker container from image: stacked/isolate:1.0");
     }
 
+    @Test
+    @DisplayName("createContainer with DatabaseContainerConstraints sets CPU, memory, PIDs, and networkDisabled")
+    void createContainerWithConstraints() {
+        DockerImageDetails details = new DockerImageDetails("stacked/mysql", "8.0", "docker/mysql-8_0");
+
+        InspectImageCmd inspectCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("stacked/mysql:8.0")).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenReturn(mock(InspectImageResponse.class));
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class);
+        CreateContainerResponse createResponse = mock(CreateContainerResponse.class);
+        when(createResponse.getId()).thenReturn("container-db-123");
+
+        when(dockerClient.createContainerCmd("stacked/mysql:8.0")).thenReturn(createCmd);
+        when(createCmd.withName(anyString())).thenReturn(createCmd);
+        when(createCmd.withTty(anyBoolean())).thenReturn(createCmd);
+        when(createCmd.withHostConfig(any(HostConfig.class))).thenReturn(createCmd);
+        when(createCmd.withNetworkDisabled(true)).thenReturn(createCmd);
+        when(createCmd.exec()).thenReturn(createResponse);
+
+        DatabaseContainerConstraints constraints = DatabaseContainerConstraints.builder()
+                .cpuLimit(2L)
+                .memoryLimitKb(524288L)
+                .pidsLimit(150L)
+                .networkDisabled(true)
+                .build();
+
+        DockerContainerDetails container = service.createContainer(details, constraints);
+
+        assertThat(container).isNotNull();
+        assertThat(container.id()).isEqualTo("container-db-123");
+
+        ArgumentCaptor<HostConfig> hostConfigCaptor = ArgumentCaptor.forClass(HostConfig.class);
+        verify(createCmd).withHostConfig(hostConfigCaptor.capture());
+        HostConfig hostConfig = hostConfigCaptor.getValue();
+        assertThat(hostConfig.getPrivileged()).isTrue();
+        assertThat(hostConfig.getNanoCPUs()).isEqualTo(2_000_000_000L);
+        assertThat(hostConfig.getMemory()).isEqualTo(524288L * 1024L);
+        assertThat(hostConfig.getPidsLimit()).isEqualTo(150L);
+        assertThat(hostConfig.getNetworkMode()).isEqualTo("none");
+        verify(createCmd).withNetworkDisabled(true);
+    }
+
+    @Test
+    @DisplayName("createContainer default overload with registry and DatabaseContainerConstraints works")
+    void createContainerRegistryWithConstraints() {
+        InspectImageCmd inspectCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("execution/mysql:8.0")).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenReturn(mock(InspectImageResponse.class));
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class);
+        CreateContainerResponse createResponse = mock(CreateContainerResponse.class);
+        when(createResponse.getId()).thenReturn("container-reg-db");
+
+        when(dockerClient.createContainerCmd("execution/mysql:8.0")).thenReturn(createCmd);
+        when(createCmd.withName(anyString())).thenReturn(createCmd);
+        when(createCmd.withTty(anyBoolean())).thenReturn(createCmd);
+        when(createCmd.withHostConfig(any(HostConfig.class))).thenReturn(createCmd);
+        when(createCmd.withNetworkDisabled(true)).thenReturn(createCmd);
+        when(createCmd.exec()).thenReturn(createResponse);
+
+        DatabaseContainerConstraints constraints = DatabaseContainerConstraints.defaults();
+        DockerContainerDetails container = service.createContainer(DockerImageRegistry.MYSQL_8_0, constraints);
+
+        assertThat(container.id()).isEqualTo("container-reg-db");
+
+        assertThatThrownBy(() -> service.createContainer((DockerImageRegistry) null, constraints))
+                .isInstanceOf(DockerContainerCreationException.class)
+                .hasMessageContaining("DockerImageRegistry must not be null.");
+    }
+
     // =========================================================================
     // Container Existence, Start & Stop Tests
     // =========================================================================
@@ -621,6 +694,88 @@ class DockerExecutionServiceImplTest {
                 .hasRootCauseInstanceOf(RuntimeException.class);
     }
 
+    @Test
+    @DisplayName("execContainer with timeLimitMs succeeds within deadline")
+    void execContainerWithTimeLimitSuccess() {
+        String containerId = "cnt-timed";
+        List<String> command = List.of("quick-query");
+
+        InspectContainerCmd inspectContainerCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectContainerCmd);
+        when(inspectContainerCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-id-timed");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd(any(String[].class))).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-id-timed")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback.Adapter<Frame> cb = invocation.getArgument(0);
+            ResultCallback.Adapter<Frame> spyCb = spy(cb);
+            doReturn(true).when(spyCb).awaitCompletion(eq(3000L), any());
+            return spyCb;
+        });
+
+        InspectExecCmd inspectExecCmd = mock(InspectExecCmd.class);
+        InspectExecResponse inspectExecResponse = mock(InspectExecResponse.class);
+        when(inspectExecResponse.getExitCodeLong()).thenReturn(0L);
+
+        when(dockerClient.inspectExecCmd("exec-id-timed")).thenReturn(inspectExecCmd);
+        when(inspectExecCmd.exec()).thenReturn(inspectExecResponse);
+
+        DockerExecutionResult result = service.execContainer(containerId, command, 3000L);
+
+        assertThat(result.exitCode()).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("execContainer with timeLimitMs returns exitCode 124 when execution times out")
+    void execContainerWithTimeLimitTimeout() {
+        String containerId = "cnt-timeout";
+        List<String> command = List.of("slow-query");
+
+        InspectContainerCmd inspectContainerCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectContainerCmd);
+        when(inspectContainerCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-id-timeout");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd(any(String[].class))).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-id-timeout")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback.Adapter<Frame> cb = invocation.getArgument(0);
+            ResultCallback.Adapter<Frame> spyCb = spy(cb);
+            doReturn(false).when(spyCb).awaitCompletion(eq(2000L), any());
+            return spyCb;
+        });
+
+        DockerExecutionResult result = service.execContainer(containerId, command, 2000L);
+
+        assertThat(result.exitCode()).isEqualTo(124L);
+        assertThat(result.stderr()).contains("Command timed out after 2000 ms.");
+    }
+
     // =========================================================================
     // Container Deletion Tests
     // =========================================================================
@@ -738,7 +893,8 @@ class DockerExecutionServiceImplTest {
         when(execStartCmd.exec(any())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             ResultCallback<Frame> cb = invocation.getArgument(0);
-            cb.onNext(new Frame(StreamType.STDERR, "cat: /missing/file.txt: No such file or directory".getBytes(StandardCharsets.UTF_8)));
+            cb.onNext(new Frame(StreamType.STDERR,
+                    "cat: /missing/file.txt: No such file or directory".getBytes(StandardCharsets.UTF_8)));
             cb.onComplete();
             return cb;
         });
@@ -830,7 +986,8 @@ class DockerExecutionServiceImplTest {
         when(execStartCmd.exec(any())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             ResultCallback<Frame> cb = invocation.getArgument(0);
-            cb.onNext(new Frame(StreamType.STDERR, "bash: /root/secret.txt: Permission denied".getBytes(StandardCharsets.UTF_8)));
+            cb.onNext(new Frame(StreamType.STDERR,
+                    "bash: /root/secret.txt: Permission denied".getBytes(StandardCharsets.UTF_8)));
             cb.onComplete();
             return cb;
         });

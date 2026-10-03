@@ -1,15 +1,17 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerProperties;
-import com.bharath.stacked.modules.execution.exception.*;
+import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
+import com.bharath.stacked.modules.execution.exception.*;
 import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.BuildImageResultCallback;
+import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
@@ -31,6 +33,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -209,6 +212,14 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
     public DockerContainerDetails createContainer(
             DockerImageDetails dockerImageDetails
     ) throws DockerContainerCreationException {
+        return createContainer(dockerImageDetails, null);
+    }
+
+    @Override
+    public DockerContainerDetails createContainer(
+            DockerImageDetails dockerImageDetails,
+            DatabaseContainerConstraints constraints
+    ) throws DockerContainerCreationException {
 
         String image = dockerImageDetails.reference();
 
@@ -222,20 +233,52 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                 "stacked-execution-" + UUID.randomUUID();
 
         try {
-            CreateContainerResponse response = dockerClient
+            HostConfig hostConfig = HostConfig.newHostConfig()
+                    .withPrivileged(true);
+
+            boolean networkDisabled = false;
+
+            if (constraints != null) {
+                if (constraints.cpuLimit() > 0) {
+                    long nanoCpus = constraints.cpuLimit() > 1000L
+                            ? constraints.cpuLimit()
+                            : constraints.cpuLimit() * 1_000_000_000L;
+                    hostConfig.withNanoCPUs(nanoCpus);
+                }
+
+                if (constraints.memoryLimitKb() > 0) {
+                    long memoryBytes = constraints.memoryLimitKb() * 1024L;
+                    hostConfig.withMemory(memoryBytes);
+                    hostConfig.withMemorySwap(memoryBytes);
+                }
+
+                if (constraints.pidsLimit() > 0) {
+                    hostConfig.withPidsLimit(constraints.pidsLimit());
+                }
+
+                if (constraints.networkDisabled()) {
+                    networkDisabled = true;
+                    hostConfig.withNetworkMode("none");
+                }
+            }
+
+            CreateContainerCmd createCmd = dockerClient
                     .createContainerCmd(image)
                     .withName(containerName)
                     .withTty(true)
-                    .withHostConfig(
-                            HostConfig.newHostConfig()
-                                    .withPrivileged(true)
-                    )
-                    .exec();
+                    .withHostConfig(hostConfig);
+
+            if (networkDisabled) {
+                createCmd.withNetworkDisabled(true);
+            }
+
+            CreateContainerResponse response = createCmd.exec();
 
             log.info(
-                    "Created Docker container [{}] from image [{}].",
+                    "Created Docker container [{}] from image [{}] with constraints [{}].",
                     containerName,
-                    image
+                    image,
+                    constraints
             );
 
             return new DockerContainerDetails(
@@ -345,6 +388,15 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             String containerId,
             List<String> command
     ) throws DockerExecutionException {
+        return execContainer(containerId, command, null);
+    }
+
+    @Override
+    public DockerExecutionResult execContainer(
+            String containerId,
+            List<String> command,
+            Long timeLimitMs
+    ) throws DockerExecutionException {
 
         if (!isContainerExists(containerId)) {
             throw new DockerContainerNotFoundException(
@@ -362,11 +414,30 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
 
             ExecOutputCallback callback = new ExecOutputCallback();
 
-            dockerClient
-                    .execStartCmd(exec.getId())
-                    .withDetach(false)
-                    .exec(callback)
-                    .awaitCompletion();
+            boolean completed;
+            if (timeLimitMs != null && timeLimitMs > 0) {
+                completed = dockerClient
+                        .execStartCmd(exec.getId())
+                        .withDetach(false)
+                        .exec(callback)
+                        .awaitCompletion(timeLimitMs, TimeUnit.MILLISECONDS);
+            } else {
+                dockerClient
+                        .execStartCmd(exec.getId())
+                        .withDetach(false)
+                        .exec(callback)
+                        .awaitCompletion();
+                completed = true;
+            }
+
+            if (!completed) {
+                log.warn("Command execution timed out after {} ms in container [{}]", timeLimitMs, containerId);
+                return new DockerExecutionResult(
+                        124L,
+                        callback.stdout(),
+                        callback.stderr() + (callback.stderr().isEmpty() ? "" : "\n") + "Command timed out after " + timeLimitMs + " ms."
+                );
+            }
 
             Long exitCode = dockerClient
                     .inspectExecCmd(exec.getId())

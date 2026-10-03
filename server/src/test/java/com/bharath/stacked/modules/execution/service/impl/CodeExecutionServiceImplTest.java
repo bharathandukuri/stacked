@@ -7,6 +7,7 @@ import com.bharath.stacked.modules.execution.enums.IsolateExecutionStatus;
 import com.bharath.stacked.modules.execution.exception.DockerExecutionException;
 import com.bharath.stacked.modules.execution.exception.IsolateExecutionException;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
+import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -121,9 +123,9 @@ class CodeExecutionServiceImplTest {
                 0L,
                 false,
                 10L,
-                2L
-        );
-        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq(""), any(IsolateExecutionConstraints.class)))
+                2L);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq(""),
+                any(IsolateExecutionConstraints.class)))
                 .thenReturn(isolateResult);
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -139,10 +141,73 @@ class CodeExecutionServiceImplTest {
         verify(dockerExecutionService).createContainer(java.dockerImageDetails());
         verify(dockerExecutionService).startContainer(testContainer.id());
         verify(isolateExecutionService).initialize(testContainer);
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/Solution.java"), anyString());
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/Solution.java"),
+                anyString());
         verify(dockerExecutionService).execContainer(eq(testContainer.id()), anyList());
-        List<String> expectedJavaRunCmd = List.of("/bin/bash", "-c", "exec \"$@\"", "--", "java", "-cp", ".", "Solution");
-        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), eq(expectedJavaRunCmd), eq(""), any());
+        List<String> expectedJavaRunCmd = List.of("/bin/bash", "-c", "exec \"$@\"", "--", "java", "-cp", ".",
+                "Solution");
+        ArgumentCaptor<IsolateExecutionConstraints> constraintsCaptor =
+                ArgumentCaptor.forClass(IsolateExecutionConstraints.class);
+        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), eq(expectedJavaRunCmd), eq(""),
+                constraintsCaptor.capture());
+        IsolateExecutionConstraints captured = constraintsCaptor.getValue();
+        assertThat(captured.cpuTimeSeconds()).isEqualTo(3.0);
+        assertThat(captured.wallTimeSeconds()).isEqualTo(6.0);
+        assertThat(captured.memoryKb()).isNull();
+
+        verify(isolateExecutionService).cleanup(testSandbox);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Successfully compiles and runs compiled language (C++) with memory constraints")
+    void executeCompiledLanguageCppWithMemoryConstraintsSuccess() {
+        Language cpp = languageFactory.create("cpp-23");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(cpp)
+                .code("#include <iostream>\nint main() { std::cout << 42; return 0; }")
+                .fileName("solution.cpp")
+                .constraints(new CodeExecutionConstraints(3000L, 131072L))
+                .build();
+
+        when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+                .thenReturn(new DockerExecutionResult(0L, "", ""));
+
+        IsolateExecutionResult isolateResult = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS,
+                "42",
+                "",
+                0.01,
+                0.02,
+                15000L,
+                0L,
+                0L,
+                false,
+                10L,
+                2L);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq(""),
+                any(IsolateExecutionConstraints.class)))
+                .thenReturn(isolateResult);
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("42");
+
+        ArgumentCaptor<IsolateExecutionConstraints> constraintsCaptor =
+                ArgumentCaptor.forClass(IsolateExecutionConstraints.class);
+        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), anyList(), eq(""),
+                constraintsCaptor.capture());
+        IsolateExecutionConstraints captured = constraintsCaptor.getValue();
+        assertThat(captured.cpuTimeSeconds()).isEqualTo(3.0);
+        assertThat(captured.wallTimeSeconds()).isEqualTo(6.0);
+        assertThat(captured.memoryKb()).isEqualTo(131072L);
+
         verify(isolateExecutionService).cleanup(testSandbox);
         verify(dockerExecutionService).stopContainer(testContainer.id());
         verify(dockerExecutionService).deleteContainer(testContainer.id());
@@ -192,6 +257,7 @@ class CodeExecutionServiceImplTest {
                 .code("print('Python Hello')")
                 .fileName("solution.py")
                 .stdin("input line")
+                .constraints(new CodeExecutionConstraints(2500L, 131072L))
                 .build();
 
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
@@ -209,10 +275,10 @@ class CodeExecutionServiceImplTest {
                 0L,
                 false,
                 5L,
-                1L
-        );
+                1L);
         List<String> expectedPythonRunCmd = List.of("/bin/bash", "-c", "exec \"$@\"", "--", "python3", "solution.py");
-        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), eq(expectedPythonRunCmd), eq("input line"), any(IsolateExecutionConstraints.class)))
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), eq(expectedPythonRunCmd), eq("input line"),
+                any(IsolateExecutionConstraints.class)))
                 .thenReturn(isolateResult);
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -222,7 +288,15 @@ class CodeExecutionServiceImplTest {
 
         // Compilation command was NOT called for interpreted language
         verify(dockerExecutionService, never()).execContainer(anyString(), anyList());
-        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), eq(expectedPythonRunCmd), eq("input line"), any());
+        ArgumentCaptor<IsolateExecutionConstraints> pythonConstraintsCaptor =
+                ArgumentCaptor.forClass(IsolateExecutionConstraints.class);
+        verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), eq(expectedPythonRunCmd),
+                eq("input line"), pythonConstraintsCaptor.capture());
+        IsolateExecutionConstraints captured = pythonConstraintsCaptor.getValue();
+        assertThat(captured.cpuTimeSeconds()).isEqualTo(2.5);
+        assertThat(captured.wallTimeSeconds()).isEqualTo(5.0);
+        assertThat(captured.memoryKb()).isEqualTo(131072L);
+
         verify(isolateExecutionService).cleanup(testSandbox);
         verify(dockerExecutionService).stopContainer(testContainer.id());
         verify(dockerExecutionService).deleteContainer(testContainer.id());
@@ -240,18 +314,25 @@ class CodeExecutionServiceImplTest {
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
         when(dockerExecutionService.execContainer(any(), any())).thenReturn(new DockerExecutionResult(0L, "", ""));
         when(isolateExecutionService.executeWithConstraints(any(), any(), any(), any()))
-                .thenReturn(new IsolateExecutionResult(IsolateExecutionStatus.SUCCESS, "", "", 0.0, 0.0, 1000L, 0L, 0L, false, 0L, 0L));
+                .thenReturn(new IsolateExecutionResult(IsolateExecutionStatus.SUCCESS, "", "", 0.0, 0.0, 1000L, 0L, 0L,
+                        false, 0L, 0L));
 
-        codeExecutionService.run(SimpleCodeExecutionRequest.builder().language(java).code("code").fileName(null).build());
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/Solution.java"), eq("code"));
+        codeExecutionService
+                .run(SimpleCodeExecutionRequest.builder().language(java).code("code").fileName(null).build());
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/Solution.java"),
+                eq("code"));
 
         // Python defaults to solution.py
-        codeExecutionService.run(SimpleCodeExecutionRequest.builder().language(python).code("code").fileName("  ").build());
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.py"), eq("code"));
+        codeExecutionService
+                .run(SimpleCodeExecutionRequest.builder().language(python).code("code").fileName("  ").build());
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.py"),
+                eq("code"));
 
         // C++ defaults to solution.cpp
-        codeExecutionService.run(SimpleCodeExecutionRequest.builder().language(cpp).code("code").fileName(null).build());
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.cpp"), eq("code"));
+        codeExecutionService
+                .run(SimpleCodeExecutionRequest.builder().language(cpp).code("code").fileName(null).build());
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.cpp"),
+                eq("code"));
     }
 
     @Test
@@ -278,8 +359,7 @@ class CodeExecutionServiceImplTest {
                 9L,
                 true,
                 10L,
-                2L
-        );
+                2L);
         when(isolateExecutionService.executeWithConstraints(any(), any(), any(), any())).thenReturn(isolateResult);
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -312,8 +392,7 @@ class CodeExecutionServiceImplTest {
                 9L,
                 true,
                 10L,
-                2L
-        );
+                2L);
         when(isolateExecutionService.executeWithConstraints(any(), any(), any(), any())).thenReturn(isolateResult);
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -345,8 +424,7 @@ class CodeExecutionServiceImplTest {
                 0L,
                 false,
                 5L,
-                1L
-        );
+                1L);
         when(isolateExecutionService.executeWithConstraints(any(), any(), any(), any())).thenReturn(isolateResult);
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -366,7 +444,8 @@ class CodeExecutionServiceImplTest {
                 .build();
 
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
-        doThrow(new DockerExecutionException("Docker start daemon died")).when(dockerExecutionService).startContainer(testContainer.id());
+        doThrow(new DockerExecutionException("Docker start daemon died")).when(dockerExecutionService)
+                .startContainer(testContainer.id());
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
 
@@ -399,6 +478,105 @@ class CodeExecutionServiceImplTest {
 
         // Sandbox and container cleanup executed
         verify(isolateExecutionService).cleanup(testSandbox);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Executes database language (MySQL) with DatabaseContainerConstraints, no isolate, and cleans up")
+    void executeDatabaseSuccess() {
+        Language mysql = languageFactory.create("mysql-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mysql)
+                .code("SELECT 1;")
+                .fileName("solution.sql")
+                .constraints(new CodeExecutionConstraints(4000L))
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(4000L)))
+                .thenReturn(new DockerExecutionResult(0L, "1\n1\n", ""));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("1\n1\n");
+        assertThat(result.exitCode()).isEqualTo(0L);
+
+        // Verify container created with DatabaseContainerConstraints
+        ArgumentCaptor<DatabaseContainerConstraints> constraintsCaptor =
+                ArgumentCaptor.forClass(DatabaseContainerConstraints.class);
+        verify(dockerExecutionService).createContainer(eq(mysql.dockerImageDetails()), constraintsCaptor.capture());
+        assertThat(constraintsCaptor.getValue().cpuLimit()).isEqualTo(1L);
+        assertThat(constraintsCaptor.getValue().memoryLimitKb()).isEqualTo(262144L);
+
+        // Verify file written to /tmp/solution.sql
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/solution.sql"), eq("SELECT 1;"));
+
+        // Verify execContainer called with timeout
+        verify(dockerExecutionService).execContainer(eq(testContainer.id()), anyList(), eq(4000L));
+
+        // Verify Isolate was NEVER used for database execution
+        verifyNoInteractions(isolateExecutionService);
+
+        // Verify cleanup
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Database execution returns TIME_LIMIT_EXCEEDED on exit code 124")
+    void executeDatabaseTimeLimitExceeded() {
+        Language postgres = languageFactory.create("postgresql-16");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(postgres)
+                .code("SELECT pg_sleep(10);")
+                .constraints(new CodeExecutionConstraints(2000L))
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(2000L)))
+                .thenReturn(new DockerExecutionResult(124L, "", "Execution timed out"));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.TIME_LIMIT_EXCEEDED);
+        assertThat(result.exitCode()).isEqualTo(124L);
+
+        verifyNoInteractions(isolateExecutionService);
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Database execution returns RUNTIME_ERROR on non-zero exit code")
+    void executeDatabaseRuntimeError() {
+        Language mysql = languageFactory.create("mysql-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mysql)
+                .code("SELECT * FROM non_existing_table;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
+                .thenReturn(new DockerExecutionResult(1L, "", "Table 'non_existing_table' doesn't exist"));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.RUNTIME_ERROR);
+        assertThat(result.exitCode()).isEqualTo(1L);
+        assertThat(result.stderr()).contains("Table 'non_existing_table' doesn't exist");
+
+        verifyNoInteractions(isolateExecutionService);
         verify(dockerExecutionService).stopContainer(testContainer.id());
         verify(dockerExecutionService).deleteContainer(testContainer.id());
     }
