@@ -54,17 +54,6 @@ export const StepSolutions = forwardRef<
   const validateAndSave = (): boolean => {
     setValidationError(null)
 
-    if (!values.testCases || values.testCases.length === 0) {
-      const msg = "At least one test case is required to validate the problem."
-      setValidationError(msg)
-      toast.add({
-        title: "Missing Test Cases",
-        description: msg,
-        type: "error",
-      })
-      return false
-    }
-
     if (isDatabaseProblem) {
       if (!databaseSolution.trim()) {
         const msg = "Reference SQL query is required for database problems."
@@ -169,7 +158,12 @@ export const StepSolutions = forwardRef<
       )}
 
       {/* Workbench Header Toolbar */}
-      <IdeToolbar onRunTestcases={handleRunSampleTests} />
+      <IdeToolbar
+        onRunTestcases={handleRunSampleTests}
+        onResetReferenceSolution={() =>
+          actions.resetReferenceSolutionToStarter(activeCodeLanguage)
+        }
+      />
 
       {/* Main IDE Workspace: Split Panes (Left: Editors, Right: Testcases & Console) */}
       <div className="min-h-0 w-full flex-1 overflow-hidden">

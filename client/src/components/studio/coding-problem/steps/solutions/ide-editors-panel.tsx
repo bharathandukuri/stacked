@@ -1,11 +1,15 @@
+import { useState } from "react"
 import {
   Sparkles,
+  FileCode,
   ShieldCheck,
+  RotateCcw,
   HelpCircle,
   Database,
   CheckCircle2,
 } from "lucide-react"
 import { MonacoEditor } from "@/components/monaco-editor"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Tooltip,
@@ -31,6 +35,7 @@ export function IdeEditorsPanel({ className }: IdeEditorsPanelProps) {
     (state) =>
       state.activeCodeLanguage || values.languages[0] || "javascript-node-20"
   )
+  const starterCodes = useCodingProblemStore((state) => state.starterCodes)
   const referenceSolutions = useCodingProblemStore(
     (state) => state.referenceSolutions
   )
@@ -48,6 +53,11 @@ export function IdeEditorsPanel({ className }: IdeEditorsPanelProps) {
   )
   const actions = useCodingProblemStore((state) => state.actions)
 
+  // Top pane tab in generic mode: "solution" vs "starter"
+  const [topEditorTab, setTopEditorTab] = useState<"solution" | "starter">(
+    "solution"
+  )
+
   const isDatabase = values.problemType === "DATABASE"
   const activeLangConfig = getLanguageById(activeCodeLanguage)
   const monacoLang = activeLangConfig?.monacoLanguage || "javascript"
@@ -58,7 +68,7 @@ export function IdeEditorsPanel({ className }: IdeEditorsPanelProps) {
       className={cn("h-full w-full overflow-hidden bg-background", className)}
     >
       <ResizablePanelGroup orientation="vertical" className="h-full w-full">
-        {/* Top Pane: Reference Solution (Generic) / Reference SQL (Database) */}
+        {/* Top Pane: Reference Solution or Starter Code (Generic) / Reference SQL (Database) */}
         <ResizablePanel
           defaultSize={58}
           minSize={25}
@@ -68,37 +78,107 @@ export function IdeEditorsPanel({ className }: IdeEditorsPanelProps) {
             <div className="flex h-full flex-col overflow-hidden">
               {/* Header Bar */}
               <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/80 bg-muted/20 px-3 select-none">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-3.5 text-emerald-500" />
-                  <span className="text-xs font-semibold text-foreground">
-                    Reference Solution
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    (solution{extension})
-                  </span>
+                {/* Editor Tabs */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setTopEditorTab("solution")}
+                    className={cn(
+                      "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+                      topEditorTab === "solution"
+                        ? "border border-border/80 bg-background text-foreground shadow-2xs"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    )}
+                  >
+                    <Sparkles className="size-3.5 text-emerald-500" />
+                    <span>Reference Solution</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      (Solution{extension})
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTopEditorTab("starter")}
+                    className={cn(
+                      "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+                      topEditorTab === "starter"
+                        ? "border border-border/80 bg-background text-foreground shadow-2xs"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    )}
+                  >
+                    <FileCode className="size-3.5 text-primary" />
+                    <span>Starter Code</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      (Starter{extension})
+                    </span>
+                  </button>
                 </div>
 
-                <Badge
-                  variant="secondary"
-                  className="font-mono text-[10px] text-muted-foreground"
-                >
-                  {activeLangConfig?.name || activeCodeLanguage}
-                </Badge>
+                {/* Right controls */}
+                <div className="flex items-center gap-1.5">
+                  {topEditorTab === "solution" && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={() =>
+                              actions.resetReferenceSolutionToStarter(
+                                activeCodeLanguage
+                              )
+                            }
+                            className="h-6 cursor-pointer gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            <RotateCcw className="size-3" />
+                            <span>Reset to Starter</span>
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>
+                        Reset solution to match starter code template
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  <Badge
+                    variant="secondary"
+                    className="font-mono text-[10px] text-muted-foreground"
+                  >
+                    {activeLangConfig?.name || activeCodeLanguage}
+                  </Badge>
+                </div>
               </div>
 
               {/* Editor Canvas */}
               <div className="min-h-0 w-full flex-1 overflow-hidden bg-background">
-                <MonacoEditor
-                  key={`sol-${activeCodeLanguage}`}
-                  language={monacoLang}
-                  value={referenceSolutions[activeCodeLanguage] || ""}
-                  onChange={(val) =>
-                    actions.setReferenceSolution(activeCodeLanguage, val)
-                  }
-                  height="100%"
-                  width="100%"
-                  bordered={false}
-                />
+                {topEditorTab === "solution" ? (
+                  <MonacoEditor
+                    key={`sol-${activeCodeLanguage}`}
+                    language={monacoLang}
+                    value={referenceSolutions[activeCodeLanguage] || ""}
+                    onChange={(val) =>
+                      actions.setReferenceSolution(activeCodeLanguage, val)
+                    }
+                    height="100%"
+                    width="100%"
+                    bordered={false}
+                  />
+                ) : (
+                  <MonacoEditor
+                    key={`starter-${activeCodeLanguage}`}
+                    language={monacoLang}
+                    value={starterCodes[activeCodeLanguage] || ""}
+                    onChange={(val) =>
+                      actions.setStarterCode(activeCodeLanguage, val)
+                    }
+                    height="100%"
+                    width="100%"
+                    bordered={false}
+                  />
+                )}
               </div>
             </div>
           ) : (

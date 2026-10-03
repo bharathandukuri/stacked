@@ -1,17 +1,30 @@
-import { Play, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
+import {
+  Play,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useCodingProblemStore } from "../../store"
 import { getLanguageById } from "@/config/languages"
 
 export interface IdeToolbarProps {
   onRunTestcases: () => void
+  onResetReferenceSolution?: () => void
   className?: string
 }
 
 export function IdeToolbar({
   onRunTestcases,
+  onResetReferenceSolution,
   className,
 }: IdeToolbarProps) {
   const values = useCodingProblemStore((state) => state.values)
@@ -123,6 +136,29 @@ export function IdeToolbar({
             </>
           )}
         </Badge>
+
+        {/* Optional Reset Shortcut */}
+        {!isDatabase && onResetReferenceSolution && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={onResetReferenceSolution}
+                  className="h-7 cursor-pointer text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span className="hidden text-[11px] lg:inline">
+                    Reset Solution
+                  </span>
+                </Button>
+              }
+            />
+            <TooltipContent>Reset solution code to starter stub</TooltipContent>
+          </Tooltip>
+        )}
 
         {/* Run Reference Solution Button */}
         <Button

@@ -35,6 +35,7 @@ import {
 } from "../types"
 import { useCodingProblemStore } from "../store"
 import { codingProblemSchema, type CodingProblemValues } from "../schemas"
+import { TestcasesSection } from "./testcases-section"
 import { toast } from "@/components/ui/toast"
 import { fileService } from "@/services/file-service"
 
@@ -471,7 +472,37 @@ export const CodingProblemForm = forwardRef<
           <FieldSet className="gap-4">
             <div>
               <FieldLegend className="text-base font-semibold tracking-tight text-foreground">
-                3. Topic Tags
+                3. Test Cases
+              </FieldLegend>
+              <FieldDescription>
+                Input test data passed to the solution code or SQL database
+                engine.
+              </FieldDescription>
+            </div>
+
+            <form.Subscribe
+              selector={(state) => [
+                state.values.problemType,
+                state.values.testCases,
+              ]}
+              children={([problemType, testCases]) => (
+                <TestcasesSection
+                  problemType={problemType as ProblemType}
+                  testCases={testCases as CodingProblemValues["testCases"]}
+                  onChange={(newCases) =>
+                    form.setFieldValue("testCases", newCases)
+                  }
+                />
+              )}
+            />
+          </FieldSet>
+
+          <FieldSeparator />
+
+          <FieldSet className="gap-4">
+            <div>
+              <FieldLegend className="text-base font-semibold tracking-tight text-foreground">
+                4. Topic Tags
               </FieldLegend>
               <FieldDescription>
                 Classify algorithms and data structures.
@@ -495,7 +526,7 @@ export const CodingProblemForm = forwardRef<
           <FieldSet className="gap-4">
             <div>
               <FieldLegend className="text-base font-semibold tracking-tight text-foreground">
-                4. Hints
+                5. Hints
               </FieldLegend>
               <FieldDescription>
                 Helpful guidance revealed sequentially when learners need a

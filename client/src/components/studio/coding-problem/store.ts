@@ -1,7 +1,11 @@
 import { create } from "zustand"
 import type { TestCase } from "./types"
 import type { CodingProblemValues } from "./schemas"
-import { LANGUAGE_REGISTRY, getDefaultLanguageIds } from "@/config/languages"
+import {
+  LANGUAGE_REGISTRY,
+  getLanguageById,
+  getDefaultLanguageIds,
+} from "@/config/languages"
 
 export type DatabaseValidationMode =
   "ORDER_INSENSITIVE" | "ORDER_SENSITIVE" | "CUSTOM_QUERY"
@@ -29,6 +33,7 @@ export interface CodingProblemStudioState {
 
   // Step 2: Code, Solutions & Validation
   activeCodeLanguage: string
+  starterCodes: Record<string, string>
   referenceSolutions: Record<string, string>
   solutionValidators: Record<string, string>
 
@@ -53,8 +58,10 @@ export interface CodingProblemStudioActions {
 
   // Step 2 actions
   setActiveCodeLanguage: (langId: string) => void
+  setStarterCode: (langId: string, code: string) => void
   setReferenceSolution: (langId: string, code: string) => void
   setSolutionValidator: (langId: string, code: string) => void
+  resetReferenceSolutionToStarter: (langId: string) => void
   setDatabaseSolution: (query: string) => void
   setDatabaseValidationMode: (mode: DatabaseValidationMode) => void
   setDatabaseCustomValidator: (query: string) => void
@@ -92,12 +99,14 @@ export const DEFAULT_CODING_PROBLEM_VALUES: CodingProblemValues = {
 
 // Generate initial templates from language registry
 function getInitialCodeMap(
-  type: "solution" | "validator"
+  type: "starter" | "solution" | "validator"
 ): Record<string, string> {
   const map: Record<string, string> = {}
   for (const lang of LANGUAGE_REGISTRY) {
-    if (type === "solution") {
-      map[lang.id] = lang.defaultSolutionTemplate
+    if (type === "starter") {
+      map[lang.id] = lang.defaultStarterCode
+    } else if (type === "solution") {
+      map[lang.id] = lang.defaultStarterCode
     } else {
       map[lang.id] = lang.defaultValidatorCode
     }
@@ -158,6 +167,25 @@ export const useCodingProblemStore = create<CodingProblemStudioStore>(
       setActiveCodeLanguage: (activeCodeLanguage) =>
         set({ activeCodeLanguage }),
 
+      setStarterCode: (langId, code) =>
+        set((state) => {
+          // If the reference solution is identical to previous starter code or empty, sync it
+          const currentRef = state.referenceSolutions[langId]
+          const prevStarter = state.starterCodes[langId]
+          const shouldSyncRef = !currentRef || currentRef === prevStarter
+
+          return {
+            starterCodes: {
+              ...state.starterCodes,
+              [langId]: code,
+            },
+            referenceSolutions: {
+              ...state.referenceSolutions,
+              [langId]: shouldSyncRef ? code : currentRef,
+            },
+          }
+        }),
+
       setReferenceSolution: (langId, code) =>
         set((state) => ({
           referenceSolutions: {
@@ -171,6 +199,17 @@ export const useCodingProblemStore = create<CodingProblemStudioStore>(
           solutionValidators: {
             ...state.solutionValidators,
             [langId]: code,
+          },
+        })),
+
+      resetReferenceSolutionToStarter: (langId) =>
+        set((state) => ({
+          referenceSolutions: {
+            ...state.referenceSolutions,
+            [langId]:
+              state.starterCodes[langId] ||
+              getLanguageById(langId)?.defaultStarterCode ||
+              "",
           },
         })),
 
@@ -237,6 +276,7 @@ export const useCodingProblemStore = create<CodingProblemStudioStore>(
           uploadedImageIds: [],
           isSaving: false,
           activeCodeLanguage: "javascript-node-20",
+          starterCodes: getInitialCodeMap("starter"),
           referenceSolutions: getInitialCodeMap("solution"),
           solutionValidators: getInitialCodeMap("validator"),
           databaseSolution: `-- Reference SQL query\nSELECT\n    *\nFROM\n    Person;\n`,
@@ -255,6 +295,7 @@ export const useCodingProblemStore = create<CodingProblemStudioStore>(
       uploadedImageIds: [],
       isSaving: false,
       activeCodeLanguage: "javascript-node-20",
+      starterCodes: getInitialCodeMap("starter"),
       referenceSolutions: getInitialCodeMap("solution"),
       solutionValidators: getInitialCodeMap("validator"),
       databaseSolution: `-- Reference SQL query\nSELECT\n    *\nFROM\n    Person;\n`,

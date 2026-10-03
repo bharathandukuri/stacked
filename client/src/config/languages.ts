@@ -13,7 +13,7 @@ export interface LanguageConfig {
   category: ProblemCategory
   monacoLanguage: string
   defaultExtension: string
-  defaultSolutionTemplate: string
+  defaultStarterCode: string
   defaultValidatorCode: string
 }
 
@@ -25,7 +25,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "javascript",
     defaultExtension: ".js",
-    defaultSolutionTemplate: `/**\n * @param {string} input\n * @return {any}\n */\nfunction solve(input) {\n    // Write your solution here\n    \n}\n`,
+    defaultStarterCode: `/**\n * @param {string} input\n * @return {any}\n */\nfunction solve(input) {\n    // Write your solution here\n    \n}\n`,
     defaultValidatorCode: `// Solution Validator (reads input and actual output separated by delimiter)\nconst fs = require('fs');\n\nconst raw = fs.readFileSync(0, 'utf-8');\nconst [input, actualOutput] = raw.split('\\n---OUTPUT---\\n');\n\n// Assert validity (exit with 0 on pass, non-zero on fail)\nif (actualOutput === undefined || actualOutput.trim() === '') {\n    process.exit(1);\n}\nprocess.exit(0);\n`,
   },
   {
@@ -34,7 +34,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "typescript",
     defaultExtension: ".ts",
-    defaultSolutionTemplate: `function solve(input: string): any {\n    // Write your solution here\n    \n}\n`,
+    defaultStarterCode: `function solve(input: string): any {\n    // Write your solution here\n    \n}\n`,
     defaultValidatorCode: `import * as fs from 'fs';\n\nconst raw = fs.readFileSync(0, 'utf-8');\nconst [input, actualOutput] = raw.split('\\n---OUTPUT---\\n');\n\nif (actualOutput === undefined || actualOutput.trim() === '') {\n    process.exit(1);\n}\nprocess.exit(0);\n`,
   },
   {
@@ -43,7 +43,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "python",
     defaultExtension: ".py",
-    defaultSolutionTemplate: `class Solution:\n    def solve(self, input_data: str):\n        # Write your solution here\n        pass\n`,
+    defaultStarterCode: `class Solution:\n    def solve(self, input_data: str):\n        # Write your solution here\n        pass\n`,
     defaultValidatorCode: `import sys\n\nraw = sys.stdin.read()\nparts = raw.split('\\n---OUTPUT---\\n')\ninput_data = parts[0]\nactual_output = parts[1] if len(parts) > 1 else ''\n\n# Assert validity (exit with 0 on pass, non-zero on fail)\nif not actual_output.strip():\n    sys.exit(1)\nsys.exit(0)\n`,
   },
   {
@@ -52,7 +52,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "python",
     defaultExtension: ".py",
-    defaultSolutionTemplate: `class Solution:\n    def solve(self, input_data: str):\n        # Write your solution here\n        pass\n`,
+    defaultStarterCode: `class Solution:\n    def solve(self, input_data: str):\n        # Write your solution here\n        pass\n`,
     defaultValidatorCode: `import sys\n\nraw = sys.stdin.read()\nparts = raw.split('\\n---OUTPUT---\\n')\ninput_data = parts[0]\nactual_output = parts[1] if len(parts) > 1 else ''\n\nif not actual_output.strip():\n    sys.exit(1)\nsys.exit(0)\n`,
   },
   {
@@ -61,7 +61,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "java",
     defaultExtension: ".java",
-    defaultSolutionTemplate: `class Solution {\n    public Object solve(String input) {\n        // Write your solution here\n        return null;\n    }\n}\n`,
+    defaultStarterCode: `class Solution {\n    public Object solve(String input) {\n        // Write your solution here\n        return null;\n    }\n}\n`,
     defaultValidatorCode: `import java.util.Scanner;\n\npublic class Validator {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        StringBuilder sb = new StringBuilder();\n        while (scanner.hasNextLine()) {\n            sb.append(scanner.nextLine()).append("\\n");\n        }\n        String raw = sb.toString();\n        String[] parts = raw.split("\\n---OUTPUT---\\n");\n        if (parts.length < 2 || parts[1].trim().isEmpty()) {\n            System.exit(1);\n        }\n        System.exit(0);\n    }\n}\n`,
   },
   {
@@ -70,7 +70,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "java",
     defaultExtension: ".java",
-    defaultSolutionTemplate: `class Solution {\n    public Object solve(String input) {\n        // Write your solution here\n        return null;\n    }\n}\n`,
+    defaultStarterCode: `class Solution {\n    public Object solve(String input) {\n        // Write your solution here\n        return null;\n    }\n}\n`,
     defaultValidatorCode: `import java.util.Scanner;\n\npublic class Validator {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        StringBuilder sb = new StringBuilder();\n        while (scanner.hasNextLine()) {\n            sb.append(scanner.nextLine()).append("\\n");\n        }\n        String raw = sb.toString();\n        String[] parts = raw.split("\\n---OUTPUT---\\n");\n        if (parts.length < 2 || parts[1].trim().isEmpty()) {\n            System.exit(1);\n        }\n        System.exit(0);\n    }\n}\n`,
   },
   {
@@ -79,7 +79,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "cpp",
     defaultExtension: ".cpp",
-    defaultSolutionTemplate: `#include <iostream>\n#include <string>\n\nclass Solution {\npublic:\n    void solve(const std::string& input) {\n        // Write your solution here\n    }\n};\n`,
+    defaultStarterCode: `#include <iostream>\n#include <string>\n\nclass Solution {\npublic:\n    void solve(const std::string& input) {\n        // Write your solution here\n    }\n};\n`,
     defaultValidatorCode: `#include <iostream>\n#include <string>\n\nint main() {\n    std::string line, raw;\n    while (std::getline(std::cin, line)) {\n        raw += line + "\\n";\n    }\n    std::string delimiter = "\\n---OUTPUT---\\n";\n    size_t pos = raw.find(delimiter);\n    if (pos == std::string::npos) {\n        return 1;\n    }\n    return 0;\n}\n`,
   },
   {
@@ -88,7 +88,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "cpp",
     defaultExtension: ".cpp",
-    defaultSolutionTemplate: `#include <iostream>\n#include <string>\n\nclass Solution {\npublic:\n    void solve(const std::string& input) {\n        // Write your solution here\n    }\n};\n`,
+    defaultStarterCode: `#include <iostream>\n#include <string>\n\nclass Solution {\npublic:\n    void solve(const std::string& input) {\n        // Write your solution here\n    }\n};\n`,
     defaultValidatorCode: `#include <iostream>\n#include <string>\n\nint main() {\n    std::string line, raw;\n    while (std::getline(std::cin, line)) {\n        raw += line + "\\n";\n    }\n    std::string delimiter = "\\n---OUTPUT---\\n";\n    size_t pos = raw.find(delimiter);\n    if (pos == std::string::npos) {\n        return 1;\n    }\n    return 0;\n}\n`,
   },
   {
@@ -97,7 +97,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "c",
     defaultExtension: ".c",
-    defaultSolutionTemplate: `#include <stdio.h>\n#include <stdlib.h>\n\nvoid solve(const char* input) {\n    // Write your solution here\n}\n`,
+    defaultStarterCode: `#include <stdio.h>\n#include <stdlib.h>\n\nvoid solve(const char* input) {\n    // Write your solution here\n}\n`,
     defaultValidatorCode: `#include <stdio.h>\n#include <string.h>\n\nint main() {\n    return 0;\n}\n`,
   },
   {
@@ -106,7 +106,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "csharp",
     defaultExtension: ".cs",
-    defaultSolutionTemplate: `public class Solution {\n    public void Solve(string input) {\n        // Write your solution here\n    }\n}\n`,
+    defaultStarterCode: `public class Solution {\n    public void Solve(string input) {\n        // Write your solution here\n    }\n}\n`,
     defaultValidatorCode: `using System;\n\npublic class Validator {\n    public static int Main() {\n        string input = Console.In.ReadToEnd();\n        string[] parts = input.Split("\\n---OUTPUT---\\n");\n        if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[1])) return 1;\n        return 0;\n    }\n}\n`,
   },
   {
@@ -115,7 +115,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "go",
     defaultExtension: ".go",
-    defaultSolutionTemplate: `package main\n\nfunc solve(input string) {\n    // Write your solution here\n}\n`,
+    defaultStarterCode: `package main\n\nfunc solve(input string) {\n    // Write your solution here\n}\n`,
     defaultValidatorCode: `package main\n\nimport (\n    "io"\n    "os"\n    "strings"\n)\n\nfunc main() {\n    bytes, _ := io.ReadAll(os.Stdin)\n    parts := strings.Split(string(bytes), "\\n---OUTPUT---\\n")\n    if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {\n        os.Exit(1)\n    }\n    os.Exit(0)\n}\n`,
   },
   {
@@ -124,7 +124,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "rust",
     defaultExtension: ".rs",
-    defaultSolutionTemplate: `impl Solution {\n    pub fn solve(input: String) {\n        // Write your solution here\n    }\n}\n`,
+    defaultStarterCode: `impl Solution {\n    pub fn solve(input: String) {\n        // Write your solution here\n    }\n}\n`,
     defaultValidatorCode: `use std::io::{self, Read};\n\nfn main() {\n    let mut buffer = String::new();\n    io::stdin().read_to_string(&mut buffer).unwrap();\n    let parts: Vec<&str> = buffer.split("\\n---OUTPUT---\\n").collect();\n    if parts.len() < 2 || parts[1].trim().is_empty() {\n        std::process::exit(1);\n    }\n    std::process::exit(0);\n}\n`,
   },
 
@@ -135,7 +135,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "DATABASE",
     monacoLanguage: "sql",
     defaultExtension: ".sql",
-    defaultSolutionTemplate: "",
+    defaultStarterCode: "",
     defaultValidatorCode: `-- Reference SQL query for MySQL (8.0)\nSELECT\n    *\nFROM\n    Person;\n`,
   },
   {
@@ -144,7 +144,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "DATABASE",
     monacoLanguage: "sql",
     defaultExtension: ".sql",
-    defaultSolutionTemplate: "",
+    defaultStarterCode: "",
     defaultValidatorCode: `-- Reference SQL query for PostgreSQL (16)\nSELECT\n    *\nFROM\n    Person;\n`,
   },
   {
@@ -153,7 +153,7 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "DATABASE",
     monacoLanguage: "sql",
     defaultExtension: ".sql",
-    defaultSolutionTemplate: "",
+    defaultStarterCode: "",
     defaultValidatorCode: `-- Reference SQL query for SQLite (3.45)\nSELECT\n    *\nFROM\n    Person;\n`,
   },
 ] as const

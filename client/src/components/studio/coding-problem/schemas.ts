@@ -37,7 +37,9 @@ export const codingProblemSchema = z.object({
   hints: z.array(z.string()),
   topics: z.array(z.string()),
   companies: z.array(z.string()),
-  testCases: z.array(testCaseSchema),
+  testCases: z
+    .array(testCaseSchema)
+    .min(1, "At least one example / test case is required"),
 })
 
 export type CodingProblemValues = z.infer<typeof codingProblemSchema>
