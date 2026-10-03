@@ -1,15 +1,14 @@
-package com.bharath.stacked.modules.execution.service.impl;
+package com.bharath.stacked.modules.execution.mapper;
 
 import com.bharath.stacked.modules.execution.enums.IsolateExecutionStatus;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionResult;
-import com.bharath.stacked.modules.execution.service.IsolateMetadataParserService;
-import org.springframework.stereotype.Service;
+import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
+import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
 
-@Service
-public class IsolateMetadataParserServiceImpl implements IsolateMetadataParserService {
+@Component
+public class IsolateMetadataParser {
     public IsolateExecutionResult parseMetadata(
             String metadata,
             String stdout,
@@ -64,7 +63,6 @@ public class IsolateMetadataParserServiceImpl implements IsolateMetadataParserSe
             case "RE", "SG" -> IsolateExecutionStatus.RUNTIME_ERROR;
             case "TO" -> IsolateExecutionStatus.TIME_LIMIT_EXCEEDED;
             case "ML" -> IsolateExecutionStatus.MEMORY_LIMIT_EXCEEDED;
-            case "XX" -> IsolateExecutionStatus.SYSTEM_ERROR;
             default -> IsolateExecutionStatus.SYSTEM_ERROR;
         };
     }

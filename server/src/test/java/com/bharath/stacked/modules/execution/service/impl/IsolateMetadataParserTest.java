@@ -1,7 +1,8 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.enums.IsolateExecutionStatus;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionResult;
+import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
+import com.bharath.stacked.modules.execution.mapper.IsolateMetadataParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,13 +13,13 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("IsolateMetadataParserServiceImpl Unit Tests")
-class IsolateMetadataParserServiceImplTest {
+class IsolateMetadataParserTest {
 
-    private IsolateMetadataParserServiceImpl parserService;
+    private IsolateMetadataParser parserService;
 
     @BeforeEach
     void setUp() {
-        parserService = new IsolateMetadataParserServiceImpl();
+        parserService = new IsolateMetadataParser();
     }
 
     @Test

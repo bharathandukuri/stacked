@@ -5,14 +5,14 @@ import com.bharath.stacked.modules.execution.exception.DockerExecutionException;
 import com.bharath.stacked.modules.execution.exception.IsolateCleanupException;
 import com.bharath.stacked.modules.execution.exception.IsolateExecutionException;
 import com.bharath.stacked.modules.execution.exception.IsolateInitializationException;
-import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.model.DockerExecutionResult;
-import com.bharath.stacked.modules.execution.model.DockerImageDetails;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionConstraints;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionResult;
-import com.bharath.stacked.modules.execution.model.SandBoxDetails;
+import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
+import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.IsolateExecutionConstraints;
+import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
+import com.bharath.stacked.modules.execution.dto.IsolateSandBoxDetails;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
-import com.bharath.stacked.modules.execution.service.IsolateMetadataParserService;
+import com.bharath.stacked.modules.execution.mapper.IsolateMetadataParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,18 +40,18 @@ class IsolateExecutionServiceImplTest {
     private DockerExecutionService dockerExecutionService;
 
     @Mock
-    private IsolateMetadataParserService isolateMetadataParserService;
+    private IsolateMetadataParser isolateMetadataParser;
 
     @InjectMocks
     private IsolateExecutionServiceImpl isolateExecutionService;
 
     private DockerContainerDetails testContainer;
-    private SandBoxDetails testSandbox;
+    private IsolateSandBoxDetails testSandbox;
 
     @BeforeEach
     void setUp() {
         testContainer = new DockerContainerDetails("cnt-12345", "stacked-execution-uuid");
-        testSandbox = new SandBoxDetails(55, testContainer);
+        testSandbox = new IsolateSandBoxDetails(55, testContainer);
     }
 
     // =========================================================================
@@ -64,13 +64,13 @@ class IsolateExecutionServiceImplTest {
         when(dockerExecutionService.execContainer(eq("cnt-12345"), anyList()))
                 .thenReturn(new DockerExecutionResult(0L, "/var/lib/isolate/55", ""));
 
-        SandBoxDetails sandboxDetails = isolateExecutionService.initialize(testContainer);
+        IsolateSandBoxDetails sandboxDetailsIsolate = isolateExecutionService.initialize(testContainer);
 
-        assertThat(sandboxDetails).isNotNull();
-        assertThat(sandboxDetails.dockerContainerDetails()).isEqualTo(testContainer);
-        assertThat(sandboxDetails.isolateBoxId()).isBetween(1, 1000);
+        assertThat(sandboxDetailsIsolate).isNotNull();
+        assertThat(sandboxDetailsIsolate.dockerContainerDetails()).isEqualTo(testContainer);
+        assertThat(sandboxDetailsIsolate.isolateBoxId()).isBetween(1, 1000);
 
-        verify(dockerExecutionService, never()).createContainer(any());
+        verify(dockerExecutionService, never()).createContainer(any(DockerImageDetails.class));
         verify(dockerExecutionService, never()).startContainer(anyString());
 
         @SuppressWarnings("unchecked")
@@ -146,7 +146,7 @@ class IsolateExecutionServiceImplTest {
     @DisplayName("cleanup gracefully handles null sandbox or null container details")
     void cleanupNullSafe() {
         isolateExecutionService.cleanup(null);
-        isolateExecutionService.cleanup(new SandBoxDetails(1, null));
+        isolateExecutionService.cleanup(new IsolateSandBoxDetails(1, null));
 
         verify(dockerExecutionService, never()).execContainer(anyString(), anyList());
     }
@@ -191,8 +191,7 @@ class IsolateExecutionServiceImplTest {
                 3.0,
                 131072L,
                 4,
-                2048L
-        );
+                2048L);
 
         String boxDir = "/var/lib/isolate/55/box";
         String metaContent = "time:0.020\ntime-wall:0.025\nmax-rss:12400\nexitcode:0\n";
@@ -219,17 +218,15 @@ class IsolateExecutionServiceImplTest {
                 0L,
                 false,
                 4L,
-                2L
-        );
-        when(isolateMetadataParserService.parseMetadata(metaContent, stdoutContent, stderrContent))
+                2L);
+        when(isolateMetadataParser.parseMetadata(metaContent, stdoutContent, stderrContent))
                 .thenReturn(expectedResult);
 
         IsolateExecutionResult result = isolateExecutionService.executeWithConstraints(
                 testSandbox,
                 command,
                 stdin,
-                constraints
-        );
+                constraints);
 
         assertThat(result).isNotNull();
         assertThat(result).isEqualTo(expectedResult);
@@ -259,8 +256,7 @@ class IsolateExecutionServiceImplTest {
                 "--full-env",
                 "--run",
                 "--",
-                "./solution"
-        );
+                "./solution");
     }
 
     @Test
@@ -276,17 +272,15 @@ class IsolateExecutionServiceImplTest {
         when(dockerExecutionService.readFile("cnt-12345", boxDir + "/stdout.txt")).thenReturn("hello\n");
         when(dockerExecutionService.readFile("cnt-12345", boxDir + "/stderr.txt")).thenReturn("");
 
-        when(isolateMetadataParserService.parseMetadata(anyString(), anyString(), anyString()))
+        when(isolateMetadataParser.parseMetadata(anyString(), anyString(), anyString()))
                 .thenReturn(new IsolateExecutionResult(
-                        IsolateExecutionStatus.SUCCESS, "hello\n", "", null, null, null, 0L, null, false, null, null
-                ));
+                        IsolateExecutionStatus.SUCCESS, "hello\n", "", null, null, null, 0L, null, false, null, null));
 
         IsolateExecutionResult result = isolateExecutionService.executeWithConstraints(
                 testSandbox,
                 command,
                 null,
-                constraints
-        );
+                constraints);
 
         assertThat(result).isNotNull();
         verify(dockerExecutionService).writeFile("cnt-12345", boxDir + "/stdin.txt", "");
@@ -305,8 +299,7 @@ class IsolateExecutionServiceImplTest {
                 testSandbox,
                 command,
                 "input",
-                constraints
-        ))
+                constraints))
                 .isInstanceOf(IsolateExecutionException.class)
                 .hasMessageContaining("Failed to execute command in Isolate sandbox: 55")
                 .hasCauseInstanceOf(DockerExecutionException.class);

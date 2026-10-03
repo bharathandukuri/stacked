@@ -2,9 +2,9 @@ package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerProperties;
 import com.bharath.stacked.modules.execution.exception.*;
-import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.model.DockerExecutionResult;
-import com.bharath.stacked.modules.execution.model.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
+import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.*;
@@ -26,7 +26,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -2,9 +2,9 @@ package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerConfig;
 import com.bharath.stacked.modules.execution.config.DockerProperties;
-import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.model.DockerExecutionResult;
-import com.bharath.stacked.modules.execution.model.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
+import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.github.dockerjava.api.DockerClient;
 import org.junit.jupiter.api.*;

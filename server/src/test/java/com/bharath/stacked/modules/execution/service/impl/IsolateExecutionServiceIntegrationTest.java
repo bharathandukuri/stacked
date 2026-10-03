@@ -3,15 +3,15 @@ package com.bharath.stacked.modules.execution.service.impl;
 import com.bharath.stacked.modules.execution.config.DockerConfig;
 import com.bharath.stacked.modules.execution.config.DockerProperties;
 import com.bharath.stacked.modules.execution.enums.IsolateExecutionStatus;
-import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.model.DockerImageDetails;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionConstraints;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionResult;
-import com.bharath.stacked.modules.execution.model.SandBoxDetails;
+import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.IsolateExecutionConstraints;
+import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
+import com.bharath.stacked.modules.execution.dto.IsolateSandBoxDetails;
+import com.bharath.stacked.modules.execution.mapper.IsolateMetadataParser;
 import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.bharath.stacked.modules.execution.service.IsolateExecutionService;
-import com.bharath.stacked.modules.execution.service.IsolateMetadataParserService;
 import com.github.dockerjava.api.DockerClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
@@ -31,12 +31,12 @@ class IsolateExecutionServiceIntegrationTest {
     private static DockerClient dockerClient;
     private static DockerProperties dockerProperties;
     private static DockerExecutionService dockerExecutionService;
-    private static IsolateMetadataParserService metadataParserService;
+    private static IsolateMetadataParser metadataParser;
     private static IsolateExecutionService isolateExecutionService;
     private static boolean dockerAvailable;
 
     private final DockerImageDetails testImage = DockerImageRegistry.ISOLATE_1_0.dockerImage();
-    private final List<SandBoxDetails> sandboxesToCleanup = new ArrayList<>();
+    private final List<IsolateSandBoxDetails> sandboxesToCleanup = new ArrayList<>();
     private final List<String> containersToCleanup = new ArrayList<>();
 
     @BeforeAll
@@ -50,8 +50,8 @@ class IsolateExecutionServiceIntegrationTest {
             dockerClient = config.dockerClient(dockerProperties);
             dockerClient.pingCmd().exec();
             dockerExecutionService = new DockerExecutionServiceImpl(dockerClient, dockerProperties);
-            metadataParserService = new IsolateMetadataParserServiceImpl();
-            isolateExecutionService = new IsolateExecutionServiceImpl(dockerExecutionService, metadataParserService);
+            metadataParser = new IsolateMetadataParser();
+            isolateExecutionService = new IsolateExecutionServiceImpl(dockerExecutionService, metadataParser);
             dockerAvailable = true;
         } catch (Exception e) {
             dockerAvailable = false;
@@ -67,7 +67,7 @@ class IsolateExecutionServiceIntegrationTest {
 
     @AfterEach
     void cleanupSandboxesAndContainers() {
-        for (SandBoxDetails sandbox : sandboxesToCleanup) {
+        for (IsolateSandBoxDetails sandbox : sandboxesToCleanup) {
             try {
                 isolateExecutionService.cleanup(sandbox);
             } catch (Exception ignored) {
@@ -102,7 +102,7 @@ class IsolateExecutionServiceIntegrationTest {
         DockerContainerDetails container = createAndStartContainer(testImage);
 
         // 2. Initialize sandbox inside the running container
-        SandBoxDetails sandbox = isolateExecutionService.initialize(container);
+        IsolateSandBoxDetails sandbox = isolateExecutionService.initialize(container);
         sandboxesToCleanup.add(sandbox);
 
         assertThat(sandbox).isNotNull();
@@ -118,8 +118,7 @@ class IsolateExecutionServiceIntegrationTest {
                 sandbox,
                 command,
                 "",
-                constraints
-        );
+                constraints);
 
         // 4. Verify results
         assertThat(result).isNotNull();
@@ -135,7 +134,8 @@ class IsolateExecutionServiceIntegrationTest {
         isolateExecutionService.cleanup(sandbox);
         sandboxesToCleanup.remove(sandbox);
 
-        // 6. Verify container is still alive (not deleted or stopped by isolate cleanup)
+        // 6. Verify container is still alive (not deleted or stopped by isolate
+        // cleanup)
         assertThat(dockerExecutionService.isContainerExists(container.id())).isTrue();
     }
 
@@ -143,7 +143,7 @@ class IsolateExecutionServiceIntegrationTest {
     @DisplayName("executeWithConstraints redirects stdin into sandbox and captures matching stdout")
     void executeCatWithStdin() {
         DockerContainerDetails container = createAndStartContainer(testImage);
-        SandBoxDetails sandbox = isolateExecutionService.initialize(container);
+        IsolateSandBoxDetails sandbox = isolateExecutionService.initialize(container);
         sandboxesToCleanup.add(sandbox);
 
         String inputPayload = "10 20 30 40\nNext line stdin\n";
@@ -154,8 +154,7 @@ class IsolateExecutionServiceIntegrationTest {
                 sandbox,
                 command,
                 inputPayload,
-                constraints
-        );
+                constraints);
 
         assertThat(result.status()).isEqualTo(IsolateExecutionStatus.SUCCESS);
         assertThat(result.exitCode()).isEqualTo(0L);
@@ -170,7 +169,7 @@ class IsolateExecutionServiceIntegrationTest {
     @DisplayName("executeWithConstraints identifies non-zero exit code as RUNTIME_ERROR and captures stderr")
     void executeScriptWithNonZeroExitCode() {
         DockerContainerDetails container = createAndStartContainer(testImage);
-        SandBoxDetails sandbox = isolateExecutionService.initialize(container);
+        IsolateSandBoxDetails sandbox = isolateExecutionService.initialize(container);
         sandboxesToCleanup.add(sandbox);
 
         List<String> command = List.of("/bin/sh", "-c", "echo 'Critical runtime error' >&2; exit 42");
@@ -180,8 +179,7 @@ class IsolateExecutionServiceIntegrationTest {
                 sandbox,
                 command,
                 "",
-                constraints
-        );
+                constraints);
 
         assertThat(result.status()).isEqualTo(IsolateExecutionStatus.RUNTIME_ERROR);
         assertThat(result.exitCode()).isEqualTo(42L);
@@ -196,7 +194,7 @@ class IsolateExecutionServiceIntegrationTest {
     @DisplayName("executeWithConstraints identifies timeout as TIME_LIMIT_EXCEEDED")
     void executeCommandExceedingTimeLimit() {
         DockerContainerDetails container = createAndStartContainer(testImage);
-        SandBoxDetails sandbox = isolateExecutionService.initialize(container);
+        IsolateSandBoxDetails sandbox = isolateExecutionService.initialize(container);
         sandboxesToCleanup.add(sandbox);
 
         List<String> command = List.of("/bin/sleep", "2");
@@ -206,15 +204,13 @@ class IsolateExecutionServiceIntegrationTest {
                 0.4,
                 131072L,
                 10,
-                10240L
-        );
+                10240L);
 
         IsolateExecutionResult result = isolateExecutionService.executeWithConstraints(
                 sandbox,
                 command,
                 "",
-                constraints
-        );
+                constraints);
 
         assertThat(result.status()).isEqualTo(IsolateExecutionStatus.TIME_LIMIT_EXCEEDED);
 
@@ -231,7 +227,7 @@ class IsolateExecutionServiceIntegrationTest {
                 "Required Java 21 image is not available");
 
         DockerContainerDetails container = createAndStartContainer(javaImage);
-        SandBoxDetails sandbox = isolateExecutionService.initialize(container);
+        IsolateSandBoxDetails sandbox = isolateExecutionService.initialize(container);
         sandboxesToCleanup.add(sandbox);
 
         String boxDir = "/var/lib/isolate/" + sandbox.isolateBoxId() + "/box";
@@ -251,25 +247,23 @@ class IsolateExecutionServiceIntegrationTest {
         List<String> command = List.of(
                 "/bin/bash",
                 "-c",
-                "javac Solution.java && java Solution"
-        );
+                "javac Solution.java && java Solution");
         IsolateExecutionConstraints constraints = new IsolateExecutionConstraints(
                 5.0,
                 10.0,
                 null,
                 50,
-                20480L
-        );
+                20480L);
 
         IsolateExecutionResult result = isolateExecutionService.executeWithConstraints(
                 sandbox,
                 command,
                 "15 27\n",
-                constraints
-        );
+                constraints);
 
         assertThat(result.status())
-                .withFailMessage("STDERR: [%s], STDOUT: [%s], EXIT: [%s]", result.stderr(), result.stdout(), result.exitCode())
+                .withFailMessage("STDERR: [%s], STDOUT: [%s], EXIT: [%s]", result.stderr(), result.stdout(),
+                        result.exitCode())
                 .isEqualTo(IsolateExecutionStatus.SUCCESS);
         assertThat(result.exitCode()).isEqualTo(0L);
         assertThat(result.stdout()).contains("SUM=42");

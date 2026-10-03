@@ -1,4 +1,4 @@
-package com.bharath.stacked.modules.execution.model;
+package com.bharath.stacked.modules.execution.dto;
 
 public record IsolateExecutionConstraints(
         Double cpuTimeSeconds,

@@ -1,12 +1,16 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
+import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.dto.IsolateExecutionConstraints;
+import com.bharath.stacked.modules.execution.dto.IsolateSandBoxDetails;
+import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
+import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
 import com.bharath.stacked.modules.execution.exception.IsolateCleanupException;
 import com.bharath.stacked.modules.execution.exception.IsolateExecutionException;
 import com.bharath.stacked.modules.execution.exception.IsolateInitializationException;
-import com.bharath.stacked.modules.execution.model.*;
+import com.bharath.stacked.modules.execution.mapper.IsolateMetadataParser;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.bharath.stacked.modules.execution.service.IsolateExecutionService;
-import com.bharath.stacked.modules.execution.service.IsolateMetadataParserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,7 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class IsolateExecutionServiceImpl implements IsolateExecutionService {
 
     private final DockerExecutionService dockerExecutionService;
-    private final IsolateMetadataParserService isolateMetadataParserService;
+    private final IsolateMetadataParser isolateMetadataParser;
 
     private int generateBoxId() {
         return ThreadLocalRandom.current()
@@ -32,7 +36,7 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
     }
 
     @Override
-    public SandBoxDetails initialize(DockerContainerDetails dockerContainer) throws IsolateInitializationException {
+    public IsolateSandBoxDetails initialize(DockerContainerDetails dockerContainer) throws IsolateInitializationException {
         if (dockerContainer == null || dockerContainer.id() == null || dockerContainer.id().isBlank()) {
             throw new IsolateInitializationException("Docker container details must not be null or empty.");
         }
@@ -59,7 +63,7 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
                 );
             }
 
-            return new SandBoxDetails(
+            return new IsolateSandBoxDetails(
                     isolateBoxId,
                     dockerContainer
             );
@@ -76,17 +80,17 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
     }
 
     @Override
-    public void cleanup(SandBoxDetails sandboxDetails)
+    public void cleanup(IsolateSandBoxDetails sandboxDetailsIsolate)
             throws IsolateCleanupException {
 
-        if (sandboxDetails == null || sandboxDetails.dockerContainerDetails() == null) {
+        if (sandboxDetailsIsolate == null || sandboxDetailsIsolate.dockerContainerDetails() == null) {
             return;
         }
 
         String containerId =
-                sandboxDetails.dockerContainerDetails().id();
+                sandboxDetailsIsolate.dockerContainerDetails().id();
 
-        int boxId = sandboxDetails.isolateBoxId();
+        int boxId = sandboxDetailsIsolate.isolateBoxId();
 
         try {
             log.info(
@@ -133,12 +137,12 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
     }
 
     private List<String> buildIsolateCommand(
-            SandBoxDetails sandboxDetails,
+            IsolateSandBoxDetails sandboxDetailsIsolate,
             List<String> command,
             String stdin,
             IsolateExecutionConstraints constraints
     ) {
-        int boxId = sandboxDetails.isolateBoxId();
+        int boxId = sandboxDetailsIsolate.isolateBoxId();
         String boxDir = getBoxDirectory(boxId);
 
         List<String> isolateCommand = new java.util.ArrayList<>();
@@ -179,15 +183,15 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
 
     @Override
     public IsolateExecutionResult executeWithConstraints(
-            SandBoxDetails sandboxDetails,
+            IsolateSandBoxDetails sandboxDetailsIsolate,
             List<String> command,
             String stdin,
             IsolateExecutionConstraints executionConstraints
     ) throws IsolateExecutionException {
 
         String containerId =
-                sandboxDetails.dockerContainerDetails().id();
-        int boxId = sandboxDetails.isolateBoxId();
+                sandboxDetailsIsolate.dockerContainerDetails().id();
+        int boxId = sandboxDetailsIsolate.isolateBoxId();
         String boxDir = getBoxDirectory(boxId);
 
         try {
@@ -199,7 +203,7 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
 
             List<String> isolateCommand =
                     buildIsolateCommand(
-                            sandboxDetails,
+                            sandboxDetailsIsolate,
                             command,
                             stdin,
                             executionConstraints
@@ -228,7 +232,7 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
                             boxDir + "/stderr.txt"
                     );
 
-            return isolateMetadataParserService.parseMetadata(
+            return isolateMetadataParser.parseMetadata(
                     metadata,
                     stdout,
                     stderr
@@ -237,13 +241,13 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
         } catch (Exception e) {
             log.error(
                     "Failed to execute command in Isolate sandbox [boxId={}]",
-                    sandboxDetails.isolateBoxId(),
+                    sandboxDetailsIsolate.isolateBoxId(),
                     e
             );
 
             throw new IsolateExecutionException(
                     "Failed to execute command in Isolate sandbox: "
-                            + sandboxDetails.isolateBoxId(),
+                            + sandboxDetailsIsolate.isolateBoxId(),
                     e
             );
         }

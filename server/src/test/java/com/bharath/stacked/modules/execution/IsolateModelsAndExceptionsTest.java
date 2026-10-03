@@ -5,11 +5,10 @@ import com.bharath.stacked.modules.execution.exception.IsolateCleanupException;
 import com.bharath.stacked.modules.execution.exception.IsolateException;
 import com.bharath.stacked.modules.execution.exception.IsolateExecutionException;
 import com.bharath.stacked.modules.execution.exception.IsolateInitializationException;
-import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.model.DockerImageDetails;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionConstraints;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionResult;
-import com.bharath.stacked.modules.execution.model.SandBoxDetails;
+import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.dto.IsolateExecutionConstraints;
+import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
+import com.bharath.stacked.modules.execution.dto.IsolateSandBoxDetails;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -41,8 +40,8 @@ class IsolateModelsAndExceptionsTest {
     void sandBoxDetailsRecord() {
         DockerContainerDetails container = new DockerContainerDetails("cnt-123", "container-123");
 
-        SandBoxDetails sandbox1 = new SandBoxDetails(42, container);
-        SandBoxDetails sandbox2 = new SandBoxDetails(42, container);
+        IsolateSandBoxDetails sandbox1 = new IsolateSandBoxDetails(42, container);
+        IsolateSandBoxDetails sandbox2 = new IsolateSandBoxDetails(42, container);
 
         assertThat(sandbox1.isolateBoxId()).isEqualTo(42);
         assertThat(sandbox1.dockerContainerDetails()).isEqualTo(container);

@@ -1,4 +1,4 @@
-package com.bharath.stacked.modules.execution.model;
+package com.bharath.stacked.modules.execution.dto.response;
 
 public record DockerExecutionResult (
         long exitCode,

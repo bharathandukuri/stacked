@@ -3,21 +3,21 @@ package com.bharath.stacked.modules.execution.service;
 import com.bharath.stacked.modules.execution.exception.IsolateCleanupException;
 import com.bharath.stacked.modules.execution.exception.IsolateExecutionException;
 import com.bharath.stacked.modules.execution.exception.IsolateInitializationException;
-import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionConstraints;
-import com.bharath.stacked.modules.execution.model.IsolateExecutionResult;
-import com.bharath.stacked.modules.execution.model.SandBoxDetails;
+import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.dto.IsolateExecutionConstraints;
+import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
+import com.bharath.stacked.modules.execution.dto.IsolateSandBoxDetails;
 
 import java.util.List;
 
 public interface IsolateExecutionService {
 
-    SandBoxDetails initialize(DockerContainerDetails dockerContainer) throws IsolateInitializationException;
+    IsolateSandBoxDetails initialize(DockerContainerDetails dockerContainer) throws IsolateInitializationException;
 
-    void cleanup(SandBoxDetails sandboxDetails) throws IsolateCleanupException;
+    void cleanup(IsolateSandBoxDetails sandboxDetailsIsolate) throws IsolateCleanupException;
 
     IsolateExecutionResult executeWithConstraints(
-            SandBoxDetails sandboxDetails,
+            IsolateSandBoxDetails sandboxDetailsIsolate,
             List<String> command,
             String stdin,
             IsolateExecutionConstraints executionConstraints

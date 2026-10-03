@@ -1,4 +1,4 @@
-package com.bharath.stacked.modules.execution.model;
+package com.bharath.stacked.modules.execution.dto.response;
 
 import com.bharath.stacked.modules.execution.enums.IsolateExecutionStatus;
 

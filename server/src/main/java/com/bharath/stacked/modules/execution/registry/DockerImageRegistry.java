@@ -1,6 +1,6 @@
 package com.bharath.stacked.modules.execution.registry;
 
-import com.bharath.stacked.modules.execution.model.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 
 public enum DockerImageRegistry {
 
