@@ -2,11 +2,9 @@ package com.bharath.stacked.modules.execution;
 
 import com.bharath.stacked.modules.execution.config.DockerConfig;
 import com.bharath.stacked.modules.execution.config.DockerProperties;
-import com.bharath.stacked.modules.execution.exception.DockerContainerCreationException;
-import com.bharath.stacked.modules.execution.exception.DockerContainerDeletionException;
-import com.bharath.stacked.modules.execution.exception.DockerException;
-import com.bharath.stacked.modules.execution.exception.DockerImageCreationException;
+import com.bharath.stacked.modules.execution.exception.*;
 import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.model.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.model.DockerImageDetails;
 import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
 import com.github.dockerjava.api.DockerClient;
@@ -19,28 +17,45 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ExecutionModelsAndExceptionsTest {
 
     @Test
-    @DisplayName("DockerContainer record constructor, getters, and stub lifecycle methods")
-    void dockerContainerRecord() {
-        DockerContainerDetails container = new DockerContainerDetails("cnt-123", "container-123");
+    @DisplayName("DockerContainerDetails record constructor, getters, equals, and toString")
+    void dockerContainerDetailsRecord() {
+        DockerContainerDetails container1 = new DockerContainerDetails("cnt-123", "container-123");
+        DockerContainerDetails container2 = new DockerContainerDetails("cnt-123", "container-123");
 
-        assertThat(container.id()).isEqualTo("cnt-123");
-        assertThat(container.name()).isEqualTo("container-123");
-        assertThat(container.toString()).contains("cnt-123");
-
-        // Life-cycle stubs
-        container.start();
-        container.stop();
+        assertThat(container1.id()).isEqualTo("cnt-123");
+        assertThat(container1.name()).isEqualTo("container-123");
+        assertThat(container1).isEqualTo(container2);
+        assertThat(container1.hashCode()).isEqualTo(container2.hashCode());
+        assertThat(container1.toString()).contains("cnt-123").contains("container-123");
     }
 
     @Test
-    @DisplayName("DockerImageDetails record and reference() method")
-    void dockerImageDetails() {
-        DockerImageDetails details = new DockerImageDetails("stacked/isolate", "1.0", "docker/isolate-1_0");
+    @DisplayName("DockerExecutionResult record constructor, getters, equals, and toString")
+    void dockerExecutionResultRecord() {
+        DockerExecutionResult result1 = new DockerExecutionResult(0L, "Hello stdout", "No stderr");
+        DockerExecutionResult result2 = new DockerExecutionResult(0L, "Hello stdout", "No stderr");
 
-        assertThat(details.name()).isEqualTo("stacked/isolate");
-        assertThat(details.tag()).isEqualTo("1.0");
-        assertThat(details.resourcePath()).isEqualTo("docker/isolate-1_0");
-        assertThat(details.reference()).isEqualTo("stacked/isolate:1.0");
+        assertThat(result1.exitCode()).isEqualTo(0L);
+        assertThat(result1.stdout()).isEqualTo("Hello stdout");
+        assertThat(result1.stderr()).isEqualTo("No stderr");
+        assertThat(result1).isEqualTo(result2);
+        assertThat(result1.hashCode()).isEqualTo(result2.hashCode());
+        assertThat(result1.toString()).contains("0").contains("Hello stdout");
+    }
+
+    @Test
+    @DisplayName("DockerImageDetails record, getters, reference() method, equals, and toString")
+    void dockerImageDetails() {
+        DockerImageDetails details1 = new DockerImageDetails("stacked/isolate", "1.0", "docker/isolate-1_0");
+        DockerImageDetails details2 = new DockerImageDetails("stacked/isolate", "1.0", "docker/isolate-1_0");
+
+        assertThat(details1.name()).isEqualTo("stacked/isolate");
+        assertThat(details1.tag()).isEqualTo("1.0");
+        assertThat(details1.resourcePath()).isEqualTo("docker/isolate-1_0");
+        assertThat(details1.reference()).isEqualTo("stacked/isolate:1.0");
+        assertThat(details1).isEqualTo(details2);
+        assertThat(details1.hashCode()).isEqualTo(details2.hashCode());
+        assertThat(details1.toString()).contains("stacked/isolate").contains("1.0");
     }
 
     @Test
@@ -74,27 +89,66 @@ class ExecutionModelsAndExceptionsTest {
     }
 
     @Test
-    @DisplayName("DockerException and custom exception hierarchy and constructors")
+    @DisplayName("DockerException and full custom exception hierarchy and constructors")
     void dockerExceptions() {
         Throwable cause = new RuntimeException("socket error");
 
+        // Base DockerException
         DockerException dEx1 = new DockerException("base docker err");
         DockerException dEx2 = new DockerException("base docker err", cause);
         assertThat(dEx1.getMessage()).isEqualTo("base docker err");
         assertThat(dEx2.getCause()).isEqualTo(cause);
 
+        // DockerContainerException
+        DockerContainerException dcEx1 = new DockerContainerException("container err");
+        DockerContainerException dcEx2 = new DockerContainerException("container err", cause);
+        assertThat(dcEx1.getMessage()).isEqualTo("container err");
+        assertThat(dcEx2.getCause()).isEqualTo(cause);
+        assertThat(dcEx1).isInstanceOf(DockerException.class);
+
+        // DockerContainerNotFoundException
+        DockerContainerNotFoundException cnf1 = new DockerContainerNotFoundException("container not found");
+        DockerContainerNotFoundException cnf2 = new DockerContainerNotFoundException("container not found", cause);
+        assertThat(cnf1.getMessage()).isEqualTo("container not found");
+        assertThat(cnf2.getCause()).isEqualTo(cause);
+        assertThat(cnf1).isInstanceOf(DockerContainerException.class);
+
+        // DockerContainerCreationException
         DockerContainerCreationException cce1 = new DockerContainerCreationException("failed to create container");
         DockerContainerCreationException cce2 = new DockerContainerCreationException("failed to create container", cause);
         assertThat(cce1.getMessage()).isEqualTo("failed to create container");
         assertThat(cce2.getCause()).isEqualTo(cause);
-        assertThat(cce1).isInstanceOf(DockerException.class);
+        assertThat(cce1).isInstanceOf(DockerContainerException.class);
 
+        // DockerContainerDeletionException
         DockerContainerDeletionException cde1 = new DockerContainerDeletionException("failed to delete container");
         DockerContainerDeletionException cde2 = new DockerContainerDeletionException("failed to delete container", cause);
         assertThat(cde1.getMessage()).isEqualTo("failed to delete container");
         assertThat(cde2.getCause()).isEqualTo(cause);
-        assertThat(cde1).isInstanceOf(DockerException.class);
+        assertThat(cde1).isInstanceOf(DockerContainerException.class);
 
+        // DockerContainerStartException
+        DockerContainerStartException cse1 = new DockerContainerStartException("failed to start container");
+        DockerContainerStartException cse2 = new DockerContainerStartException("failed to start container", cause);
+        assertThat(cse1.getMessage()).isEqualTo("failed to start container");
+        assertThat(cse2.getCause()).isEqualTo(cause);
+        assertThat(cse1).isInstanceOf(DockerContainerException.class);
+
+        // DockerContainerStopException
+        DockerContainerStopException stp1 = new DockerContainerStopException("failed to stop container");
+        DockerContainerStopException stp2 = new DockerContainerStopException("failed to stop container", cause);
+        assertThat(stp1.getMessage()).isEqualTo("failed to stop container");
+        assertThat(stp2.getCause()).isEqualTo(cause);
+        assertThat(stp1).isInstanceOf(DockerContainerException.class);
+
+        // DockerExecutionException
+        DockerExecutionException exec1 = new DockerExecutionException("execution failed");
+        DockerExecutionException exec2 = new DockerExecutionException("execution failed", cause);
+        assertThat(exec1.getMessage()).isEqualTo("execution failed");
+        assertThat(exec2.getCause()).isEqualTo(cause);
+        assertThat(exec1).isInstanceOf(DockerContainerException.class);
+
+        // DockerImageCreationException
         DockerImageCreationException ice1 = new DockerImageCreationException("failed to build image");
         DockerImageCreationException ice2 = new DockerImageCreationException("failed to build image", cause);
         assertThat(ice1.getMessage()).isEqualTo("failed to build image");

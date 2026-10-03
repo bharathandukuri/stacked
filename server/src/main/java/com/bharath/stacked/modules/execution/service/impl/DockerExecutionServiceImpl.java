@@ -1,26 +1,34 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
-import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.config.DockerProperties;
-import com.bharath.stacked.modules.execution.exception.DockerContainerCreationException;
-import com.bharath.stacked.modules.execution.exception.DockerContainerDeletionException;
-import com.bharath.stacked.modules.execution.exception.DockerImageCreationException;
+import com.bharath.stacked.modules.execution.exception.*;
+import com.bharath.stacked.modules.execution.model.DockerContainerDetails;
+import com.bharath.stacked.modules.execution.model.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.model.DockerImageDetails;
 import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.BuildImageResultCallback;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.BuildResponseItem;
+import com.github.dockerjava.api.model.Frame;
+import com.github.dockerjava.api.model.StreamType;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -29,6 +37,42 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
 
     private final DockerClient dockerClient;
     private final DockerProperties dockerProperties;
+
+    private static class ExecOutputCallback
+            extends ResultCallback.Adapter<Frame> {
+
+        private final ByteArrayOutputStream stdout =
+                new ByteArrayOutputStream();
+
+        private final ByteArrayOutputStream stderr =
+                new ByteArrayOutputStream();
+
+        @Override
+        public void onNext(Frame frame) {
+            try {
+                if (frame.getStreamType() == StreamType.STDOUT) {
+                    stdout.write(frame.getPayload());
+
+                } else if (frame.getStreamType() == StreamType.STDERR) {
+                    stderr.write(frame.getPayload());
+
+                } else if (frame.getStreamType() == StreamType.RAW) {
+                    stdout.write(frame.getPayload());
+                }
+
+            } catch (IOException e) {
+                onError(e);
+            }
+        }
+
+        public String stdout() {
+            return stdout.toString(StandardCharsets.UTF_8);
+        }
+
+        public String stderr() {
+            return stderr.toString(StandardCharsets.UTF_8);
+        }
+    }
 
     @PostConstruct
     void validateImages() {
@@ -41,7 +85,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             for (DockerImageRegistry registry : DockerImageRegistry.values()) {
                 DockerImageDetails image = registry.dockerImage();
 
-                if (checkImageExists(image)) {
+                if (isImageExists(image)) {
                     log.info(
                             "Verified required Docker image [{}] is present.",
                             image.reference()
@@ -62,7 +106,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
     }
 
     @Override
-    public boolean checkImageExists(DockerImageDetails dockerImageDetails) {
+    public boolean isImageExists(DockerImageDetails dockerImageDetails) {
         try {
             dockerClient
                     .inspectImageCmd(dockerImageDetails.reference())
@@ -132,7 +176,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                     .exec(callback)
                     .awaitImageId();
 
-            if (!checkImageExists(dockerImageDetails)) {
+            if (!isImageExists(dockerImageDetails)) {
                 throw new IllegalStateException(
                         "Docker image build completed but image was not found: "
                                 + dockerImageDetails.reference()
@@ -166,26 +210,30 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
 
         String image = dockerImageDetails.reference();
 
-        if (!checkImageExists(dockerImageDetails)) {
+        if (!isImageExists(dockerImageDetails)) {
             throw new DockerContainerCreationException(
                     "Docker image does not exist: " + image
             );
         }
 
+        String containerName =
+                "stacked-execution-" + UUID.randomUUID();
+
         try {
             CreateContainerResponse response = dockerClient
                     .createContainerCmd(image)
+                    .withName(containerName)
                     .exec();
 
             log.info(
                     "Created Docker container [{}] from image [{}].",
-                    response.getId(),
+                    containerName,
                     image
             );
 
             return new DockerContainerDetails(
                     response.getId(),
-                    response.getId()
+                    containerName
             );
 
         } catch (Exception e) {
@@ -202,6 +250,152 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
         }
     }
 
+    @Override
+    public boolean isContainerExists(String containerId) {
+        try {
+            dockerClient
+                    .inspectContainerCmd(containerId)
+                    .exec();
+
+            return true;
+
+        } catch (NotFoundException e) {
+            return false;
+        }
+    }
+
+    @Override
+    public void startContainer(String containerId)
+            throws DockerContainerStartException {
+
+        if (!isContainerExists(containerId)) {
+            throw new DockerContainerNotFoundException(
+                    "Docker container does not exist: " + containerId
+            );
+        }
+
+        try {
+            dockerClient
+                    .startContainerCmd(containerId)
+                    .exec();
+
+            log.info(
+                    "Started Docker container [{}].",
+                    containerId
+            );
+
+        } catch (Exception e) {
+            log.error(
+                    "Failed to start Docker container [{}].",
+                    containerId,
+                    e
+            );
+
+            throw new DockerContainerStartException(
+                    "Failed to start Docker container: " + containerId,
+                    e
+            );
+        }
+    }
+
+    @Override
+    public void stopContainer(String containerId)
+            throws DockerContainerStopException {
+
+        if (!isContainerExists(containerId)) {
+            throw new DockerContainerNotFoundException(
+                    "Docker container does not exist: " + containerId
+            );
+        }
+
+        try {
+            dockerClient
+                    .stopContainerCmd(containerId)
+                    .exec();
+
+            log.info(
+                    "Stopped Docker container [{}].",
+                    containerId
+            );
+
+        } catch (Exception e) {
+            log.error(
+                    "Failed to stop Docker container [{}].",
+                    containerId,
+                    e
+            );
+
+            throw new DockerContainerStopException(
+                    "Failed to stop Docker container: " + containerId,
+                    e
+            );
+        }
+    }
+
+    @Override
+    public DockerExecutionResult execContainer(
+            String containerId,
+            List<String> command
+    ) throws DockerExecutionException {
+
+        if (!isContainerExists(containerId)) {
+            throw new DockerContainerNotFoundException(
+                    "Docker container does not exist: " + containerId
+            );
+        }
+
+        try {
+            ExecCreateCmdResponse exec = dockerClient
+                    .execCreateCmd(containerId)
+                    .withCmd(command.toArray(String[]::new))
+                    .withAttachStdout(true)
+                    .withAttachStderr(true)
+                    .exec();
+
+            ExecOutputCallback callback = new ExecOutputCallback();
+
+            dockerClient
+                    .execStartCmd(exec.getId())
+                    .withDetach(false)
+                    .exec(callback)
+                    .awaitCompletion();
+
+            Long exitCode = dockerClient
+                    .inspectExecCmd(exec.getId())
+                    .exec()
+                    .getExitCodeLong();
+
+            return new DockerExecutionResult(
+                    exitCode == null ? -1 : exitCode,
+                    callback.stdout(),
+                    callback.stderr()
+            );
+
+        } catch (InterruptedException e) {
+
+            Thread.currentThread().interrupt();
+
+            throw new DockerExecutionException(
+                    "Docker command execution was interrupted.",
+                    e
+            );
+
+        } catch (Exception e) {
+
+            log.error(
+                    "Failed to execute command [{}] in container [{}].",
+                    command,
+                    containerId,
+                    e
+            );
+
+            throw new DockerExecutionException(
+                    "Failed to execute command in Docker container: "
+                            + containerId,
+                    e
+            );
+        }
+    }
     @Override
     public void deleteContainer(String containerId)
             throws DockerContainerDeletionException {

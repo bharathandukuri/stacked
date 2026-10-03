@@ -1,6 +1,6 @@
 package com.bharath.stacked.modules.execution.exception;
 
-public class DockerContainerCreationException extends DockerException {
+public class DockerContainerCreationException extends DockerContainerException {
 
     public DockerContainerCreationException(String message) {
         super(message);

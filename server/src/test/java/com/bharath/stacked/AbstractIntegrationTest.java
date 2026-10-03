@@ -22,6 +22,10 @@ public abstract class AbstractIntegrationTest {
     protected static final GenericContainer<?> REDIS_CONTAINER;
 
     static {
+        if (System.getProperty("testcontainers.ryuk.disabled") == null) {
+            System.setProperty("testcontainers.ryuk.disabled", "true");
+        }
+
         MONGO_CONTAINER = new MongoDBContainer(MONGO_IMAGE);
         MONGO_CONTAINER.start();
 
@@ -47,5 +51,6 @@ public abstract class AbstractIntegrationTest {
         registry.add("REDIS_HOST", () -> redisHost);
         registry.add("REDIS_PORT", () -> redisPort);
         registry.add("REDIS_PASSWORD", () -> "");
+        registry.add("stacked.execution.docker.enabled", () -> false);
     }
 }
