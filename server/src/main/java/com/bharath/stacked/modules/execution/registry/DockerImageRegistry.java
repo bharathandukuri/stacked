@@ -1,5 +1,7 @@
 package com.bharath.stacked.modules.execution.registry;
 
+import com.bharath.stacked.modules.execution.model.DockerImageDetails;
+
 public enum DockerImageRegistry {
 
     ISOLATE_1_0(

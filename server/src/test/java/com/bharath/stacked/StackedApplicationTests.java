@@ -6,7 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-@SpringBootTest(properties = "spring.data.mongodb.auto-index-creation=false")
+@SpringBootTest(properties = {
+        "spring.data.mongodb.auto-index-creation=false",
+        "stacked.execution.docker.enabled=false"
+})
 class StackedApplicationTests {
 
     @MockitoBean
@@ -17,5 +20,11 @@ class StackedApplicationTests {
 
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void applicationInstantiation() {
+        StackedApplication app = new StackedApplication();
+        org.assertj.core.api.Assertions.assertThat(app).isNotNull();
     }
 }

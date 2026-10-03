@@ -1,4 +1,4 @@
-package com.bharath.stacked.modules.execution.registry;
+package com.bharath.stacked.modules.execution.model;
 
 public record DockerImageDetails(
         String name,
