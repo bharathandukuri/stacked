@@ -1,33 +1,47 @@
-FROM ubuntu:24.04
+# Stage 1: Build isolate from source with a pinned stable release version
+FROM alpine:3.20 AS builder
 
-ENV DEBIAN_FRONTEND=noninteractive
+ARG ISOLATE_VERSION=v2.7
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        coreutils \
-        bash \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://www.ucw.cz/isolate/debian/signing-key.asc \
-        -o /etc/apt/keyrings/isolate.asc \
-    && printf '%s\n' \
-        'Types: deb' \
-        'URIs: http://www.ucw.cz/isolate/debian/' \
-        'Suites: trixie-isolate' \
-        'Components: main' \
-        'Architectures: amd64' \
-        'Signed-By: /etc/apt/keyrings/isolate.asc' \
-        > /etc/apt/sources.list.d/isolate.sources \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        isolate \
-    && isolate --version \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    gcc \
+    make \
+    musl-dev \
+    libcap-dev \
+    libseccomp-dev \
+    git \
+    linux-headers
 
-# Directory used by isolate
-RUN mkdir -p /var/local/lib/isolate \
-    && chown -R root:root /var/local/lib/isolate
+RUN git clone --branch "${ISOLATE_VERSION}" --depth 1 https://github.com/ioi/isolate.git /tmp/isolate \
+    && cd /tmp/isolate \
+    && make PREFIX=/usr CONFIG=/etc/isolate VARPREFIX=/var isolate default.cf CFLAGS_EXTRA="-DSYS_quotactl_fd=443" \
+    && strip /tmp/isolate/isolate \
+    && sed -i "s/^subid_user = isolate/#subid_user = isolate/" default.cf \
+    && sed -i "s/^# first_uid = 60000/first_uid = 60000/" default.cf \
+    && sed -i "s/^# first_gid = 60000/first_gid = 60000/" default.cf \
+    && sed -i "s/^# num_boxes = 1000/num_boxes = 1000/" default.cf
+
+# Stage 2: Minimal Alpine runtime image
+FROM alpine:3.20
+
+RUN apk add --no-cache \
+    bash \
+    coreutils \
+    libcap \
+    libseccomp
+
+COPY --from=builder /tmp/isolate/isolate /usr/bin/isolate
+COPY --from=builder /tmp/isolate/default.cf /etc/isolate
+
+# Setup permissions, directories, and backwards compatibility symlinks
+RUN chmod 4755 /usr/bin/isolate \
+    && mkdir -p /var/lib/isolate /run/isolate/locks /usr/etc /usr/local/etc /var/local/lib \
+    && chown -R root:root /var/lib/isolate \
+    && ln -sf /usr/bin/isolate /usr/local/bin/isolate \
+    && ln -sf /etc/isolate /usr/etc/isolate \
+    && ln -sf /etc/isolate /usr/local/etc/isolate \
+    && ln -sf /var/lib/isolate /var/local/lib/isolate \
+    && isolate --version
 
 WORKDIR /execution
 

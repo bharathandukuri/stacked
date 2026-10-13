@@ -1,14 +1,7 @@
-FROM execution/isolate:1.0
+FROM execution/c:17
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        gcc \
-        g++ \
-        make \
-        libc6-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    g++
 
 WORKDIR /execution
 

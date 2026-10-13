@@ -1,7 +1,10 @@
 FROM execution/isolate:1.0
 
-# Copy Node.js runtime and npm from official Node LTS image
-COPY --from=node:20-bookworm-slim /usr/local /usr/local
+RUN apk add --no-cache \
+    nodejs \
+    npm \
+    && npm cache clean --force \
+    && rm -rf /root/.npm
 
 WORKDIR /execution
 

@@ -1,17 +1,16 @@
 FROM execution/isolate:1.0
 
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apk add --no-cache \
+    openjdk21-jdk \
+    && rm -rf /usr/lib/jvm/java-21-openjdk/lib/src.zip \
+              /usr/lib/jvm/java-21-openjdk/demo \
+              /usr/lib/jvm/java-21-openjdk/man
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        openjdk-21-jdk-headless \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 WORKDIR /execution
 
-RUN java -version
+RUN java -version && javac -version
 
 CMD ["/bin/bash"]

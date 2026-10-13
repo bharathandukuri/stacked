@@ -1,13 +1,8 @@
 FROM execution/isolate:1.0
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        python3-setuptools \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    python3 \
+    && find / -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 
 WORKDIR /execution
 
