@@ -1,16 +1,12 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
-import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
-import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
-import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
-import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
-import com.bharath.stacked.modules.execution.dto.IsolateExecutionConstraints;
-import com.bharath.stacked.modules.execution.dto.IsolateSandBoxDetails;
+import com.bharath.stacked.modules.execution.dto.*;
 import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequest;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult;
 import com.bharath.stacked.modules.execution.dto.response.SimpleCodeExecutionResult;
 import com.bharath.stacked.modules.execution.enums.CodeExecutionStatus;
+import com.bharath.stacked.modules.execution.exception.DockerExecutionException;
 import com.bharath.stacked.modules.execution.mapper.CodeExecutionStatusMapper;
 import com.bharath.stacked.modules.execution.service.CodeExecutionService;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
@@ -18,7 +14,6 @@ import com.bharath.stacked.modules.execution.service.IsolateExecutionService;
 import com.bharath.stacked.modules.language.CompiledLanguage;
 import com.bharath.stacked.modules.language.Language;
 import com.bharath.stacked.modules.language.LanguageType;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
@@ -27,13 +22,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
-@RequiredArgsConstructor
 @Service
 public class CodeExecutionServiceImpl implements CodeExecutionService {
 
     private final DockerExecutionService dockerExecutionService;
     private final IsolateExecutionService isolateExecutionService;
     private final CodeExecutionStatusMapper codeExecutionStatusMapper;
+
+    public CodeExecutionServiceImpl(
+            DockerExecutionService dockerExecutionService,
+            IsolateExecutionService isolateExecutionService,
+            CodeExecutionStatusMapper codeExecutionStatusMapper) {
+        super();
+        this.dockerExecutionService = dockerExecutionService;
+        this.isolateExecutionService = isolateExecutionService;
+        this.codeExecutionStatusMapper = codeExecutionStatusMapper;
+    }
 
     @Override
     public SimpleCodeExecutionResult run(SimpleCodeExecutionRequest request) {
@@ -103,6 +107,13 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                     request.getStdin() != null ? request.getStdin() : "",
                     isolateConstraints);
 
+            Long execTimeMs = null;
+            if (isolateResult.wallTimeSeconds() != null) {
+                execTimeMs = (long) (isolateResult.wallTimeSeconds() * 1000);
+            } else if (isolateResult.cpuTimeSeconds() != null) {
+                execTimeMs = (long) (isolateResult.cpuTimeSeconds() * 1000);
+            }
+
             List<String> logs = buildExecutionLogs(isolateResult);
 
             return SimpleCodeExecutionResult.builder()
@@ -111,6 +122,8 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                     .exitCode(isolateResult.exitCode())
                     .exitSignal(isolateResult.exitSignal())
                     .executionStatus(codeExecutionStatusMapper.map(isolateResult.status()))
+                    .executionTimeMs(execTimeMs)
+                    .memoryUsageKb(isolateResult.memoryKb())
                     .logs(logs)
                     .build();
 
@@ -132,18 +145,22 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                 }
             }
 
-            if (dockerContainer != null) {
-                try {
-                    dockerExecutionService.stopContainer(dockerContainer.id());
-                } catch (Exception e) {
-                    log.warn("Failed to stop Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
-                }
+            cleanup(dockerContainer);
+        }
+    }
 
-                try {
-                    dockerExecutionService.deleteContainer(dockerContainer.id());
-                } catch (Exception e) {
-                    log.warn("Failed to delete Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
-                }
+    private void cleanup(DockerContainerDetails dockerContainer) {
+        if (dockerContainer != null) {
+            try {
+                dockerExecutionService.stopContainer(dockerContainer.id());
+            } catch (Exception e) {
+                log.warn("Failed to stop Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
+            }
+
+            try {
+                dockerExecutionService.deleteContainer(dockerContainer.id());
+            } catch (Exception e) {
+                log.warn("Failed to delete Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
             }
         }
     }
@@ -173,31 +190,25 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                     : 5000L;
 
             List<String> runCommand = language.run(targetPath);
+            long startNanos = System.nanoTime();
             DockerExecutionResult execResult = dockerExecutionService.execContainer(
                     dockerContainer.id(),
                     runCommand,
                     timeLimitMs);
+            long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
 
-            CodeExecutionStatus status;
-            if (execResult.exitCode() == 0L) {
-                if (execResult.stderr() != null && !execResult.stderr().isBlank()
-                        && (execResult.stderr().contains("ERROR:") || execResult.stderr().contains("ERROR "))) {
-                    status = CodeExecutionStatus.RUNTIME_ERROR;
-                } else {
-                    status = CodeExecutionStatus.SUCCESS;
-                }
-            } else if (execResult.exitCode() == 124L) {
-                status = CodeExecutionStatus.TIME_LIMIT_EXCEEDED;
-            } else {
-                status = CodeExecutionStatus.RUNTIME_ERROR;
-            }
+            String cleanStderr = sanitizeDatabaseStderr(execResult.stderr());
+
+            CodeExecutionStatus status = getCodeExecutionStatus(execResult, cleanStderr);
 
             return SimpleCodeExecutionResult.builder()
                     .stdout(execResult.stdout())
-                    .stderr(execResult.stderr())
+                    .stderr(cleanStderr)
                     .exitCode(execResult.exitCode())
                     .exitSignal(0L)
                     .executionStatus(status)
+                    .executionTimeMs(elapsedMs)
+                    .memoryUsageKb(null)
                     .logs(List.of("Database execution completed with exit code: " + execResult.exitCode()))
                     .build();
 
@@ -209,20 +220,37 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
                     .build();
 
         } finally {
-            if (dockerContainer != null) {
-                try {
-                    dockerExecutionService.stopContainer(dockerContainer.id());
-                } catch (Exception e) {
-                    log.warn("Failed to stop Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
-                }
-
-                try {
-                    dockerExecutionService.deleteContainer(dockerContainer.id());
-                } catch (Exception e) {
-                    log.warn("Failed to delete Docker container [{}]: {}", dockerContainer.id(), e.getMessage());
-                }
-            }
+            cleanup(dockerContainer);
         }
+    }
+
+    private static @NonNull CodeExecutionStatus getCodeExecutionStatus(DockerExecutionResult execResult, String cleanStderr) {
+        CodeExecutionStatus status;
+        if (execResult.exitCode() == 0L) {
+            if (cleanStderr != null && !cleanStderr.isBlank()
+                    && (cleanStderr.contains("ERROR:") || cleanStderr.contains("ERROR "))) {
+                status = CodeExecutionStatus.RUNTIME_ERROR;
+            } else {
+                status = CodeExecutionStatus.SUCCESS;
+            }
+        } else if (execResult.exitCode() == 124L) {
+            status = CodeExecutionStatus.TIME_LIMIT_EXCEEDED;
+        } else {
+            status = CodeExecutionStatus.RUNTIME_ERROR;
+        }
+        return status;
+    }
+
+    private String sanitizeDatabaseStderr(String stderr) {
+        if (stderr == null || stderr.isBlank()) {
+            return stderr;
+        }
+        String filtered = stderr.lines()
+                .filter(line -> !line.contains("Using a password on the command line interface can be insecure"))
+                .reduce((a, b) -> a + "\n" + b)
+                .orElse("")
+                .trim();
+        return filtered.isEmpty() ? null : filtered;
     }
 
     private void waitForDatabaseReady(String containerId, Language language) {
@@ -231,13 +259,25 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
         if (langId.contains("postgres")) {
             readyCmd = List.of("psql", "-U", "postgres", "-d", "stacked_judge_db", "-c", "SELECT 1;");
         } else if (langId.contains("mysql")) {
-            readyCmd = List.of("mysql", "-u", "root", "-pstacked_judge", "stacked_judge_db", "-e", "SELECT 1;");
+            readyCmd = List.of("mysql", "-S", "/var/run/mysqld/mysqld.sock", "stacked_judge_db", "-e", "SELECT 1;");
+        } else if (langId.contains("mongo")) {
+            readyCmd = List.of("mongosh", "--quiet", "--eval", "db.adminCommand('ping')");
+        } else if (langId.contains("sqlite")) {
+            return;
         } else {
             return;
         }
 
-        long deadline = System.currentTimeMillis() + 15000L;
+        long deadline = System.currentTimeMillis() + 30000L;
         while (System.currentTimeMillis() < deadline) {
+            if (!dockerExecutionService.isContainerRunning(containerId)) {
+                String containerLogs = dockerExecutionService.getContainerLogs(containerId, 50);
+                log.error("Database container [{}] stopped unexpectedly for language [{}]. Container logs:\n{}",
+                        containerId, language.id(), containerLogs);
+                throw new DockerExecutionException("Database container stopped unexpectedly: "
+                        + (containerLogs != null && !containerLogs.isBlank() ? containerLogs : "container exited with non-zero status"));
+            }
+
             try {
                 DockerExecutionResult result = dockerExecutionService.execContainer(containerId, readyCmd);
                 if (result != null && result.exitCode() == 0L) {
@@ -246,14 +286,17 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
             } catch (Exception ignored) {
             }
             try {
+
                 Thread.sleep(150L);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
         }
-        log.warn("Database container [{}] did not become ready within timeout for language [{}]", containerId,
-                language != null ? language.id() : "unknown");
+        log.error("Database container [{}] did not become ready within timeout for language [{}]", containerId,
+                language.id());
+        throw new DockerExecutionException("Database container [" + containerId + "] did not become ready within timeout for language ["
+                + language.id() + "]");
     }
 
     private static @NonNull List<String> getBashCompileCmd(CompiledLanguage language, String fileName, String boxDir) {
@@ -276,11 +319,11 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
 
         Language language = request.getLanguage();
         if ("java-21".equalsIgnoreCase(language.id())) {
-            return "Solution.java";
+            return "Main.java";
         }
 
         String ext = language.fileExtension() != null ? language.fileExtension() : "";
-        return "solution" + ext;
+        return "main" + ext;
     }
 
     private IsolateExecutionConstraints mapConstraints(Language language, CodeExecutionConstraints constraints) {
@@ -298,20 +341,24 @@ public class CodeExecutionServiceImpl implements CodeExecutionService {
             }
         }
 
-        // JVM and Node.js V8 runtimes pre-allocate large virtual address spaces
+        // Managed runtimes (JVM, V8, Go) pre-allocate large virtual address spaces
         // for JIT code caches, GC card tables, and pointer compression. Setting RLIMIT_AS (--mem)
-        // starves virtual address space and causes initialization crash.
+        // starves virtual address space and causes initialization crashes.
         String langId = language != null && language.id() != null ? language.id().toLowerCase() : "";
-        if (langId.contains("java") || langId.contains("node") || langId.contains("javascript")) {
+        if (langId.contains("java") || langId.contains("node") || langId.contains("javascript")
+                || langId.contains("kotlin") || langId.contains("typescript")
+                || langId.contains("go")) {
             memoryKb = null;
         }
+
+        Long fileSizeKb = 10240L;
 
         return new IsolateExecutionConstraints(
                 cpuTime,
                 wallTime,
                 memoryKb,
                 50,
-                10240L);
+                fileSizeKb);
     }
 
     private List<String> buildExecutionLogs(IsolateExecutionResult result) {

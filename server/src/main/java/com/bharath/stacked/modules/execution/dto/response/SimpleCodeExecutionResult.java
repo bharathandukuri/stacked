@@ -12,6 +12,8 @@ public record SimpleCodeExecutionResult(
         Long exitCode,
         Long exitSignal,
         CodeExecutionStatus executionStatus,
+        Long executionTimeMs,
+        Long memoryUsageKb,
         List<String> logs
 ) {
 }

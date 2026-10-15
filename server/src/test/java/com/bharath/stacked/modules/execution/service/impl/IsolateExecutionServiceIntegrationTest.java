@@ -10,6 +10,7 @@ import com.bharath.stacked.modules.execution.dto.response.IsolateExecutionResult
 import com.bharath.stacked.modules.execution.dto.IsolateSandBoxDetails;
 import com.bharath.stacked.modules.execution.mapper.IsolateMetadataParser;
 import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
+import com.bharath.stacked.modules.execution.registry.ManagedContainerRegistry;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.bharath.stacked.modules.execution.service.IsolateExecutionService;
 import com.github.dockerjava.api.DockerClient;
@@ -49,7 +50,8 @@ class IsolateExecutionServiceIntegrationTest {
             DockerConfig config = new DockerConfig();
             dockerClient = config.dockerClient(dockerProperties);
             dockerClient.pingCmd().exec();
-            dockerExecutionService = new DockerExecutionServiceImpl(dockerClient, dockerProperties);
+            ManagedContainerRegistry containerRegistry = com.bharath.stacked.modules.execution.util.TestcontainersRedisRegistryProvider.registry();
+            dockerExecutionService = new DockerExecutionServiceImpl(dockerClient, dockerProperties, containerRegistry);
             metadataParser = new IsolateMetadataParser();
             isolateExecutionService = new IsolateExecutionServiceImpl(dockerExecutionService, metadataParser);
             dockerAvailable = true;

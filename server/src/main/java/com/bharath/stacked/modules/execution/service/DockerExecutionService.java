@@ -5,38 +5,33 @@ import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.exception.*;
+import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
 
 import java.util.List;
 
 public interface DockerExecutionService {
+
     boolean isImageExists(DockerImageDetails dockerImageDetails);
 
-    default boolean isImageExists(com.bharath.stacked.modules.execution.registry.DockerImageRegistry registry) {
+
+    default boolean isImageExists(DockerImageRegistry registry) {
         return registry != null && isImageExists(registry.dockerImage());
     }
 
     void createImage(DockerImageDetails dockerImageDetails) throws DockerImageCreationException;
 
-    DockerContainerDetails createContainer(DockerImageDetails dockerImageDetails)
-            throws DockerContainerCreationException;
+    DockerContainerDetails createContainer(DockerImageDetails dockerImageDetails) throws DockerContainerCreationException;
 
-    DockerContainerDetails createContainer(
-            DockerImageDetails dockerImageDetails,
-            DatabaseContainerConstraints constraints
-    ) throws DockerContainerCreationException;
+    DockerContainerDetails createContainer(DockerImageDetails dockerImageDetails, DatabaseContainerConstraints constraints) throws DockerContainerCreationException;
 
-    default DockerContainerDetails createContainer(com.bharath.stacked.modules.execution.registry.DockerImageRegistry registry)
-            throws DockerContainerCreationException {
+    default DockerContainerDetails createContainer(DockerImageRegistry registry) throws DockerContainerCreationException {
         if (registry == null) {
             throw new DockerContainerCreationException("DockerImageRegistry must not be null.");
         }
         return createContainer(registry.dockerImage());
     }
 
-    default DockerContainerDetails createContainer(
-            com.bharath.stacked.modules.execution.registry.DockerImageRegistry registry,
-            DatabaseContainerConstraints constraints
-    ) throws DockerContainerCreationException {
+    default DockerContainerDetails createContainer(DockerImageRegistry registry, DatabaseContainerConstraints constraints) throws DockerContainerCreationException {
         if (registry == null) {
             throw new DockerContainerCreationException("DockerImageRegistry must not be null.");
         }
@@ -47,27 +42,19 @@ public interface DockerExecutionService {
 
     boolean isContainerExists(String containerId);
 
+    boolean isContainerRunning(String containerId);
+
+    String getContainerLogs(String containerId, int tailLines);
+
     void startContainer(String containerId) throws DockerContainerNotFoundException;
 
-    void stopContainer(String containerId)
-            throws DockerContainerStopException;
+    void stopContainer(String containerId) throws DockerContainerStopException;
 
     DockerExecutionResult execContainer(String containerId, List<String> command) throws DockerExecutionException;
 
-    DockerExecutionResult execContainer(
-            String containerId,
-            List<String> command,
-            Long timeLimitMs
-    ) throws DockerExecutionException;
+    DockerExecutionResult execContainer(String containerId, List<String> command, Long timeLimitMs) throws DockerExecutionException;
 
-    String readFile(
-            String containerId,
-            String path
-    ) throws DockerExecutionException;
+    String readFile(String containerId, String path) throws DockerExecutionException;
 
-    void writeFile(
-            String containerId,
-            String path,
-            String content
-    ) throws DockerExecutionException;
+    void writeFile(String containerId, String path, String content) throws DockerExecutionException;
 }

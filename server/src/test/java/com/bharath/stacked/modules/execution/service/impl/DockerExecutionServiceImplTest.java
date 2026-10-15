@@ -27,12 +27,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import com.bharath.stacked.modules.execution.dto.ManagedContainer;
+import com.bharath.stacked.modules.execution.registry.ManagedContainerRegistry;
+import com.github.dockerjava.api.command.InspectContainerCmd;
+import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.LogContainerCmd;
+import com.github.dockerjava.api.command.RemoveContainerCmd;
+
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -43,6 +51,9 @@ class DockerExecutionServiceImplTest {
     @Mock
     private DockerClient dockerClient;
 
+    @Mock
+    private ManagedContainerRegistry containerRegistry;
+
     private DockerProperties dockerProperties;
 
     @InjectMocks
@@ -51,7 +62,8 @@ class DockerExecutionServiceImplTest {
     @BeforeEach
     void setUp() {
         dockerProperties = new DockerProperties();
-        service = new DockerExecutionServiceImpl(dockerClient, dockerProperties);
+        service = new DockerExecutionServiceImpl(dockerClient, dockerProperties, containerRegistry);
+        lenient().when(containerRegistry.isManaged(anyString())).thenReturn(true);
     }
 
     // =========================================================================
@@ -1002,5 +1014,131 @@ class DockerExecutionServiceImplTest {
                 .isInstanceOf(DockerExecutionException.class)
                 .hasMessageContaining("Failed to write file [" + path + "] to container [" + containerId + "]")
                 .hasMessageContaining("Permission denied");
+    }
+
+    // =========================================================================
+    // Managed Container Registry & Safety Verification Tests
+    // =========================================================================
+
+    @Test
+    @DisplayName("Operations throw DockerContainerNotFoundException when container is unmanaged")
+    void operationsThrowWhenContainerNotManaged() {
+        when(containerRegistry.isManaged("unmanaged-container")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.startContainer("unmanaged-container"))
+                .isInstanceOf(DockerContainerNotFoundException.class)
+                .hasMessageContaining("not managed");
+
+        assertThatThrownBy(() -> service.stopContainer("unmanaged-container"))
+                .isInstanceOf(DockerContainerNotFoundException.class)
+                .hasMessageContaining("not managed");
+
+        assertThatThrownBy(() -> service.execContainer("unmanaged-container", List.of("echo", "1")))
+                .isInstanceOf(DockerContainerNotFoundException.class)
+                .hasMessageContaining("not managed");
+
+        assertThatThrownBy(() -> service.deleteContainer("unmanaged-container"))
+                .isInstanceOf(DockerContainerNotFoundException.class)
+                .hasMessageContaining("not managed");
+
+        assertThatThrownBy(() -> service.getContainerLogs("unmanaged-container", 10))
+                .isInstanceOf(DockerContainerNotFoundException.class)
+                .hasMessageContaining("not managed");
+    }
+
+    @Test
+    @DisplayName("createContainer rolls back and deletes container when registration in registry fails")
+    void createContainerRollsBackWhenRegistryFails() {
+        DockerImageDetails details = new DockerImageDetails("stacked/isolate", "1.0", "docker/isolate-1_0");
+
+        InspectImageCmd inspectCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd(anyString())).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenReturn(mock(InspectImageResponse.class));
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class);
+        when(dockerClient.createContainerCmd(anyString())).thenReturn(createCmd);
+        when(createCmd.withName(anyString())).thenReturn(createCmd);
+        when(createCmd.withTty(anyBoolean())).thenReturn(createCmd);
+        when(createCmd.withHostConfig(any())).thenReturn(createCmd);
+        when(createCmd.withNetworkDisabled(anyBoolean())).thenReturn(createCmd);
+
+        CreateContainerResponse response = mock(CreateContainerResponse.class);
+        when(response.getId()).thenReturn("registered-fail-cid");
+        when(createCmd.exec()).thenReturn(response);
+
+        doThrow(new RuntimeException("Redis connection error"))
+                .when(containerRegistry).register(any(ManagedContainer.class));
+
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class);
+        when(dockerClient.removeContainerCmd("registered-fail-cid")).thenReturn(removeCmd);
+        when(removeCmd.withForce(true)).thenReturn(removeCmd);
+
+        assertThatThrownBy(() -> service.createContainer(details))
+                .isInstanceOf(DockerContainerCreationException.class)
+                .hasMessageContaining("Failed to register created container");
+
+        verify(removeCmd).exec();
+    }
+
+    @Test
+    @DisplayName("deleteContainer throws DockerContainerDeletionException when unregister from registry fails")
+    void deleteContainerThrowsWhenUnregisterFails() {
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class);
+        when(dockerClient.removeContainerCmd("del-fail-cid")).thenReturn(removeCmd);
+        when(removeCmd.withForce(true)).thenReturn(removeCmd);
+
+        doThrow(new RuntimeException("Redis cluster unavailable"))
+                .when(containerRegistry).unregister("del-fail-cid");
+
+        assertThatThrownBy(() -> service.deleteContainer("del-fail-cid"))
+                .isInstanceOf(DockerContainerDeletionException.class)
+                .hasMessageContaining("registration could not be removed");
+    }
+
+    @Test
+    @DisplayName("isContainerRunning returns true when container state is running")
+    void isContainerRunningReturnsTrue() {
+        InspectContainerCmd cmd = mock(InspectContainerCmd.class);
+        InspectContainerResponse resp = mock(InspectContainerResponse.class);
+        InspectContainerResponse.ContainerState state = mock(InspectContainerResponse.ContainerState.class);
+
+        when(dockerClient.inspectContainerCmd("cid-running")).thenReturn(cmd);
+        when(cmd.exec()).thenReturn(resp);
+        when(resp.getState()).thenReturn(state);
+        when(state.getRunning()).thenReturn(true);
+
+        assertThat(service.isContainerRunning("cid-running")).isTrue();
+    }
+
+    @Test
+    @DisplayName("isContainerRunning returns false when container state is not running or on error")
+    void isContainerRunningReturnsFalse() {
+        InspectContainerCmd cmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("cid-stopped")).thenReturn(cmd);
+        when(cmd.exec()).thenThrow(new NotFoundException("No such container"));
+
+        assertThat(service.isContainerRunning("cid-stopped")).isFalse();
+    }
+
+    @Test
+    @DisplayName("getContainerLogs retrieves stdout/stderr logs from managed container")
+    void getContainerLogsSuccess() {
+        LogContainerCmd logCmd = mock(LogContainerCmd.class);
+        when(dockerClient.logContainerCmd("cid-log")).thenReturn(logCmd);
+        when(logCmd.withStdOut(true)).thenReturn(logCmd);
+        when(logCmd.withStdErr(true)).thenReturn(logCmd);
+        when(logCmd.withTail(anyInt())).thenReturn(logCmd);
+        when(logCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> cb = invocation.getArgument(0);
+            cb.onNext(new Frame(StreamType.STDOUT, "Server started\nListening on :8080\n".getBytes(StandardCharsets.UTF_8)));
+            cb.onComplete();
+            return cb;
+        });
+
+        String logs = service.getContainerLogs("cid-log", 50);
+
+        assertThat(logs).contains("Server started");
+        assertThat(logs).contains("Listening on :8080");
     }
 }

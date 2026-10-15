@@ -68,6 +68,7 @@ class CodeExecutionServiceImplTest {
     void setUp() {
         testContainer = new DockerContainerDetails("cnt-12345", "test-container");
         testSandbox = new IsolateSandBoxDetails(42, testContainer);
+        lenient().when(dockerExecutionService.isContainerRunning(anyString())).thenReturn(true);
         lenient().when(dockerExecutionService.execContainer(anyString(), anyList()))
                 .thenReturn(new DockerExecutionResult(0L, "", ""));
     }
@@ -327,19 +328,19 @@ class CodeExecutionServiceImplTest {
 
         codeExecutionService
                 .run(SimpleCodeExecutionRequest.builder().language(java).code("code").fileName(null).build());
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/Solution.java"),
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/Main.java"),
                 eq("code"));
 
-        // Python defaults to solution.py
+        // Python defaults to main.py
         codeExecutionService
                 .run(SimpleCodeExecutionRequest.builder().language(python).code("code").fileName("  ").build());
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.py"),
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/main.py"),
                 eq("code"));
 
-        // C++ defaults to solution.cpp
+        // C++ defaults to main.cpp
         codeExecutionService
                 .run(SimpleCodeExecutionRequest.builder().language(cpp).code("code").fileName(null).build());
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.cpp"),
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/main.cpp"),
                 eq("code"));
     }
 
@@ -611,7 +612,7 @@ class CodeExecutionServiceImplTest {
         assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
         assertThat(result.stdout()).isEqualTo("Query OK");
 
-        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/solution.sql"), eq(""));
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/main.sql"), eq(""));
         verify(dockerExecutionService).execContainer(eq(testContainer.id()), anyList(), eq(5000L));
         verifyNoInteractions(isolateExecutionService);
         verify(dockerExecutionService).stopContainer(testContainer.id());
@@ -676,7 +677,7 @@ class CodeExecutionServiceImplTest {
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         doThrow(new DockerExecutionException("Disk full in docker container"))
-                .when(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/solution.sql"), anyString());
+                .when(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/main.sql"), anyString());
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
 
@@ -886,7 +887,7 @@ class CodeExecutionServiceImplTest {
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
         doThrow(new DockerExecutionException("No space left on device"))
-                .when(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/solution.py"), anyString());
+                .when(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/main.py"), anyString());
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
 
@@ -995,5 +996,99 @@ class CodeExecutionServiceImplTest {
         verify(isolateExecutionService).cleanup(testSandbox);
         verify(dockerExecutionService).stopContainer(testContainer.id());
         verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Executes SQLite 3 database problem without wait ready loop and captures execution time")
+    void executeDatabaseSqliteSuccess() {
+        Language sqlite = languageFactory.create("sqlite-3");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(sqlite)
+                .code("CREATE TABLE users (id INT); INSERT INTO users VALUES (1); SELECT * FROM users;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(sqlite.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
+                .thenReturn(new DockerExecutionResult(0L, "id\n1\n", ""));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("id\n1\n");
+        assertThat(result.executionTimeMs()).isNotNull();
+
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/main.sql"), anyString());
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Executes MongoDB 8.0 with mongosh ping readiness check")
+    void executeDatabaseMongoDbSuccess() {
+        Language mongo = languageFactory.create("mongodb-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mongo)
+                .code("db.users.insertOne({ name: 'Alice' }); printjson(db.users.findOne());")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mongo.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
+                .thenReturn(new DockerExecutionResult(0L, "{ name: 'Alice' }\n", ""));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).contains("Alice");
+        assertThat(result.executionTimeMs()).isNotNull();
+
+        verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/main.js"), anyString());
+        verify(dockerExecutionService).stopContainer(testContainer.id());
+        verify(dockerExecutionService).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Database execution filters MySQL command line password warning from stderr")
+    void executeDatabaseSanitizesMysqlPasswordWarning() {
+        Language mysql = languageFactory.create("mysql-8.0");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(mysql)
+                .code("SELECT 1;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
+                .thenReturn(new DockerExecutionResult(0L, "1\n", "mysql: [Warning] Using a password on the command line interface can be insecure."));
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.stderr()).isNull();
+    }
+
+    @Test
+    @DisplayName("Database execution returns SYSTEM_ERROR when database container crashes before becoming ready")
+    void executeDatabaseContainerStopsDuringReadinessCheck() {
+        Language postgres = languageFactory.create("postgresql-16");
+        SimpleCodeExecutionRequest request = SimpleCodeExecutionRequest.builder()
+                .language(postgres)
+                .code("SELECT 1;")
+                .build();
+
+        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+                .thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(dockerExecutionService.isContainerRunning(testContainer.id())).thenReturn(false);
+        when(dockerExecutionService.getContainerLogs(testContainer.id(), 50)).thenReturn("FATAL: could not create shared memory segment");
+
+        SimpleCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(result.logs()).anyMatch(log -> log.contains("Database container stopped unexpectedly"));
     }
 }

@@ -172,6 +172,8 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
         isolateCommand.add("--stderr=stderr.txt");
         isolateCommand.add("--dir=/etc:maybe");
         isolateCommand.add("--full-env");
+        isolateCommand.add("--env=LANG=C.UTF-8");
+        isolateCommand.add("--env=LC_ALL=C.UTF-8");
 
         isolateCommand.add("--run");
         isolateCommand.add("--");
@@ -209,6 +211,7 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
                             executionConstraints
                     );
 
+            log.debug("Executing Isolate command: {}", isolateCommand);
             dockerExecutionService.execContainer(
                     containerId,
                     isolateCommand
@@ -219,6 +222,7 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
                             containerId,
                             boxDir + "/meta.txt"
                     );
+            log.debug("Isolate metadata for box {}:\n{}", boxId, metadata);
 
             String stdout =
                     dockerExecutionService.readFile(

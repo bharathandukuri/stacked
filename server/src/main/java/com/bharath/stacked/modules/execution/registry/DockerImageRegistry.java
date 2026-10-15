@@ -50,6 +50,17 @@ public enum DockerImageRegistry {
             "execution/postgres",
             "16",
             "docker/postgres-16"
+    ),
+    SQLITE_3(
+            "execution/sqlite",
+                    "3",
+                    "docker/sqlite-3"
+    ),
+
+    MONGODB_8_0(
+            "execution/mongodb",
+                    "8.0",
+                    "docker/mongodb-8_0"
     );
 
     private final String name;

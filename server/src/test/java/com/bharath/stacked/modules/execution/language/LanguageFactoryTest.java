@@ -25,7 +25,7 @@ class LanguageFactoryTest {
     }
 
     @Test
-    @DisplayName("supportedLanguageIds returns all 7 standard built-in language IDs")
+    @DisplayName("supportedLanguageIds returns all 9 standard built-in language IDs")
     void supportedLanguageIds() {
         assertThat(factory.supportedLanguageIds()).containsExactly(
                 "java-21",
@@ -34,7 +34,9 @@ class LanguageFactoryTest {
                 "python-3.12",
                 "javascript-node-20",
                 "mysql-8.0",
-                "postgresql-16"
+                "postgresql-16",
+                "sqlite-3",
+                "mongodb-8.0"
         );
     }
 
@@ -235,5 +237,41 @@ class LanguageFactoryTest {
         );
         assertThat(customDatabase.id()).isEqualTo("sqlite-3.45");
         assertThat(customDatabase.type()).isEqualTo(LanguageType.DATABASE);
+    }
+
+    @Test
+    @DisplayName("create('sqlite-3') produces valid DatabaseLanguage with sqlite3 command")
+    void createSqlite3() {
+        Language language = factory.create("sqlite-3");
+
+        assertThat(language).isInstanceOf(DatabaseLanguage.class);
+        DatabaseLanguage dbLang = (DatabaseLanguage) language;
+
+        assertThat(dbLang.id()).isEqualTo("sqlite-3");
+        assertThat(dbLang.name()).isEqualTo("SQLite (3.45)");
+        assertThat(dbLang.type()).isEqualTo(LanguageType.DATABASE);
+        assertThat(dbLang.fileExtension()).isEqualTo(".sql");
+        assertThat(dbLang.dockerImage()).isEqualTo(DockerImageRegistry.SQLITE_3);
+
+        assertThat(dbLang.run("/tmp/test.sql"))
+                .containsExactly("sqlite3", "-header", "-column", "/tmp/stacked_judge.db", ".read /tmp/test.sql");
+    }
+
+    @Test
+    @DisplayName("create('mongodb-8.0') produces valid DatabaseLanguage with mongosh command")
+    void createMongoDb80() {
+        Language language = factory.create("mongodb-8.0");
+
+        assertThat(language).isInstanceOf(DatabaseLanguage.class);
+        DatabaseLanguage dbLang = (DatabaseLanguage) language;
+
+        assertThat(dbLang.id()).isEqualTo("mongodb-8.0");
+        assertThat(dbLang.name()).isEqualTo("MongoDB (8.0)");
+        assertThat(dbLang.type()).isEqualTo(LanguageType.DATABASE);
+        assertThat(dbLang.fileExtension()).isEqualTo(".js");
+        assertThat(dbLang.dockerImage()).isEqualTo(DockerImageRegistry.MONGODB_8_0);
+
+        assertThat(dbLang.run("/tmp/solution.js"))
+                .containsExactly("mongosh", "--quiet", "--norc", "mongodb://127.0.0.1:27017/stacked_judge_db", "--file", "/tmp/solution.js");
     }
 }

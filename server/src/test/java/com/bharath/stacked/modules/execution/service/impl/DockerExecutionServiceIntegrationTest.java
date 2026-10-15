@@ -5,12 +5,14 @@ import com.bharath.stacked.modules.execution.config.DockerProperties;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
+import com.bharath.stacked.modules.execution.registry.ManagedContainerRegistry;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.github.dockerjava.api.DockerClient;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,6 +23,8 @@ class DockerExecutionServiceIntegrationTest {
     private static DockerProperties dockerProperties;
     private static DockerExecutionService executionService;
     private static boolean dockerAvailable;
+
+    private static ManagedContainerRegistry containerRegistry;
 
     // Use the isolate image which contains bash and isolate
     private final DockerImageDetails testImage =
@@ -38,7 +42,8 @@ class DockerExecutionServiceIntegrationTest {
             DockerConfig config = new DockerConfig();
             dockerClient = config.dockerClient(dockerProperties);
             dockerClient.pingCmd().exec();
-            executionService = new DockerExecutionServiceImpl(dockerClient, dockerProperties);
+            containerRegistry = com.bharath.stacked.modules.execution.util.TestcontainersRedisRegistryProvider.registry();
+            executionService = new DockerExecutionServiceImpl(dockerClient, dockerProperties, containerRegistry);
             dockerAvailable = true;
         } catch (Exception e) {
             dockerAvailable = false;
@@ -76,7 +81,7 @@ class DockerExecutionServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("Complete container lifecycle: create, verify, start, exec, stop, and delete")
+    @DisplayName("Complete container lifecycle: create, verify in live Redis, start, exec, logs, stop, and delete from Redis")
     void containerLifecycleAndExecLive() {
         // 1. Create container
         DockerContainerDetails container = executionService.createContainer(testImage);
@@ -85,13 +90,23 @@ class DockerExecutionServiceIntegrationTest {
         assertThat(container.name()).startsWith("stacked-execution-");
         containersToCleanup.add(container.id());
 
-        // 2. Verify container exists
+        // 2. Verify container is registered in LIVE Testcontainers Redis
+        assertThat(containerRegistry.isManaged(container.id())).isTrue();
+        com.bharath.stacked.modules.execution.dto.ManagedContainer managed = containerRegistry.get(container.id());
+        assertThat(managed).isNotNull();
+        assertThat(managed.containerId()).isEqualTo(container.id());
+        assertThat(managed.imageReference()).isEqualTo(testImage.reference());
+        assertThat(managed.createdAt()).isNotNull();
+
+        // 3. Verify container exists in Docker
         assertThat(executionService.isContainerExists(container.id())).isTrue();
+        assertThat(executionService.isContainerRunning(container.id())).isFalse();
 
-        // 3. Start container
+        // 4. Start container
         executionService.startContainer(container.id());
+        assertThat(executionService.isContainerRunning(container.id())).isTrue();
 
-        // 4. Execute standard command (echo)
+        // 5. Execute standard command (echo)
         DockerExecutionResult echoResult = executionService.execContainer(
                 container.id(),
                 List.of("echo", "hello-stacked-judge")
@@ -101,7 +116,7 @@ class DockerExecutionServiceIntegrationTest {
         assertThat(echoResult.stdout().trim()).isEqualTo("hello-stacked-judge");
         assertThat(echoResult.stderr()).isEmpty();
 
-        // 5. Execute command writing to stderr
+        // 6. Execute command writing to stderr
         DockerExecutionResult stderrResult = executionService.execContainer(
                 container.id(),
                 List.of("sh", "-c", "echo 'judge-stderr-output' >&2")
@@ -109,22 +124,45 @@ class DockerExecutionServiceIntegrationTest {
         assertThat(stderrResult.exitCode()).isEqualTo(0L);
         assertThat(stderrResult.stderr().trim()).isEqualTo("judge-stderr-output");
 
-        // 6. Execute command with non-zero exit code
+        // 7. Verify container logs
+        String logs = executionService.getContainerLogs(container.id(), 50);
+        assertThat(logs).isNotNull();
+
+        // 8. Execute command with non-zero exit code
         DockerExecutionResult failResult = executionService.execContainer(
                 container.id(),
                 List.of("sh", "-c", "exit 42")
         );
         assertThat(failResult.exitCode()).isEqualTo(42L);
 
-        // 7. Stop container
+        // 9. Stop container
         executionService.stopContainer(container.id());
+        assertThat(executionService.isContainerRunning(container.id())).isFalse();
 
-        // 8. Delete container
+        // 10. Delete container -> verifies unregistration from LIVE Testcontainers Redis
         executionService.deleteContainer(container.id());
         containersToCleanup.remove(container.id());
 
-        // 9. Verify container no longer exists
+        // 11. Verify container no longer exists in Docker NOR in live Redis
         assertThat(executionService.isContainerExists(container.id())).isFalse();
+        assertThat(containerRegistry.isManaged(container.id())).isFalse();
+        assertThat(containerRegistry.get(container.id())).isNull();
+    }
+
+    @Test
+    @DisplayName("Should reject operations on unmanaged container ID against live Redis")
+    void shouldRejectUnmanagedContainerInLiveRedis() {
+        String fakeId = "unmanaged-" + UUID.randomUUID();
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.bharath.stacked.modules.execution.exception.DockerContainerException.class,
+                () -> executionService.stopContainer(fakeId)
+        );
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.bharath.stacked.modules.execution.exception.DockerContainerException.class,
+                () -> executionService.deleteContainer(fakeId)
+        );
     }
 
     @Test

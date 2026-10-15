@@ -4,16 +4,15 @@ import com.bharath.stacked.modules.execution.config.DockerProperties;
 import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
+import com.bharath.stacked.modules.execution.dto.ManagedContainer;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.exception.*;
 import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
+import com.bharath.stacked.modules.execution.registry.ManagedContainerRegistry;
 import com.bharath.stacked.modules.execution.service.DockerExecutionService;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
-import com.github.dockerjava.api.command.BuildImageResultCallback;
-import com.github.dockerjava.api.command.CreateContainerCmd;
-import com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.dockerjava.api.command.ExecCreateCmdResponse;
+import com.github.dockerjava.api.command.*;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.BuildResponseItem;
 import com.github.dockerjava.api.model.Frame;
@@ -29,6 +28,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +42,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
 
     private final DockerClient dockerClient;
     private final DockerProperties dockerProperties;
+    private final ManagedContainerRegistry containerRegistry;
 
     private static class ExecOutputCallback
             extends ResultCallback.Adapter<Frame> {
@@ -86,8 +87,10 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             return;
         }
 
-        try {
-            for (DockerImageRegistry registry : DockerImageRegistry.values()) {
+        ensureSandboxNetworkExists();
+
+        for (DockerImageRegistry registry : DockerImageRegistry.values()) {
+            try {
                 DockerImageDetails image = registry.dockerImage();
 
                 if (isImageExists(image)) {
@@ -104,9 +107,9 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                 );
 
                 createImage(image);
+            } catch (Exception e) {
+                log.warn("Could not prepare Docker image [{}]: {}. Continuing startup.", registry.name(), e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Docker daemon image validation failed: {}. Continuing startup.", e.getMessage());
         }
     }
 
@@ -215,6 +218,30 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
         return createContainer(dockerImageDetails, null);
     }
 
+    public static final String SANDBOX_NETWORK_NAME = "stacked-sandbox-net";
+
+    private void ensureSandboxNetworkExists() {
+        try {
+            boolean exists = dockerClient.listNetworksCmd()
+                    .withNameFilter(SANDBOX_NETWORK_NAME)
+                    .exec()
+                    .stream()
+                    .anyMatch(n -> SANDBOX_NETWORK_NAME.equals(n.getName()));
+
+            if (!exists) {
+                dockerClient.createNetworkCmd()
+                        .withName(SANDBOX_NETWORK_NAME)
+                        .withDriver("bridge")
+                        .withInternal(true)
+                        .withCheckDuplicate(true)
+                        .exec();
+                log.info("Created isolated internal Docker network [{}] for execution sandboxes.", SANDBOX_NETWORK_NAME);
+            }
+        } catch (Exception e) {
+            log.warn("Could not ensure sandbox network [{}] exists: {}", SANDBOX_NETWORK_NAME, e.getMessage());
+        }
+    }
+
     @Override
     public DockerContainerDetails createContainer(
             DockerImageDetails dockerImageDetails,
@@ -229,25 +256,31 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             );
         }
 
-        String containerName =
-                "stacked-execution-" + UUID.randomUUID();
+        String containerName = "stacked-execution-" + UUID.randomUUID();
 
         try {
             HostConfig hostConfig = HostConfig.newHostConfig()
                     .withPrivileged(true);
 
-            boolean networkDisabled = false;
+            boolean networkDisabled =
+                    constraints == null || constraints.networkDisabled();
 
             if (constraints != null) {
                 if (constraints.cpuLimit() > 0) {
-                    long nanoCpus = constraints.cpuLimit() > 1000L
-                            ? constraints.cpuLimit()
-                            : constraints.cpuLimit() * 1_000_000_000L;
+                    long nanoCpus = Math.multiplyExact(
+                            constraints.cpuLimit(),
+                            1_000_000_000L
+                    );
+
                     hostConfig.withNanoCPUs(nanoCpus);
                 }
 
                 if (constraints.memoryLimitKb() > 0) {
-                    long memoryBytes = constraints.memoryLimitKb() * 1024L;
+                    long memoryBytes = Math.multiplyExact(
+                            constraints.memoryLimitKb(),
+                            1024L
+                    );
+
                     hostConfig.withMemory(memoryBytes);
                     hostConfig.withMemorySwap(memoryBytes);
                 }
@@ -255,11 +288,13 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                 if (constraints.pidsLimit() > 0) {
                     hostConfig.withPidsLimit(constraints.pidsLimit());
                 }
+            }
 
-                if (constraints.networkDisabled()) {
-                    networkDisabled = true;
-                    hostConfig.withNetworkMode("none");
-                }
+            if (networkDisabled) {
+                hostConfig.withNetworkMode("none");
+            } else {
+                ensureSandboxNetworkExists();
+                hostConfig.withNetworkMode(SANDBOX_NETWORK_NAME);
             }
 
             CreateContainerCmd createCmd = dockerClient
@@ -273,6 +308,38 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             }
 
             CreateContainerResponse response = createCmd.exec();
+            String containerId = response.getId();
+
+            ManagedContainer managedContainer = new ManagedContainer(
+                    containerId,
+                    containerName,
+                    image,
+                    Instant.now()
+            );
+
+            try {
+                containerRegistry.register(managedContainer);
+            } catch (Exception registrationException) {
+                // Do not leave an untracked container behind.
+                try {
+                    dockerClient.removeContainerCmd(containerId)
+                            .withForce(true)
+                            .exec();
+                } catch (Exception cleanupException) {
+                    registrationException.addSuppressed(cleanupException);
+
+                    log.error(
+                            "Failed to clean up container [{}] after registry failure.",
+                            containerId,
+                            cleanupException
+                    );
+                }
+
+                throw new DockerContainerCreationException(
+                        "Failed to register created container with Stacked.",
+                        registrationException
+                );
+            }
 
             log.info(
                     "Created Docker container [{}] from image [{}] with constraints [{}].",
@@ -281,11 +348,11 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                     constraints
             );
 
-            return new DockerContainerDetails(
-                    response.getId(),
-                    containerName
-            );
+            return new DockerContainerDetails(containerId, containerName);
 
+        } catch (DockerContainerCreationException e) {
+            // Preserve the original exception and cause.
+            throw e;
         } catch (Exception e) {
             log.error(
                     "Failed to create Docker container from image [{}].",
@@ -296,6 +363,15 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             throw new DockerContainerCreationException(
                     "Failed to create Docker container from image: " + image,
                     e
+            );
+        }
+    }
+
+    private void requireManagedContainer(String containerId) {
+        if (containerId == null
+                || !containerRegistry.isManaged(containerId)) {
+            throw new DockerContainerNotFoundException(
+                    "Container is not managed by Stacked."
             );
         }
     }
@@ -315,8 +391,43 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
     }
 
     @Override
+    public boolean isContainerRunning(String containerId) {
+        try {
+            InspectContainerResponse response = dockerClient.inspectContainerCmd(containerId).exec();
+            return response != null && response.getState() != null && Boolean.TRUE.equals(response.getState().getRunning());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @Override
+    public String getContainerLogs(String containerId, int tailLines) {
+        requireManagedContainer(containerId);
+        try {
+            StringBuilder sb = new StringBuilder();
+            dockerClient.logContainerCmd(containerId)
+                    .withStdOut(true)
+                    .withStdErr(true)
+                    .withTail(tailLines)
+                    .exec(new ResultCallback.Adapter<Frame>() {
+                        @Override
+                        public void onNext(Frame frame) {
+                            if (frame != null && frame.getPayload() != null) {
+                                sb.append(new String(frame.getPayload(), StandardCharsets.UTF_8));
+                            }
+                        }
+                    })
+                    .awaitCompletion(2, TimeUnit.SECONDS);
+            return sb.toString().trim();
+        } catch (Exception e) {
+            return "Unable to retrieve container logs: " + e.getMessage();
+        }
+    }
+
+    @Override
     public void startContainer(String containerId)
             throws DockerContainerStartException {
+        requireManagedContainer(containerId);
 
         if (!isContainerExists(containerId)) {
             throw new DockerContainerNotFoundException(
@@ -351,6 +462,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
     @Override
     public void stopContainer(String containerId)
             throws DockerContainerStopException {
+        requireManagedContainer(containerId);
 
         if (!isContainerExists(containerId)) {
             throw new DockerContainerNotFoundException(
@@ -397,6 +509,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             List<String> command,
             Long timeLimitMs
     ) throws DockerExecutionException {
+        requireManagedContainer(containerId);
 
         if (!isContainerExists(containerId)) {
             throw new DockerContainerNotFoundException(
@@ -532,9 +645,12 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
         }
     }
 
+
     @Override
     public void deleteContainer(String containerId)
             throws DockerContainerDeletionException {
+
+        requireManagedContainer(containerId);
 
         try {
             dockerClient
@@ -542,14 +658,11 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                     .withForce(true)
                     .exec();
 
-            log.info(
-                    "Deleted Docker container [{}].",
-                    containerId
-            );
+            log.info("Deleted Docker container [{}].", containerId);
 
         } catch (NotFoundException e) {
             log.warn(
-                    "Docker container [{}] does not exist.",
+                    "Docker container [{}] no longer exists. Removing stale registration.",
                     containerId
             );
 
@@ -565,5 +678,23 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                     e
             );
         }
+
+        // Docker deletion succeeded, or Docker confirmed it was already absent.
+        try {
+            containerRegistry.unregister(containerId);
+        } catch (Exception e) {
+            log.error(
+                    "Container [{}] is absent from Docker, but its Redis registration could not be removed.",
+                    containerId,
+                    e
+            );
+
+            throw new DockerContainerDeletionException(
+                    "Container was removed from Docker, but its registration could not be removed: "
+                            + containerId,
+                    e
+            );
+        }
     }
+
 }

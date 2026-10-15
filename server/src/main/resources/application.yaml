@@ -1,6 +1,3 @@
-# ==============================================================================
-# Stacked Server Application Configuration
-# ==============================================================================
 spring:
   application:
     name: stacked
@@ -79,11 +76,11 @@ app:
 # ------------------------------------------------------------------------------
 file:
   storage:
-    temp-path: ${FILE_STORAGE_TEMP_PATH:uploads/temp}
-    permanent-path: ${FILE_STORAGE_PERMANENT_PATH:uploads/permanent}
-    max-file-size-bytes: ${FILE_STORAGE_MAX_SIZE:10485760}
-    cleanup-cron: ${FILE_CLEANUP_CRON:0 0 * * * *}
-    temp-ttl: ${FILE_TEMP_TTL:PT1H}
+    temp-path: uploads/temp
+    permanent-path: uploads/permanent
+    max-file-size-bytes: 10485760
+    cleanup-cron: 0 0 * * * *
+    temp-ttl: PT1H
 
 # ------------------------------------------------------------------------------
 # Execution Sandbox Configuration

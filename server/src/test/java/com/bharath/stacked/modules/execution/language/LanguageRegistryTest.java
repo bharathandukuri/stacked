@@ -32,9 +32,9 @@ class LanguageRegistryTest {
     }
 
     @Test
-    @DisplayName("init registers all 7 standard languages on startup")
+    @DisplayName("init registers all 9 standard languages on startup")
     void initBootstrapsAllLanguages() {
-        assertThat(registry.getAll()).hasSize(7);
+        assertThat(registry.getAll()).hasSize(9);
         assertThat(registry.isSupported("java-21")).isTrue();
         assertThat(registry.isSupported("c-17")).isTrue();
         assertThat(registry.isSupported("cpp-23")).isTrue();
@@ -42,6 +42,8 @@ class LanguageRegistryTest {
         assertThat(registry.isSupported("javascript-node-20")).isTrue();
         assertThat(registry.isSupported("mysql-8.0")).isTrue();
         assertThat(registry.isSupported("postgresql-16")).isTrue();
+        assertThat(registry.isSupported("sqlite-3")).isTrue();
+        assertThat(registry.isSupported("mongodb-8.0")).isTrue();
     }
 
     @Test
@@ -125,9 +127,9 @@ class LanguageRegistryTest {
                 .extracting(Language::id)
                 .containsExactlyInAnyOrder("python-3.12", "javascript-node-20");
 
-        assertThat(database).hasSize(2)
+        assertThat(database).hasSize(4)
                 .extracting(Language::id)
-                .containsExactlyInAnyOrder("mysql-8.0", "postgresql-16");
+                .containsExactlyInAnyOrder("mysql-8.0", "postgresql-16", "sqlite-3", "mongodb-8.0");
     }
 
     @Test
@@ -160,6 +162,6 @@ class LanguageRegistryTest {
     void unregisterNullSafe() {
         registry.unregister(null);
         registry.unregister("   ");
-        assertThat(registry.getAll()).hasSize(7);
+        assertThat(registry.getAll()).hasSize(9);
     }
 }
