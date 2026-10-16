@@ -29,6 +29,10 @@ class ContainerCleanupSchedulerTest {
     @Mock
     private DockerExecutionService dockerExecutionService;
 
+    @org.mockito.Spy
+    private com.bharath.stacked.modules.execution.config.ExecutionProperties executionProperties =
+            new com.bharath.stacked.modules.execution.config.ExecutionProperties();
+
     @InjectMocks
     private ContainerCleanupScheduler scheduler;
 

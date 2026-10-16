@@ -13,7 +13,6 @@ import java.util.Objects;
 import java.util.Set;
 
 @Component
-@RequiredArgsConstructor
 public class RedisManagedContainerRegistry
         implements ManagedContainerRegistry {
 
@@ -25,6 +24,11 @@ public class RedisManagedContainerRegistry
 
     private final RedisService redisService;
     private final StringRedisTemplate stringRedisTemplate;
+
+    public RedisManagedContainerRegistry(RedisService redisService, StringRedisTemplate stringRedisTemplate) {
+        this.redisService = redisService;
+        this.stringRedisTemplate = stringRedisTemplate;
+    }
 
     private String key(String containerId) {
         return KEY_PREFIX + containerId;
@@ -83,9 +87,16 @@ public class RedisManagedContainerRegistry
             return List.of();
         }
 
-        return containerIds.stream()
-                .map(this::get)
-                .filter(Objects::nonNull)
-                .toList();
+        List<ManagedContainer> list = new java.util.ArrayList<>();
+        for (String id : containerIds) {
+            ManagedContainer container = this.get(id);
+            if (container != null) {
+                list.add(container);
+            } else {
+                // Metadata key is missing, prune stale orphan from ZSet index
+                stringRedisTemplate.opsForZSet().remove(CREATED_AT_INDEX, id);
+            }
+        }
+        return list;
     }
 }

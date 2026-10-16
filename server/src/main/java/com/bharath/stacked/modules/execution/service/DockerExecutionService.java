@@ -1,6 +1,6 @@
 package com.bharath.stacked.modules.execution.service;
 
-import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
+import com.bharath.stacked.modules.execution.dto.DockerContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
@@ -14,24 +14,13 @@ public interface DockerExecutionService {
     boolean isImageExists(DockerImageDetails dockerImageDetails);
 
 
-    default boolean isImageExists(DockerImageRegistry registry) {
-        return registry != null && isImageExists(registry.dockerImage());
-    }
-
     void createImage(DockerImageDetails dockerImageDetails) throws DockerImageCreationException;
 
     DockerContainerDetails createContainer(DockerImageDetails dockerImageDetails) throws DockerContainerCreationException;
 
-    DockerContainerDetails createContainer(DockerImageDetails dockerImageDetails, DatabaseContainerConstraints constraints) throws DockerContainerCreationException;
+    DockerContainerDetails createContainer(DockerImageDetails dockerImageDetails, DockerContainerConstraints constraints) throws DockerContainerCreationException;
 
-    default DockerContainerDetails createContainer(DockerImageRegistry registry) throws DockerContainerCreationException {
-        if (registry == null) {
-            throw new DockerContainerCreationException("DockerImageRegistry must not be null.");
-        }
-        return createContainer(registry.dockerImage());
-    }
-
-    default DockerContainerDetails createContainer(DockerImageRegistry registry, DatabaseContainerConstraints constraints) throws DockerContainerCreationException {
+    default DockerContainerDetails createContainer(DockerImageRegistry registry, DockerContainerConstraints constraints) throws DockerContainerCreationException {
         if (registry == null) {
             throw new DockerContainerCreationException("DockerImageRegistry must not be null.");
         }

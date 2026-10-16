@@ -1,7 +1,7 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerProperties;
-import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
+import com.bharath.stacked.modules.execution.dto.DockerContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
@@ -359,7 +359,7 @@ class DockerExecutionServiceImplTest {
         when(createCmd.withNetworkDisabled(true)).thenReturn(createCmd);
         when(createCmd.exec()).thenReturn(createResponse);
 
-        DatabaseContainerConstraints constraints = DatabaseContainerConstraints.builder()
+        DockerContainerConstraints constraints = DockerContainerConstraints.builder()
                 .cpuLimit(2L)
                 .memoryLimitKb(524288L)
                 .pidsLimit(150L)
@@ -400,7 +400,7 @@ class DockerExecutionServiceImplTest {
         when(createCmd.withNetworkDisabled(true)).thenReturn(createCmd);
         when(createCmd.exec()).thenReturn(createResponse);
 
-        DatabaseContainerConstraints constraints = DatabaseContainerConstraints.defaults();
+        DockerContainerConstraints constraints = DockerContainerConstraints.defaults();
         DockerContainerDetails container = service.createContainer(DockerImageRegistry.MYSQL_8_0, constraints);
 
         assertThat(container.id()).isEqualTo("container-reg-db");

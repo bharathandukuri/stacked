@@ -12,7 +12,8 @@ public record DefaultInterpretedLanguage(
         String name,
         String fileExtension,
         DockerImageRegistry dockerImage,
-        Function<List<String>, List<String>> runCommandGenerator
+        Function<List<String>, List<String>> runCommandGenerator,
+        String defaultFileName
 ) implements InterpretedLanguage {
 
     public DefaultInterpretedLanguage {
@@ -21,6 +22,17 @@ public record DefaultInterpretedLanguage(
         Objects.requireNonNull(fileExtension, "fileExtension must not be null");
         Objects.requireNonNull(dockerImage, "dockerImage must not be null");
         Objects.requireNonNull(runCommandGenerator, "runCommandGenerator must not be null");
+        defaultFileName = defaultFileName != null ? defaultFileName : "solution" + fileExtension;
+    }
+
+    public DefaultInterpretedLanguage(
+            String id,
+            String name,
+            String fileExtension,
+            DockerImageRegistry dockerImage,
+            Function<List<String>, List<String>> runCommandGenerator
+    ) {
+        this(id, name, fileExtension, dockerImage, runCommandGenerator, "solution" + fileExtension);
     }
 
     @Override

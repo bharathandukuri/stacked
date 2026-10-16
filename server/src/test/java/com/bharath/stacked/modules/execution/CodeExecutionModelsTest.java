@@ -1,7 +1,7 @@
 package com.bharath.stacked.modules.execution;
 
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
-import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
+import com.bharath.stacked.modules.execution.dto.DockerContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequest;
 import com.bharath.stacked.modules.execution.dto.response.SimpleCodeExecutionResult;
 import com.bharath.stacked.modules.execution.enums.CodeExecutionStatus;
@@ -56,13 +56,13 @@ class CodeExecutionModelsTest {
     @Test
     @DisplayName("DatabaseContainerConstraints record, builder, defaults, and accessors")
     void databaseContainerConstraintsRecord() {
-        DatabaseContainerConstraints defaults = DatabaseContainerConstraints.defaults();
+        DockerContainerConstraints defaults = DockerContainerConstraints.defaults();
         assertThat(defaults.cpuLimit()).isEqualTo(1L);
         assertThat(defaults.memoryLimitKb()).isEqualTo(262144L);
         assertThat(defaults.pidsLimit()).isEqualTo(100L);
         assertThat(defaults.networkDisabled()).isTrue();
 
-        DatabaseContainerConstraints custom = DatabaseContainerConstraints.builder()
+        DockerContainerConstraints custom = DockerContainerConstraints.builder()
                 .cpuLimit(2L)
                 .memoryLimitKb(524288L)
                 .pidsLimit(200L)
@@ -74,7 +74,7 @@ class CodeExecutionModelsTest {
         assertThat(custom.pidsLimit()).isEqualTo(200L);
         assertThat(custom.networkDisabled()).isFalse();
 
-        DatabaseContainerConstraints same = new DatabaseContainerConstraints(2L, 524288L, 200L, false);
+        DockerContainerConstraints same = new DockerContainerConstraints(2L, 524288L, 200L, false);
         assertThat(custom).isEqualTo(same);
         assertThat(custom.hashCode()).isEqualTo(same.hashCode());
         assertThat(custom.toString()).contains("524288");

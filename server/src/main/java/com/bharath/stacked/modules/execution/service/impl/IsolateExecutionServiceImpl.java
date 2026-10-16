@@ -224,17 +224,25 @@ public class IsolateExecutionServiceImpl implements IsolateExecutionService {
                     );
             log.debug("Isolate metadata for box {}:\n{}", boxId, metadata);
 
-            String stdout =
-                    dockerExecutionService.readFile(
-                            containerId,
-                            boxDir + "/stdout.txt"
-                    );
+            String stdout = "";
+            try {
+                stdout = dockerExecutionService.readFile(
+                        containerId,
+                        boxDir + "/stdout.txt"
+                );
+            } catch (Exception e) {
+                log.debug("stdout.txt not available for Isolate box [{}]: {}", boxId, e.getMessage());
+            }
 
-            String stderr =
-                    dockerExecutionService.readFile(
-                            containerId,
-                            boxDir + "/stderr.txt"
-                    );
+            String stderr = "";
+            try {
+                stderr = dockerExecutionService.readFile(
+                        containerId,
+                        boxDir + "/stderr.txt"
+                );
+            } catch (Exception e) {
+                log.debug("stderr.txt not available for Isolate box [{}]: {}", boxId, e.getMessage());
+            }
 
             return isolateMetadataParser.parseMetadata(
                     metadata,

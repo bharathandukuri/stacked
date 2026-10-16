@@ -27,6 +27,8 @@ public class LanguageFactoryImpl implements LanguageFactory {
     public static final String ID_JAVASCRIPT_NODE_20 = "javascript-node-20";
     public static final String ID_MYSQL_8_0 = "mysql-8.0";
     public static final String ID_POSTGRESQL_16 = "postgresql-16";
+    public static final String ID_SQLITE_3 = "sqlite-3";
+    public static final String ID_MONGODB_8_0 = "mongodb-8.0";
 
     private static final List<String> SUPPORTED_IDS = List.of(
             ID_JAVA_21,
@@ -35,7 +37,9 @@ public class LanguageFactoryImpl implements LanguageFactory {
             ID_PYTHON_3_12,
             ID_JAVASCRIPT_NODE_20,
             ID_MYSQL_8_0,
-            ID_POSTGRESQL_16
+            ID_POSTGRESQL_16,
+            ID_SQLITE_3,
+            ID_MONGODB_8_0
     );
 
     @Override
@@ -52,6 +56,8 @@ public class LanguageFactoryImpl implements LanguageFactory {
             case ID_JAVASCRIPT_NODE_20 -> createJavaScriptNode20();
             case ID_MYSQL_8_0 -> createMySql80();
             case ID_POSTGRESQL_16 -> createPostgreSql16();
+            case ID_SQLITE_3, "sqlite", "sqlite3" -> createSqlite3();
+            case ID_MONGODB_8_0, "mongodb", "mongo" -> createMongoDb80();
             default -> throw new LanguageNotFoundException(languageId);
         };
     }
@@ -119,7 +125,7 @@ public class LanguageFactoryImpl implements LanguageFactory {
     // =========================================================================
 
     private CompiledLanguage createJava21() {
-        return createCompiled(
+        return new DefaultCompiledLanguage(
                 ID_JAVA_21,
                 "Java (OpenJDK 21)",
                 ".java",
@@ -139,12 +145,14 @@ public class LanguageFactoryImpl implements LanguageFactory {
                             : files.get(0);
                     String className = extractBaseName(mainFile);
                     return List.of("java", "-cp", ".", className);
-                }
+                },
+                "Main.java",
+                "Main"
         );
     }
 
     private CompiledLanguage createC17() {
-        return createCompiled(
+        return new DefaultCompiledLanguage(
                 ID_C_17,
                 "C (GCC 13.2)",
                 ".c",
@@ -164,12 +172,14 @@ public class LanguageFactoryImpl implements LanguageFactory {
                     command.add("-lm");
                     return command;
                 },
-                files -> List.of("./a.out")
+                files -> List.of("./a.out"),
+                "main.c",
+                "a.out"
         );
     }
 
     private CompiledLanguage createCpp23() {
-        return createCompiled(
+        return new DefaultCompiledLanguage(
                 ID_CPP_23,
                 "C++ (GCC 13.2)",
                 ".cpp",
@@ -188,12 +198,14 @@ public class LanguageFactoryImpl implements LanguageFactory {
                     command.add("a.out");
                     return command;
                 },
-                files -> List.of("./a.out")
+                files -> List.of("./a.out"),
+                "main.cpp",
+                "a.out"
         );
     }
 
     private InterpretedLanguage createPython312() {
-        return createInterpreted(
+        return new DefaultInterpretedLanguage(
                 ID_PYTHON_3_12,
                 "Python (CPython 3.12)",
                 ".py",
@@ -203,12 +215,13 @@ public class LanguageFactoryImpl implements LanguageFactory {
                             ? "solution.py"
                             : files.get(0);
                     return List.of("python3", scriptFile);
-                }
+                },
+                "main.py"
         );
     }
 
     private InterpretedLanguage createJavaScriptNode20() {
-        return createInterpreted(
+        return new DefaultInterpretedLanguage(
                 ID_JAVASCRIPT_NODE_20,
                 "JavaScript (Node.js 20)",
                 ".js",
@@ -218,12 +231,13 @@ public class LanguageFactoryImpl implements LanguageFactory {
                             ? "solution.js"
                             : files.get(0);
                     return List.of("node", scriptFile);
-                }
+                },
+                "main.js"
         );
     }
 
     private DatabaseLanguage createMySql80() {
-        return createDatabase(
+        return new DefaultDatabaseLanguage(
                 ID_MYSQL_8_0,
                 "MySQL (8.0)",
                 ".sql",
@@ -233,12 +247,15 @@ public class LanguageFactoryImpl implements LanguageFactory {
                             ? "solution.sql"
                             : files.get(0);
                     return List.of("mysql", "-u", "root", "-pstacked_judge", "stacked_judge_db", "-e", "source " + scriptFile);
-                }
+                },
+                List.of("mysql", "-S", "/var/run/mysqld/mysqld.sock", "stacked_judge_db", "-e", "SELECT 1;"),
+                true,
+                "main.sql"
         );
     }
 
     private DatabaseLanguage createPostgreSql16() {
-        return createDatabase(
+        return new DefaultDatabaseLanguage(
                 ID_POSTGRESQL_16,
                 "PostgreSQL (16)",
                 ".sql",
@@ -248,7 +265,46 @@ public class LanguageFactoryImpl implements LanguageFactory {
                             ? "solution.sql"
                             : files.get(0);
                     return List.of("psql", "-U", "postgres", "-d", "stacked_judge_db", "-f", scriptFile);
-                }
+                },
+                List.of("psql", "-U", "postgres", "-d", "stacked_judge_db", "-c", "SELECT 1;"),
+                true,
+                "main.sql"
+        );
+    }
+
+    private DatabaseLanguage createSqlite3() {
+        return new DefaultDatabaseLanguage(
+                ID_SQLITE_3,
+                "SQLite (3.45)",
+                ".sql",
+                DockerImageRegistry.SQLITE_3,
+                files -> {
+                    String scriptFile = (files == null || files.isEmpty())
+                            ? "main.sql"
+                            : files.get(0);
+                    return List.of("sqlite3", "-header", "-column", "/tmp/stacked_judge.db", ".read " + scriptFile);
+                },
+                List.of(),
+                false,
+                "main.sql"
+        );
+    }
+
+    private DatabaseLanguage createMongoDb80() {
+        return new DefaultDatabaseLanguage(
+                ID_MONGODB_8_0,
+                "MongoDB (8.0)",
+                ".js",
+                DockerImageRegistry.MONGODB_8_0,
+                files -> {
+                    String scriptFile = (files == null || files.isEmpty())
+                            ? "solution.js"
+                            : files.get(0);
+                    return List.of("mongosh", "--quiet", "--norc", "mongodb://127.0.0.1:27017/stacked_judge_db", "--file", scriptFile);
+                },
+                List.of("mongosh", "--quiet", "--eval", "db.adminCommand('ping')"),
+                true,
+                "main.js"
         );
     }
 

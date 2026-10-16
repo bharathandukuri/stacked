@@ -140,10 +140,24 @@ class IsolateMetadataParserTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"status:   ", "status:\n", "time:  \nstatus:"})
-    @DisplayName("parseMetadata defaults to SUCCESS when status key has blank value")
+    @DisplayName("parseMetadata defaults to SUCCESS when status key has blank value and zero/no exitcode")
     void parseMetadataBlankStatusValue(String metadata) {
         IsolateExecutionResult result = parserService.parseMetadata(metadata, "", "");
 
         assertThat(result.status()).isEqualTo(IsolateExecutionStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("parseMetadata maps to RUNTIME_ERROR when status is blank but exitcode is non-zero")
+    void parseMetadataBlankStatusWithNonZeroExitCode() {
+        String metadata = """
+                exitcode:1
+                time:0.012
+                """;
+
+        IsolateExecutionResult result = parserService.parseMetadata(metadata, "", "Process exited with code 1");
+
+        assertThat(result.status()).isEqualTo(IsolateExecutionStatus.RUNTIME_ERROR);
+        assertThat(result.exitCode()).isEqualTo(1L);
     }
 }

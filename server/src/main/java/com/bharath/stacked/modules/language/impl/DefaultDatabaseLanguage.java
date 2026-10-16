@@ -12,7 +12,10 @@ public record DefaultDatabaseLanguage(
         String name,
         String fileExtension,
         DockerImageRegistry dockerImage,
-        Function<List<String>, List<String>> runCommandGenerator
+        Function<List<String>, List<String>> runCommandGenerator,
+        List<String> readinessCheckCommand,
+        boolean requiresDaemonWait,
+        String defaultFileName
 ) implements DatabaseLanguage {
 
     public DefaultDatabaseLanguage {
@@ -21,6 +24,18 @@ public record DefaultDatabaseLanguage(
         Objects.requireNonNull(fileExtension, "fileExtension must not be null");
         Objects.requireNonNull(dockerImage, "dockerImage must not be null");
         Objects.requireNonNull(runCommandGenerator, "runCommandGenerator must not be null");
+        readinessCheckCommand = readinessCheckCommand != null ? List.copyOf(readinessCheckCommand) : List.of();
+        defaultFileName = defaultFileName != null ? defaultFileName : "solution" + fileExtension;
+    }
+
+    public DefaultDatabaseLanguage(
+            String id,
+            String name,
+            String fileExtension,
+            DockerImageRegistry dockerImage,
+            Function<List<String>, List<String>> runCommandGenerator
+    ) {
+        this(id, name, fileExtension, dockerImage, runCommandGenerator, List.of(), true, "solution" + fileExtension);
     }
 
     @Override

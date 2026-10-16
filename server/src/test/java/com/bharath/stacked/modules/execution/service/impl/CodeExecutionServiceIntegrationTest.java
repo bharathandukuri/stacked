@@ -2,7 +2,10 @@ package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerConfig;
 import com.bharath.stacked.modules.execution.config.DockerProperties;
+import com.bharath.stacked.modules.execution.dto.request.BatchCodeExecutionRequest;
+import com.bharath.stacked.modules.execution.dto.request.BatchExecutionItem;
 import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequest;
+import com.bharath.stacked.modules.execution.dto.response.BatchCodeExecutionResult;
 import com.bharath.stacked.modules.execution.dto.response.SimpleCodeExecutionResult;
 import com.bharath.stacked.modules.execution.enums.CodeExecutionStatus;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
@@ -26,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -897,5 +901,182 @@ class CodeExecutionServiceIntegrationTest {
         assertThat(result).isNotNull();
         assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.RUNTIME_ERROR);
         assertThat(result.stderr()).contains("SyntaxError");
+    }
+
+    @Test
+    @DisplayName("Python 3.12: batch execution runs multiple inputs sequentially within single container")
+    void executePython312Batch() {
+        Language python = languageRegistry.get("python-3.12");
+        assumeLanguageImageAvailable(python);
+
+        String code = """
+                import sys
+                line = sys.stdin.read().strip()
+                if line:
+                    a, b = map(int, line.split())
+                    print(a + b)
+                """;
+
+        BatchCodeExecutionRequest request = BatchCodeExecutionRequest.builder()
+                .language(python)
+                .files(Map.of("solution.py", code))
+                .constraints(new CodeExecutionConstraints(3000L))
+                .executions(List.of(
+                        BatchExecutionItem.builder().executablePath("solution.py").stdin("3 5\n").build(),
+                        BatchExecutionItem.builder().executablePath("solution.py").stdin("10 20\n").build(),
+                        BatchExecutionItem.builder().executablePath("solution.py").stdin("100 200\n").build()
+                ))
+                .build();
+
+        BatchCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.totalExecutions()).isEqualTo(3);
+        assertThat(result.successfulExecutions()).isEqualTo(3);
+        assertThat(result.failedExecutions()).isEqualTo(0);
+        assertThat(result.results()).hasSize(3);
+
+        assertThat(result.results().get(0).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.results().get(0).stdout().trim()).isEqualTo("8");
+
+        assertThat(result.results().get(1).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.results().get(1).stdout().trim()).isEqualTo("30");
+
+        assertThat(result.results().get(2).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.results().get(2).stdout().trim()).isEqualTo("300");
+    }
+
+    @Test
+    @DisplayName("Java 21: batch execution with mixed results and independent constraints")
+    void executeJava21BatchMixedResults() {
+        Language java = languageRegistry.get("java-21");
+        assumeLanguageImageAvailable(java);
+
+        String code = """
+                import java.util.Scanner;
+                public class Solution {
+                    public static void main(String[] args) {
+                        Scanner sc = new Scanner(System.in);
+                        if (!sc.hasNextInt()) return;
+                        int n = sc.nextInt();
+                        if (n < 0) {
+                            while (true) {} // Infinite loop for negative inputs
+                        }
+                        System.out.println(n * 2);
+                    }
+                }
+                """;
+
+        BatchCodeExecutionRequest request = BatchCodeExecutionRequest.builder()
+                .language(java)
+                .files(Map.of("Solution.java", code))
+                .constraints(new CodeExecutionConstraints(5000L))
+                .executions(List.of(
+                        BatchExecutionItem.builder().stdin("5\n").build(),
+                        BatchExecutionItem.builder().stdin("-1\n").constraints(new CodeExecutionConstraints(1000L)).build(),
+                        BatchExecutionItem.builder().stdin("7\n").build()
+                ))
+                .build();
+
+        BatchCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.totalExecutions()).isEqualTo(3);
+        assertThat(result.successfulExecutions()).isEqualTo(2);
+        assertThat(result.failedExecutions()).isEqualTo(1);
+        assertThat(result.results()).hasSize(3);
+
+        assertThat(result.results().get(0).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.results().get(0).stdout().trim()).isEqualTo("10");
+
+        assertThat(result.results().get(1).executionStatus()).isEqualTo(CodeExecutionStatus.TIME_LIMIT_EXCEEDED);
+
+        assertThat(result.results().get(2).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.results().get(2).stdout().trim()).isEqualTo("14");
+    }
+
+    @Test
+    @DisplayName("C++ 23: batch execution with compilation error marks all items as COMPILATION_ERROR")
+    void executeCpp23BatchCompilationError() {
+        Language cpp = languageRegistry.get("cpp-23");
+        assumeLanguageImageAvailable(cpp);
+
+        String invalidCode = """
+                #include <iostream>
+                int main() {
+                    this_is_a_syntax_error();
+                    return 0;
+                }
+                """;
+
+        BatchCodeExecutionRequest request = BatchCodeExecutionRequest.builder()
+                .language(cpp)
+                .files(Map.of("solution.cpp", invalidCode))
+                .constraints(new CodeExecutionConstraints(3000L))
+                .executions(List.of(
+                        BatchExecutionItem.builder().stdin("1\n").build(),
+                        BatchExecutionItem.builder().stdin("2\n").build()
+                ))
+                .build();
+
+        BatchCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.totalExecutions()).isEqualTo(2);
+        assertThat(result.successfulExecutions()).isEqualTo(0);
+        assertThat(result.failedExecutions()).isEqualTo(2);
+        assertThat(result.results()).hasSize(2);
+
+        for (SimpleCodeExecutionResult itemResult : result.results()) {
+            assertThat(itemResult.executionStatus()).isEqualTo(CodeExecutionStatus.COMPILATION_ERROR);
+            assertThat(itemResult.stderr()).isNotEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("SQLite 3: batch execution runs multiple queries within single container")
+    void executeSqlite3Batch() {
+        Language sqlite = languageRegistry.get("sqlite-3");
+        assumeLanguageImageAvailable(sqlite);
+
+        String initSql = """
+                CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);
+                INSERT INTO users (id, name) VALUES (1, 'Alice');
+                INSERT INTO users (id, name) VALUES (2, 'Bob');
+                """;
+
+        String q1 = "SELECT name FROM users WHERE id = 1;";
+        String q2 = "SELECT COUNT(*) FROM users;";
+
+        BatchCodeExecutionRequest request = BatchCodeExecutionRequest.builder()
+                .language(sqlite)
+                .files(Map.of(
+                        "init.sql", initSql,
+                        "q1.sql", q1,
+                        "q2.sql", q2
+                ))
+                .constraints(new CodeExecutionConstraints(5000L))
+                .executions(List.of(
+                        BatchExecutionItem.builder().executablePath("init.sql").build(),
+                        BatchExecutionItem.builder().executablePath("q1.sql").build(),
+                        BatchExecutionItem.builder().executablePath("q2.sql").build()
+                ))
+                .build();
+
+        BatchCodeExecutionResult result = codeExecutionService.run(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.totalExecutions()).isEqualTo(3);
+        assertThat(result.successfulExecutions()).isEqualTo(3);
+        assertThat(result.failedExecutions()).isEqualTo(0);
+        assertThat(result.results()).hasSize(3);
+
+        assertThat(result.results().get(0).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+
+        assertThat(result.results().get(1).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.results().get(1).stdout()).contains("Alice");
+
+        assertThat(result.results().get(2).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(result.results().get(2).stdout().trim()).contains("2");
     }
 }

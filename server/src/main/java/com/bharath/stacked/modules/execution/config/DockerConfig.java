@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(DockerProperties.class)
+@EnableConfigurationProperties({DockerProperties.class, ExecutionProperties.class})
 public class DockerConfig {
 
     @Bean

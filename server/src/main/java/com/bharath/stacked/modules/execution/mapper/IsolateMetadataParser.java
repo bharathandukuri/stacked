@@ -36,7 +36,7 @@ public class IsolateMetadataParser {
         }
 
         return new IsolateExecutionResult(
-                parseStatus(values.get("status"), values.get("message")),
+                parseStatus(values.get("status"), values.get("message"), values.get("exitcode")),
                 stdout,
                 stderr,
                 parseDouble(values.get("time")),
@@ -50,12 +50,15 @@ public class IsolateMetadataParser {
         );
     }
 
-    private IsolateExecutionStatus parseStatus(String status, String message) {
+    private IsolateExecutionStatus parseStatus(String status, String message, String exitcode) {
         if (message != null && message.toLowerCase().contains("memory")) {
             return IsolateExecutionStatus.MEMORY_LIMIT_EXCEEDED;
         }
 
         if (status == null || status.isBlank()) {
+            if (exitcode != null && !exitcode.isBlank() && !"0".equals(exitcode.trim())) {
+                return IsolateExecutionStatus.RUNTIME_ERROR;
+            }
             return IsolateExecutionStatus.SUCCESS;
         }
 

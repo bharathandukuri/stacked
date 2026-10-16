@@ -1,7 +1,11 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
+import com.bharath.stacked.modules.execution.dto.request.BatchCodeExecutionRequest;
+import com.bharath.stacked.modules.execution.dto.request.BatchExecutionItem;
 import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequest;
+import com.bharath.stacked.modules.execution.dto.response.BatchCodeExecutionResult;
 import com.bharath.stacked.modules.execution.dto.response.SimpleCodeExecutionResult;
+import java.util.Map;
 import com.bharath.stacked.modules.execution.enums.CodeExecutionStatus;
 import com.bharath.stacked.modules.execution.enums.IsolateExecutionStatus;
 import com.bharath.stacked.modules.execution.exception.DockerContainerCreationException;
@@ -13,7 +17,7 @@ import com.bharath.stacked.modules.execution.exception.IsolateCleanupException;
 import com.bharath.stacked.modules.execution.exception.IsolateExecutionException;
 import com.bharath.stacked.modules.execution.exception.IsolateInitializationException;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
-import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
+import com.bharath.stacked.modules.execution.dto.DockerContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.response.DockerExecutionResult;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
@@ -57,6 +61,18 @@ class CodeExecutionServiceImplTest {
     @Spy
     private CodeExecutionStatusMapper codeExecutionStatusMapper = new CodeExecutionStatusMapper();
 
+    @Spy
+    private com.bharath.stacked.modules.execution.config.ExecutionProperties executionProperties =
+            new com.bharath.stacked.modules.execution.config.ExecutionProperties();
+
+    @Spy
+    private com.bharath.stacked.modules.execution.validator.ExecutionPathValidator executionPathValidator =
+            new com.bharath.stacked.modules.execution.validator.ExecutionPathValidator(executionProperties);
+
+    @Spy
+    private com.bharath.stacked.modules.execution.resolver.ExecutionConstraintResolver executionConstraintResolver =
+            new com.bharath.stacked.modules.execution.resolver.ExecutionConstraintResolver(executionProperties);
+
     @InjectMocks
     private CodeExecutionServiceImpl codeExecutionService;
 
@@ -76,7 +92,7 @@ class CodeExecutionServiceImplTest {
     @Test
     @DisplayName("Returns SYSTEM_ERROR when request is null")
     void nullRequestReturnsSystemError() {
-        SimpleCodeExecutionResult result = codeExecutionService.run(null);
+        SimpleCodeExecutionResult result = codeExecutionService.run((SimpleCodeExecutionRequest) null);
 
         assertThat(result).isNotNull();
         assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
@@ -502,7 +518,7 @@ class CodeExecutionServiceImplTest {
                 .constraints(new CodeExecutionConstraints(4000L))
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(4000L)))
@@ -516,8 +532,8 @@ class CodeExecutionServiceImplTest {
         assertThat(result.exitCode()).isEqualTo(0L);
 
         // Verify container created with DatabaseContainerConstraints
-        ArgumentCaptor<DatabaseContainerConstraints> constraintsCaptor =
-                ArgumentCaptor.forClass(DatabaseContainerConstraints.class);
+        ArgumentCaptor<DockerContainerConstraints> constraintsCaptor =
+                ArgumentCaptor.forClass(DockerContainerConstraints.class);
         verify(dockerExecutionService).createContainer(eq(mysql.dockerImageDetails()), constraintsCaptor.capture());
         assertThat(constraintsCaptor.getValue().cpuLimit()).isEqualTo(1L);
         assertThat(constraintsCaptor.getValue().memoryLimitKb()).isEqualTo(262144L);
@@ -546,7 +562,7 @@ class CodeExecutionServiceImplTest {
                 .constraints(new CodeExecutionConstraints(2000L))
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(2000L)))
@@ -572,7 +588,7 @@ class CodeExecutionServiceImplTest {
                 .code("SELECT * FROM non_existing_table;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
@@ -601,7 +617,7 @@ class CodeExecutionServiceImplTest {
                 .constraints(new CodeExecutionConstraints(-500L))
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
@@ -628,7 +644,7 @@ class CodeExecutionServiceImplTest {
                 .code("SELECT 1;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenThrow(new DockerContainerCreationException("Failed to allocate container port or cgroup"));
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -650,7 +666,7 @@ class CodeExecutionServiceImplTest {
                 .code("SELECT 1;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doThrow(new DockerContainerNotFoundException("Container cnt-12345 not found"))
                 .when(dockerExecutionService).startContainer(testContainer.id());
@@ -673,7 +689,7 @@ class CodeExecutionServiceImplTest {
                 .code("SELECT 1;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         doThrow(new DockerExecutionException("Disk full in docker container"))
@@ -697,7 +713,7 @@ class CodeExecutionServiceImplTest {
                 .code("SELECT 42;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
@@ -1007,7 +1023,7 @@ class CodeExecutionServiceImplTest {
                 .code("CREATE TABLE users (id INT); INSERT INTO users VALUES (1); SELECT * FROM users;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(sqlite.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(sqlite.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
@@ -1033,7 +1049,7 @@ class CodeExecutionServiceImplTest {
                 .code("db.users.insertOne({ name: 'Alice' }); printjson(db.users.findOne());")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mongo.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mongo.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
@@ -1059,7 +1075,7 @@ class CodeExecutionServiceImplTest {
                 .code("SELECT 1;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(mysql.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), eq(5000L)))
@@ -1080,7 +1096,7 @@ class CodeExecutionServiceImplTest {
                 .code("SELECT 1;")
                 .build();
 
-        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DatabaseContainerConstraints.class)))
+        when(dockerExecutionService.createContainer(eq(postgres.dockerImageDetails()), any(DockerContainerConstraints.class)))
                 .thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(dockerExecutionService.isContainerRunning(testContainer.id())).thenReturn(false);
@@ -1090,5 +1106,169 @@ class CodeExecutionServiceImplTest {
 
         assertThat(result.executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
         assertThat(result.logs()).anyMatch(log -> log.contains("Database container stopped unexpectedly"));
+    }
+
+    // =========================================================================
+    // Batch Code Execution Unit Tests
+    // =========================================================================
+
+    @Test
+    @DisplayName("Batch execution returns empty result when request or language is null")
+    void batchExecutionNullRequestReturnsEmpty() {
+        BatchCodeExecutionResult res1 = codeExecutionService.run((BatchCodeExecutionRequest) null);
+        assertThat(res1).isNotNull();
+        assertThat(res1.totalExecutions()).isEqualTo(0);
+        assertThat(res1.results()).isEmpty();
+
+        BatchCodeExecutionRequest reqNullLang = new BatchCodeExecutionRequest(null, Map.of(), null, List.of());
+        BatchCodeExecutionResult res2 = codeExecutionService.run(reqNullLang);
+        assertThat(res2.totalExecutions()).isEqualTo(0);
+        assertThat(res2.results()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Batch execution returns empty result when executions list is empty")
+    void batchExecutionEmptyExecutionsReturnsEmpty() {
+        Language python = languageFactory.create("python-3.12");
+        BatchCodeExecutionRequest request = new BatchCodeExecutionRequest(python, Map.of("main.py", "print(1)"), null, List.of());
+
+        BatchCodeExecutionResult result = codeExecutionService.run(request);
+        assertThat(result.totalExecutions()).isEqualTo(0);
+        assertThat(result.results()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Batch execution creates ONE container, ONE sandbox, and runs all items with proper constraints")
+    void batchExecutionRunsAllItemsWithSingleContainer() {
+        Language java = languageFactory.create("java-21");
+
+        BatchExecutionItem item1 = new BatchExecutionItem(null, "10\n", new CodeExecutionConstraints(1000L, 128000L));
+        BatchExecutionItem item2 = new BatchExecutionItem(null, "20\n", new CodeExecutionConstraints(3000L, 256000L));
+
+        BatchCodeExecutionRequest request = new BatchCodeExecutionRequest(
+                java,
+                Map.of("Main.java", "public class Main { public static void main(String[] args) {} }"),
+                new CodeExecutionConstraints(2000L, 262144L),
+                List.of(item1, item2)
+        );
+
+        when(dockerExecutionService.createContainer(eq(java.dockerImageDetails()))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+
+        // Compilation succeeds
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+                .thenReturn(new DockerExecutionResult(0L, "", ""));
+
+        // Item 1 execution result
+        IsolateExecutionResult res1 = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS, "ANS_1\n", "", 0.05, 0.08, 15000L, 0L, 0L, false, 10L, 2L
+        );
+        // Item 2 execution result
+        IsolateExecutionResult res2 = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS, "ANS_2\n", "", 0.12, 0.15, 18000L, 0L, 0L, false, 12L, 3L
+        );
+
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq("10\n"), any(IsolateExecutionConstraints.class)))
+                .thenReturn(res1);
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq("20\n"), any(IsolateExecutionConstraints.class)))
+                .thenReturn(res2);
+
+        BatchCodeExecutionResult batchResult = codeExecutionService.run(request);
+
+        assertThat(batchResult).isNotNull();
+        assertThat(batchResult.totalExecutions()).isEqualTo(2);
+        assertThat(batchResult.successfulExecutions()).isEqualTo(2);
+        assertThat(batchResult.failedExecutions()).isEqualTo(0);
+        assertThat(batchResult.results()).hasSize(2);
+        assertThat(batchResult.results().get(0).stdout()).isEqualTo("ANS_1\n");
+        assertThat(batchResult.results().get(1).stdout()).isEqualTo("ANS_2\n");
+
+        // Container and sandbox created ONCE only!
+        verify(dockerExecutionService, times(1)).createContainer(eq(java.dockerImageDetails()));
+        verify(dockerExecutionService, times(1)).startContainer(testContainer.id());
+        verify(isolateExecutionService, times(1)).initialize(testContainer);
+        verify(isolateExecutionService, times(2)).executeWithConstraints(eq(testSandbox), anyList(), anyString(), any());
+        verify(isolateExecutionService, times(1)).cleanup(testSandbox);
+        verify(dockerExecutionService, times(1)).stopContainer(testContainer.id());
+        verify(dockerExecutionService, times(1)).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Batch execution marks all items as COMPILATION_ERROR when compilation fails")
+    void batchExecutionCompilationFailureMarksAllItems() {
+        Language cpp = languageFactory.create("cpp-23");
+
+        BatchExecutionItem item1 = new BatchExecutionItem(null, "1\n", null);
+        BatchExecutionItem item2 = new BatchExecutionItem(null, "2\n", null);
+
+        BatchCodeExecutionRequest request = new BatchCodeExecutionRequest(
+                cpp,
+                Map.of("main.cpp", "int main() { syntax error }"),
+                new CodeExecutionConstraints(2000L, 262144L),
+                List.of(item1, item2)
+        );
+
+        when(dockerExecutionService.createContainer(eq(cpp.dockerImageDetails()))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+
+        // Compilation fails
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+                .thenReturn(new DockerExecutionResult(1L, "", "error: expected ';' before '}'"));
+
+        BatchCodeExecutionResult batchResult = codeExecutionService.run(request);
+
+        assertThat(batchResult).isNotNull();
+        assertThat(batchResult.totalExecutions()).isEqualTo(2);
+        assertThat(batchResult.successfulExecutions()).isEqualTo(0);
+        assertThat(batchResult.failedExecutions()).isEqualTo(2);
+        assertThat(batchResult.results()).hasSize(2);
+        assertThat(batchResult.results().get(0).executionStatus()).isEqualTo(CodeExecutionStatus.COMPILATION_ERROR);
+        assertThat(batchResult.results().get(1).executionStatus()).isEqualTo(CodeExecutionStatus.COMPILATION_ERROR);
+
+        // Isolate execution should never be invoked
+        verify(isolateExecutionService, never()).executeWithConstraints(any(), any(), any(), any());
+        verify(isolateExecutionService, times(1)).cleanup(testSandbox);
+        verify(dockerExecutionService, times(1)).deleteContainer(testContainer.id());
+    }
+
+    @Test
+    @DisplayName("Batch execution continues remaining items when one item encounters an unexpected error")
+    void batchExecutionContinuesWhenItemFails() {
+        Language python = languageFactory.create("python-3.12");
+
+        BatchExecutionItem item1 = new BatchExecutionItem(null, "in1\n", null);
+        BatchExecutionItem item2 = new BatchExecutionItem(null, "in2\n", null);
+
+        BatchCodeExecutionRequest request = new BatchCodeExecutionRequest(
+                python,
+                Map.of("main.py", "import sys; print(sys.stdin.read())"),
+                null,
+                List.of(item1, item2)
+        );
+
+        when(dockerExecutionService.createContainer(eq(python.dockerImageDetails()))).thenReturn(testContainer);
+        doNothing().when(dockerExecutionService).startContainer(testContainer.id());
+        when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
+
+        // Item 1 throws unexpected exception
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq("in1\n"), any()))
+                .thenThrow(new RuntimeException("Simulated isolate crash"));
+
+        // Item 2 succeeds
+        IsolateExecutionResult res2 = new IsolateExecutionResult(
+                IsolateExecutionStatus.SUCCESS, "out2\n", "", 0.05, 0.08, 10000L, 0L, 0L, false, 5L, 1L
+        );
+        when(isolateExecutionService.executeWithConstraints(eq(testSandbox), anyList(), eq("in2\n"), any()))
+                .thenReturn(res2);
+
+        BatchCodeExecutionResult batchResult = codeExecutionService.run(request);
+
+        assertThat(batchResult.totalExecutions()).isEqualTo(2);
+        assertThat(batchResult.successfulExecutions()).isEqualTo(1);
+        assertThat(batchResult.failedExecutions()).isEqualTo(1);
+        assertThat(batchResult.results().get(0).executionStatus()).isEqualTo(CodeExecutionStatus.SYSTEM_ERROR);
+        assertThat(batchResult.results().get(1).executionStatus()).isEqualTo(CodeExecutionStatus.SUCCESS);
     }
 }

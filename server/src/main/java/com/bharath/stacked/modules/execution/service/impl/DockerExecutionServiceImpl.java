@@ -1,7 +1,7 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerProperties;
-import com.bharath.stacked.modules.execution.dto.DatabaseContainerConstraints;
+import com.bharath.stacked.modules.execution.dto.DockerContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.bharath.stacked.modules.execution.dto.ManagedContainer;
@@ -245,7 +245,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
     @Override
     public DockerContainerDetails createContainer(
             DockerImageDetails dockerImageDetails,
-            DatabaseContainerConstraints constraints
+            DockerContainerConstraints constraints
     ) throws DockerContainerCreationException {
 
         String image = dockerImageDetails.reference();
@@ -265,29 +265,31 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             boolean networkDisabled =
                     constraints == null || constraints.networkDisabled();
 
-            if (constraints != null) {
-                if (constraints.cpuLimit() > 0) {
-                    long nanoCpus = Math.multiplyExact(
-                            constraints.cpuLimit(),
-                            1_000_000_000L
-                    );
+            DockerContainerConstraints effectiveConstraints = constraints != null
+                    ? constraints
+                    : DockerContainerConstraints.defaults();
 
-                    hostConfig.withNanoCPUs(nanoCpus);
-                }
+            if (effectiveConstraints.cpuLimit() > 0) {
+                long nanoCpus = Math.multiplyExact(
+                        effectiveConstraints.cpuLimit(),
+                        1_000_000_000L
+                );
 
-                if (constraints.memoryLimitKb() > 0) {
-                    long memoryBytes = Math.multiplyExact(
-                            constraints.memoryLimitKb(),
-                            1024L
-                    );
+                hostConfig.withNanoCPUs(nanoCpus);
+            }
 
-                    hostConfig.withMemory(memoryBytes);
-                    hostConfig.withMemorySwap(memoryBytes);
-                }
+            if (effectiveConstraints.memoryLimitKb() > 0) {
+                long memoryBytes = Math.multiplyExact(
+                        effectiveConstraints.memoryLimitKb(),
+                        1024L
+                );
 
-                if (constraints.pidsLimit() > 0) {
-                    hostConfig.withPidsLimit(constraints.pidsLimit());
-                }
+                hostConfig.withMemory(memoryBytes);
+                hostConfig.withMemorySwap(memoryBytes);
+            }
+
+            if (effectiveConstraints.pidsLimit() > 0) {
+                hostConfig.withPidsLimit(effectiveConstraints.pidsLimit());
             }
 
             if (networkDisabled) {
@@ -631,7 +633,7 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                         List.of(
                                 "bash",
                                 "-c",
-                                "echo '" + encodedContent
+                                "mkdir -p \"$(dirname '" + path + "')\" && echo '" + encodedContent
                                         + "' | base64 -d > '" + path + "'"
                         )
                 );

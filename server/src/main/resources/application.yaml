@@ -90,3 +90,33 @@ stacked:
     docker:
       enabled: ${DOCKER_ENABLED:true}
       host: ${DOCKER_HOST:unix:///var/run/docker.sock}
+    defaults:
+      time-limit-ms: ${EXECUTION_DEFAULT_TIME_LIMIT_MS:2000}
+      memory-limit-kb: ${EXECUTION_DEFAULT_MEMORY_LIMIT_KB:262144}
+      process-limit: ${EXECUTION_DEFAULT_PROCESS_LIMIT:50}
+      file-size-kb: ${EXECUTION_DEFAULT_FILE_SIZE_KB:10240}
+      output-limit-bytes: ${EXECUTION_DEFAULT_OUTPUT_LIMIT_BYTES:10485760}
+    hard-limits:
+      max-time-limit-ms: ${EXECUTION_MAX_TIME_LIMIT_MS:60000}
+      max-memory-limit-kb: ${EXECUTION_MAX_MEMORY_LIMIT_KB:1048576}
+      max-process-limit: ${EXECUTION_MAX_PROCESS_LIMIT:100}
+      max-file-size-kb: ${EXECUTION_MAX_FILE_SIZE_KB:51200}
+      max-output-limit-bytes: ${EXECUTION_MAX_OUTPUT_LIMIT_BYTES:52428800}
+      max-batch-size: ${EXECUTION_MAX_BATCH_SIZE:50}
+      max-file-count: ${EXECUTION_MAX_FILE_COUNT:20}
+      max-file-size-bytes: ${EXECUTION_MAX_FILE_SIZE_BYTES:10485760}
+    docker-limits:
+      container-cpu-limit: ${EXECUTION_DOCKER_CPU_LIMIT:1}
+      container-memory-limit-kb: ${EXECUTION_DOCKER_MEMORY_LIMIT_KB:1048576}
+      container-pids-limit: ${EXECUTION_DOCKER_PIDS_LIMIT:200}
+    compilation:
+      timeout-ms: ${EXECUTION_COMPILATION_TIMEOUT_MS:10000}
+      memory-limit-kb: ${EXECUTION_COMPILATION_MEMORY_LIMIT_KB:524288}
+    database:
+      readiness-timeout-ms: ${EXECUTION_DB_READINESS_TIMEOUT_MS:30000}
+      readiness-poll-interval-ms: ${EXECUTION_DB_READINESS_POLL_INTERVAL_MS:150}
+      default-query-timeout-ms: ${EXECUTION_DB_QUERY_TIMEOUT_MS:5000}
+    cleanup:
+      stale-retention-minutes: ${EXECUTION_STALE_RETENTION_MINUTES:30}
+      cron: "${EXECUTION_CLEANUP_CRON:0 */5 * * * *}"
+

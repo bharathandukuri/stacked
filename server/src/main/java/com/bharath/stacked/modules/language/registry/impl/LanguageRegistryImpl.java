@@ -21,11 +21,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LanguageRegistryImpl implements LanguageRegistry {
 
     private final LanguageFactory languageFactory;
     private final Map<String, Language> registry = new ConcurrentHashMap<>();
+
+    public LanguageRegistryImpl(LanguageFactory languageFactory) {
+        this.languageFactory = languageFactory;
+    }
 
     @PostConstruct
     public void init() {

@@ -1,6 +1,7 @@
 package com.bharath.stacked.modules.language;
 
 import java.util.List;
+import java.util.Map;
 
 public interface CompiledLanguage extends Language {
 
@@ -18,4 +19,13 @@ public interface CompiledLanguage extends Language {
     default List<String> compile(String... fileNames) {
         return compile(fileNames != null ? List.of(fileNames) : List.of());
     }
+
+    default String buildArtifactName() {
+        return "a.out";
+    }
+
+    default List<String> resolveFilesToCompile(Map<String, String> files) {
+        return resolveSourceFiles(files);
+    }
 }
+
