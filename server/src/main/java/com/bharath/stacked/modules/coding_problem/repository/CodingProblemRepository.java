@@ -1,6 +1,6 @@
-package com.bharath.stacked.modules.coding.repository;
+package com.bharath.stacked.modules.coding_problem.repository;
 
-import com.bharath.stacked.modules.coding.model.CodingProblem;
+import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 

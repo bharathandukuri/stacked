@@ -1,14 +1,14 @@
-package com.bharath.stacked.modules.coding.service.impl;
+package com.bharath.stacked.modules.coding_problem.service.impl;
 
 import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
-import com.bharath.stacked.modules.coding.dto.request.CreateCodingProblemRequest;
-import com.bharath.stacked.modules.coding.dto.request.ExecutionLimitsRequest;
-import com.bharath.stacked.modules.coding.dto.request.TestcaseRequest;
-import com.bharath.stacked.modules.coding.enums.CodingProblemDifficulty;
-import com.bharath.stacked.modules.coding.enums.CodingProblemType;
-import com.bharath.stacked.modules.coding.model.CodingProblem;
-import com.bharath.stacked.modules.coding.repository.CodingProblemRepository;
+import com.bharath.stacked.modules.coding_problem.dto.request.CreateCodingProblemRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.ExecutionLimitsRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.TestcaseRequest;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
+import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
+import com.bharath.stacked.modules.coding_problem.repository.CodingProblemRepository;
 import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequest;
 import com.bharath.stacked.modules.execution.dto.response.SimpleCodeExecutionResult;
 import com.bharath.stacked.modules.execution.enums.CodeExecutionStatus;

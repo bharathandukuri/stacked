@@ -1,4 +1,4 @@
-package com.bharath.stacked.modules.coding.model;
+package com.bharath.stacked.modules.coding_problem.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

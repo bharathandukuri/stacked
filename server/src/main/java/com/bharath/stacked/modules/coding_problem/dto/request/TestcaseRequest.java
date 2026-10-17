@@ -1,4 +1,4 @@
-package com.bharath.stacked.modules.coding.dto.request;
+package com.bharath.stacked.modules.coding_problem.dto.request;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

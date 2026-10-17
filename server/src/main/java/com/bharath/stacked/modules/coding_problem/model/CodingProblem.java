@@ -1,7 +1,7 @@
-package com.bharath.stacked.modules.coding.model;
+package com.bharath.stacked.modules.coding_problem.model;
 
-import com.bharath.stacked.modules.coding.enums.CodingProblemDifficulty;
-import com.bharath.stacked.modules.coding.enums.CodingProblemType;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

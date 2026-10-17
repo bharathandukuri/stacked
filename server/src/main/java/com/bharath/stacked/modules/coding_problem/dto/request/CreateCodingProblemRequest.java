@@ -1,7 +1,7 @@
-package com.bharath.stacked.modules.coding.dto.request;
+package com.bharath.stacked.modules.coding_problem.dto.request;
 
-import com.bharath.stacked.modules.coding.enums.CodingProblemDifficulty;
-import com.bharath.stacked.modules.coding.enums.CodingProblemType;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;

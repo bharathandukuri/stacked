@@ -1,15 +1,15 @@
-package com.bharath.stacked.modules.coding.service.impl;
+package com.bharath.stacked.modules.coding_problem.service.impl;
 
 import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
-import com.bharath.stacked.modules.coding.dto.request.CreateCodingProblemRequest;
-import com.bharath.stacked.modules.coding.dto.request.TestcaseRequest;
-import com.bharath.stacked.modules.coding.enums.CodingProblemType;
-import com.bharath.stacked.modules.coding.model.CodingProblem;
-import com.bharath.stacked.modules.coding.model.ExecutionLimits;
-import com.bharath.stacked.modules.coding.model.TestCase;
-import com.bharath.stacked.modules.coding.repository.CodingProblemRepository;
-import com.bharath.stacked.modules.coding.service.CodingProblemService;
+import com.bharath.stacked.modules.coding_problem.dto.request.CreateCodingProblemRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.TestcaseRequest;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
+import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
+import com.bharath.stacked.modules.coding_problem.model.ExecutionLimits;
+import com.bharath.stacked.modules.coding_problem.model.TestCase;
+import com.bharath.stacked.modules.coding_problem.repository.CodingProblemRepository;
+import com.bharath.stacked.modules.coding_problem.service.CodingProblemService;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
 import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequest;
 import com.bharath.stacked.modules.execution.dto.response.SimpleCodeExecutionResult;
@@ -18,7 +18,6 @@ import com.bharath.stacked.modules.execution.service.CodeExecutionService;
 import com.bharath.stacked.modules.language.Language;
 import com.bharath.stacked.modules.language.LanguageType;
 import com.bharath.stacked.modules.language.registry.LanguageRegistry;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 

@@ -1,9 +1,9 @@
-package com.bharath.stacked.modules.coding.controller;
+package com.bharath.stacked.modules.coding_problem.controller;
 
 import com.bharath.stacked.common.api.ApiResponse;
-import com.bharath.stacked.modules.coding.dto.request.CreateCodingProblemRequest;
-import com.bharath.stacked.modules.coding.model.CodingProblem;
-import com.bharath.stacked.modules.coding.service.CodingProblemService;
+import com.bharath.stacked.modules.coding_problem.dto.request.CreateCodingProblemRequest;
+import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
+import com.bharath.stacked.modules.coding_problem.service.CodingProblemService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

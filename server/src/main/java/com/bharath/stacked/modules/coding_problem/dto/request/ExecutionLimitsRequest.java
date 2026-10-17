@@ -1,6 +1,6 @@
-package com.bharath.stacked.modules.coding.dto.request;
+package com.bharath.stacked.modules.coding_problem.dto.request;
 
-import com.bharath.stacked.modules.coding.model.ExecutionLimits;
+import com.bharath.stacked.modules.coding_problem.model.ExecutionLimits;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
