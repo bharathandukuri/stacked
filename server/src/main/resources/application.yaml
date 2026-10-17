@@ -110,7 +110,7 @@ stacked:
         time-limit-ms: ${EXECUTION_C_TIME_LIMIT_MS:1000}
         memory-limit-kb: ${EXECUTION_C_MEMORY_LIMIT_KB:131072}
         compilation-timeout-ms: ${EXECUTION_C_COMPILATION_TIMEOUT_MS:10000}
-      python-3.12:
+      python-3_12:
         time-limit-ms: ${EXECUTION_PYTHON_TIME_LIMIT_MS:3000}
         memory-limit-kb: ${EXECUTION_PYTHON_MEMORY_LIMIT_KB:262144}
       javascript-node-20:
@@ -123,10 +123,10 @@ stacked:
       postgresql-16:
         query-timeout-ms: ${EXECUTION_POSTGRES_QUERY_TIMEOUT_MS:5000}
         memory-limit-kb: ${EXECUTION_POSTGRES_MEMORY_LIMIT_KB:524288}
-      mysql-8.0:
+      mysql-8_0:
         query-timeout-ms: ${EXECUTION_MYSQL_QUERY_TIMEOUT_MS:5000}
         memory-limit-kb: ${EXECUTION_MYSQL_MEMORY_LIMIT_KB:524288}
-      mongodb-8.0:
+      mongodb-8_0:
         query-timeout-ms: ${EXECUTION_MONGODB_QUERY_TIMEOUT_MS:5000}
         memory-limit-kb: ${EXECUTION_MONGODB_MEMORY_LIMIT_KB:524288}
     hard-limits:

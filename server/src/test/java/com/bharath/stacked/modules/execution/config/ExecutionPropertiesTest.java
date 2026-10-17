@@ -56,8 +56,8 @@ class ExecutionPropertiesTest {
         assertThat(properties.getCleanup().getCron()).isEqualTo("0 */5 * * * *");
 
         assertThat(properties.getLanguages()).containsKeys(
-                "java-21", "cpp-23", "c-17", "python-3.12", "javascript-node-20",
-                "sqlite-3", "postgresql-16", "mysql-8.0", "mongodb-8.0"
+                "java-21", "cpp-23", "c-17", "python-3_12", "javascript-node-20",
+                "sqlite-3", "postgresql-16", "mysql-8_0", "mongodb-8_0"
         );
         assertThat(properties.getLanguages().get("java-21").getTimeLimitMs()).isEqualTo(2000L);
         assertThat(properties.getLanguages().get("java-21").getMemoryLimitKb()).isEqualTo(262144L);
@@ -69,8 +69,10 @@ class ExecutionPropertiesTest {
         assertThat(properties.getLanguages().get("c-17").getTimeLimitMs()).isEqualTo(1000L);
         assertThat(properties.getLanguages().get("c-17").getMemoryLimitKb()).isEqualTo(131072L);
 
-        assertThat(properties.getLanguages().get("python-3.12").getTimeLimitMs()).isEqualTo(3000L);
-        assertThat(properties.getLanguages().get("python-3.12").getMemoryLimitKb()).isEqualTo(262144L);
+        assertThat(properties.getLanguages().get("python-3_12").getTimeLimitMs()).isEqualTo(3000L);
+        assertThat(properties.getLanguages().get("python-3_12").getMemoryLimitKb()).isEqualTo(262144L);
+        // Also test alias lookup with dot
+        assertThat(properties.getLanguageLimits("python-3.12").getTimeLimitMs()).isEqualTo(3000L);
 
         assertThat(properties.getLanguages().get("javascript-node-20").getTimeLimitMs()).isEqualTo(2000L);
         assertThat(properties.getLanguages().get("javascript-node-20").getMemoryLimitKb()).isEqualTo(262144L);
@@ -82,11 +84,15 @@ class ExecutionPropertiesTest {
         assertThat(properties.getLanguages().get("postgresql-16").getQueryTimeoutMs()).isEqualTo(5000L);
         assertThat(properties.getLanguages().get("postgresql-16").getMemoryLimitKb()).isEqualTo(524288L);
 
-        assertThat(properties.getLanguages().get("mysql-8.0").getQueryTimeoutMs()).isEqualTo(5000L);
-        assertThat(properties.getLanguages().get("mysql-8.0").getMemoryLimitKb()).isEqualTo(524288L);
+        assertThat(properties.getLanguages().get("mysql-8_0").getQueryTimeoutMs()).isEqualTo(5000L);
+        assertThat(properties.getLanguages().get("mysql-8_0").getMemoryLimitKb()).isEqualTo(524288L);
+        // Also test alias lookup with dot
+        assertThat(properties.getLanguageLimits("mysql-8.0").getQueryTimeoutMs()).isEqualTo(5000L);
 
-        assertThat(properties.getLanguages().get("mongodb-8.0").getQueryTimeoutMs()).isEqualTo(5000L);
-        assertThat(properties.getLanguages().get("mongodb-8.0").getMemoryLimitKb()).isEqualTo(524288L);
+        assertThat(properties.getLanguages().get("mongodb-8_0").getQueryTimeoutMs()).isEqualTo(5000L);
+        assertThat(properties.getLanguages().get("mongodb-8_0").getMemoryLimitKb()).isEqualTo(524288L);
+        // Also test alias lookup with dot
+        assertThat(properties.getLanguageLimits("mongodb-8.0").getQueryTimeoutMs()).isEqualTo(5000L);
 
         assertThat(validator.validate(properties)).isEmpty();
     }

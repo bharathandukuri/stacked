@@ -33,19 +33,15 @@ public class ExecutionConstraintResolver {
      */
     public long resolveTimeLimitMs(Language language, CodeExecutionConstraints itemConstraints, CodeExecutionConstraints batchConstraints) {
         long requestedTimeMs;
-        String langKey = (language != null && language.id() != null) ? language.id().trim().toLowerCase() : null;
+        ExecutionProperties.LanguageLimits langLimits = (language != null) ? executionProperties.getLanguageLimits(language.id()) : null;
         if (itemConstraints != null && itemConstraints.timeLimitMs() > 0) {
             requestedTimeMs = itemConstraints.timeLimitMs();
         } else if (batchConstraints != null && batchConstraints.timeLimitMs() > 0) {
             requestedTimeMs = batchConstraints.timeLimitMs();
-        } else if (langKey != null
-                && executionProperties.getLanguages().containsKey(langKey)
-                && executionProperties.getLanguages().get(langKey).getTimeLimitMs() != null) {
-            requestedTimeMs = executionProperties.getLanguages().get(langKey).getTimeLimitMs();
-        } else if (langKey != null
-                && executionProperties.getLanguages().containsKey(langKey)
-                && executionProperties.getLanguages().get(langKey).getQueryTimeoutMs() != null) {
-            requestedTimeMs = executionProperties.getLanguages().get(langKey).getQueryTimeoutMs();
+        } else if (langLimits != null && langLimits.getTimeLimitMs() != null) {
+            requestedTimeMs = langLimits.getTimeLimitMs();
+        } else if (langLimits != null && langLimits.getQueryTimeoutMs() != null) {
+            requestedTimeMs = langLimits.getQueryTimeoutMs();
         } else {
             requestedTimeMs = executionProperties.getDefaults().getTimeLimitMs();
         }
@@ -64,15 +60,13 @@ public class ExecutionConstraintResolver {
      */
     public long resolveMemoryLimitKb(Language language, CodeExecutionConstraints itemConstraints, CodeExecutionConstraints batchConstraints) {
         long requestedMemoryKb;
-        String langKey = (language != null && language.id() != null) ? language.id().trim().toLowerCase() : null;
+        ExecutionProperties.LanguageLimits langLimits = (language != null) ? executionProperties.getLanguageLimits(language.id()) : null;
         if (itemConstraints != null && itemConstraints.memoryLimitKb() != null && itemConstraints.memoryLimitKb() > 0) {
             requestedMemoryKb = itemConstraints.memoryLimitKb();
         } else if (batchConstraints != null && batchConstraints.memoryLimitKb() != null && batchConstraints.memoryLimitKb() > 0) {
             requestedMemoryKb = batchConstraints.memoryLimitKb();
-        } else if (langKey != null
-                && executionProperties.getLanguages().containsKey(langKey)
-                && executionProperties.getLanguages().get(langKey).getMemoryLimitKb() != null) {
-            requestedMemoryKb = executionProperties.getLanguages().get(langKey).getMemoryLimitKb();
+        } else if (langLimits != null && langLimits.getMemoryLimitKb() != null) {
+            requestedMemoryKb = langLimits.getMemoryLimitKb();
         } else {
             requestedMemoryKb = executionProperties.getDefaults().getMemoryLimitKb();
         }
@@ -134,11 +128,9 @@ public class ExecutionConstraintResolver {
      * Resolves compilation timeout in milliseconds for the given language.
      */
     public long resolveCompilationTimeoutMs(Language language) {
-        String langKey = (language != null && language.id() != null) ? language.id().trim().toLowerCase() : null;
-        if (langKey != null
-                && executionProperties.getLanguages().containsKey(langKey)
-                && executionProperties.getLanguages().get(langKey).getCompilationTimeoutMs() != null) {
-            return executionProperties.getLanguages().get(langKey).getCompilationTimeoutMs();
+        ExecutionProperties.LanguageLimits langLimits = (language != null) ? executionProperties.getLanguageLimits(language.id()) : null;
+        if (langLimits != null && langLimits.getCompilationTimeoutMs() != null) {
+            return langLimits.getCompilationTimeoutMs();
         }
         return executionProperties.getCompilation().getTimeoutMs();
     }
@@ -147,12 +139,10 @@ public class ExecutionConstraintResolver {
      * Resolves JVM heap limit in MB (-Xmx) for Java executions.
      */
     public int resolveJvmMaxHeapMb(Language language, Long effectiveMemoryKb) {
-        String langKey = (language != null && language.id() != null) ? language.id().trim().toLowerCase() : null;
+        ExecutionProperties.LanguageLimits langLimits = (language != null) ? executionProperties.getLanguageLimits(language.id()) : null;
         int baseHeapMb = 192;
-        if (langKey != null
-                && executionProperties.getLanguages().containsKey(langKey)
-                && executionProperties.getLanguages().get(langKey).getMaxHeapMb() != null) {
-            baseHeapMb = executionProperties.getLanguages().get(langKey).getMaxHeapMb();
+        if (langLimits != null && langLimits.getMaxHeapMb() != null) {
+            baseHeapMb = langLimits.getMaxHeapMb();
         }
         if (effectiveMemoryKb != null && effectiveMemoryKb > 0) {
             int memoryMb = (int) (effectiveMemoryKb / 1024L);
@@ -167,12 +157,10 @@ public class ExecutionConstraintResolver {
      * Resolves Node.js V8 max-old-space-size in MB for JavaScript executions.
      */
     public int resolveNodeMaxOldSpaceSizeMb(Language language, Long effectiveMemoryKb) {
-        String langKey = (language != null && language.id() != null) ? language.id().trim().toLowerCase() : null;
+        ExecutionProperties.LanguageLimits langLimits = (language != null) ? executionProperties.getLanguageLimits(language.id()) : null;
         int baseHeapMb = 192;
-        if (langKey != null
-                && executionProperties.getLanguages().containsKey(langKey)
-                && executionProperties.getLanguages().get(langKey).getMaxOldSpaceSizeMb() != null) {
-            baseHeapMb = executionProperties.getLanguages().get(langKey).getMaxOldSpaceSizeMb();
+        if (langLimits != null && langLimits.getMaxOldSpaceSizeMb() != null) {
+            baseHeapMb = langLimits.getMaxOldSpaceSizeMb();
         }
         if (effectiveMemoryKb != null && effectiveMemoryKb > 0) {
             int memoryMb = (int) (effectiveMemoryKb / 1024L);
@@ -195,15 +183,11 @@ public class ExecutionConstraintResolver {
         } else if (batchConstraints != null && batchConstraints.timeLimitMs() > 0) {
             timeLimitMs = batchConstraints.timeLimitMs();
         } else {
-            String langKey = (language != null && language.id() != null) ? language.id().trim().toLowerCase() : null;
-            if (langKey != null
-                    && executionProperties.getLanguages().containsKey(langKey)
-                    && executionProperties.getLanguages().get(langKey).getQueryTimeoutMs() != null) {
-                timeLimitMs = executionProperties.getLanguages().get(langKey).getQueryTimeoutMs();
-            } else if (langKey != null
-                    && executionProperties.getLanguages().containsKey(langKey)
-                    && executionProperties.getLanguages().get(langKey).getTimeLimitMs() != null) {
-                timeLimitMs = executionProperties.getLanguages().get(langKey).getTimeLimitMs();
+            ExecutionProperties.LanguageLimits langLimits = (language != null) ? executionProperties.getLanguageLimits(language.id()) : null;
+            if (langLimits != null && langLimits.getQueryTimeoutMs() != null) {
+                timeLimitMs = langLimits.getQueryTimeoutMs();
+            } else if (langLimits != null && langLimits.getTimeLimitMs() != null) {
+                timeLimitMs = langLimits.getTimeLimitMs();
             } else {
                 timeLimitMs = executionProperties.getDatabase().getDefaultQueryTimeoutMs();
             }
@@ -232,12 +216,10 @@ public class ExecutionConstraintResolver {
      * taking into account language-specific memory configuration (e.g. 512MB for MongoDB/Postgres/MySQL).
      */
     public DockerContainerConstraints resolveDatabaseContainerConstraints(Language language) {
-        String langKey = (language != null && language.id() != null) ? language.id().trim().toLowerCase() : null;
+        ExecutionProperties.LanguageLimits langLimits = (language != null) ? executionProperties.getLanguageLimits(language.id()) : null;
         long memoryKb;
-        if (langKey != null
-                && executionProperties.getLanguages().containsKey(langKey)
-                && executionProperties.getLanguages().get(langKey).getMemoryLimitKb() != null) {
-            memoryKb = executionProperties.getLanguages().get(langKey).getMemoryLimitKb();
+        if (langLimits != null && langLimits.getMemoryLimitKb() != null) {
+            memoryKb = langLimits.getMemoryLimitKb();
         } else {
             memoryKb = executionProperties.getDockerLimits().getContainerMemoryLimitKb();
         }

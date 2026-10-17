@@ -53,12 +53,24 @@ public class ExecutionProperties {
         languages.put("java-21", new LanguageLimits(2000L, 262144L, 10000L, 192, null, null));
         languages.put("cpp-23", new LanguageLimits(1000L, 131072L, 10000L, null, null, null));
         languages.put("c-17", new LanguageLimits(1000L, 131072L, 10000L, null, null, null));
-        languages.put("python-3.12", new LanguageLimits(3000L, 262144L, null, null, null, null));
+        languages.put("python-3_12", new LanguageLimits(3000L, 262144L, null, null, null, null));
         languages.put("javascript-node-20", new LanguageLimits(2000L, 262144L, null, null, 192, null));
         languages.put("sqlite-3", new LanguageLimits(null, 262144L, null, null, null, 5000L));
         languages.put("postgresql-16", new LanguageLimits(null, 524288L, null, null, null, 5000L));
-        languages.put("mysql-8.0", new LanguageLimits(null, 524288L, null, null, null, 5000L));
-        languages.put("mongodb-8.0", new LanguageLimits(null, 524288L, null, null, null, 5000L));
+        languages.put("mysql-8_0", new LanguageLimits(null, 524288L, null, null, null, 5000L));
+        languages.put("mongodb-8_0", new LanguageLimits(null, 524288L, null, null, null, 5000L));
+    }
+
+    public LanguageLimits getLanguageLimits(String languageId) {
+        if (languageId == null) {
+            return null;
+        }
+        String rawKey = languageId.trim().toLowerCase();
+        String underscoreKey = rawKey.replace('.', '_');
+        if (languages.containsKey(underscoreKey)) {
+            return languages.get(underscoreKey);
+        }
+        return languages.get(rawKey);
     }
 
     @Getter
