@@ -144,7 +144,18 @@ public class LanguageFactoryImpl implements LanguageFactory {
                             ? "Solution.java"
                             : files.get(0);
                     String className = extractBaseName(mainFile);
-                    return List.of("java", "-cp", ".", className);
+                    return List.of("java", "-Xmx192m", "-cp", ".", className);
+                },
+                (files, constraints) -> {
+                    String mainFile = (files == null || files.isEmpty())
+                            ? "Solution.java"
+                            : files.get(0);
+                    String className = extractBaseName(mainFile);
+                    int heapMb = 192;
+                    if (constraints != null && constraints.memoryLimitKb() != null && constraints.memoryLimitKb() > 0) {
+                        heapMb = Math.max(16, (int) (constraints.memoryLimitKb() / 1024L * 3L / 4L));
+                    }
+                    return List.of("java", "-Xmx" + heapMb + "m", "-cp", ".", className);
                 },
                 "Main.java",
                 "Main"
@@ -230,7 +241,17 @@ public class LanguageFactoryImpl implements LanguageFactory {
                     String scriptFile = (files == null || files.isEmpty())
                             ? "solution.js"
                             : files.get(0);
-                    return List.of("node", scriptFile);
+                    return List.of("node", "--max-old-space-size=192", scriptFile);
+                },
+                (files, constraints) -> {
+                    String scriptFile = (files == null || files.isEmpty())
+                            ? "solution.js"
+                            : files.get(0);
+                    int heapMb = 192;
+                    if (constraints != null && constraints.memoryLimitKb() != null && constraints.memoryLimitKb() > 0) {
+                        heapMb = Math.max(16, (int) (constraints.memoryLimitKb() / 1024L * 3L / 4L));
+                    }
+                    return List.of("node", "--max-old-space-size=" + heapMb, scriptFile);
                 },
                 "main.js"
         );

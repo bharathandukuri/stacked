@@ -64,11 +64,11 @@ class LanguageFactoryTest {
 
         // Run commands
         assertThat(compiled.run("Solution.java"))
-                .containsExactly("java", "-cp", ".", "Solution");
+                .containsExactly("java", "-Xmx192m", "-cp", ".", "Solution");
         assertThat(compiled.run("Main.java"))
-                .containsExactly("java", "-cp", ".", "Main");
+                .containsExactly("java", "-Xmx192m", "-cp", ".", "Main");
         assertThat(compiled.run(List.of()))
-                .containsExactly("java", "-cp", ".", "Solution");
+                .containsExactly("java", "-Xmx192m", "-cp", ".", "Solution");
     }
 
     @Test
@@ -146,8 +146,8 @@ class LanguageFactoryTest {
         assertThat(interpreted.fileExtension()).isEqualTo(".js");
         assertThat(interpreted.dockerImage()).isEqualTo(DockerImageRegistry.JAVASCRIPT_NODE_20);
 
-        assertThat(interpreted.run("solution.js")).containsExactly("node", "solution.js");
-        assertThat(interpreted.run()).containsExactly("node", "solution.js");
+        assertThat(interpreted.run("solution.js")).containsExactly("node", "--max-old-space-size=192", "solution.js");
+        assertThat(interpreted.run()).containsExactly("node", "--max-old-space-size=192", "solution.js");
     }
 
     @Test

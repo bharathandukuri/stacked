@@ -30,8 +30,16 @@ public interface Language {
 
     List<String> run(List<String> fileNames);
 
+    default List<String> run(List<String> fileNames, com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints constraints) {
+        return run(fileNames);
+    }
+
     default List<String> run(String fileName) {
         return run(fileName != null ? List.of(fileName) : List.of());
+    }
+
+    default List<String> run(String fileName, com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints constraints) {
+        return run(fileName != null ? List.of(fileName) : List.of(), constraints);
     }
 
     default List<String> run(String... fileNames) {
@@ -50,6 +58,9 @@ public interface Language {
         String defaultName = defaultFileName();
         if (files.containsKey(defaultName)) {
             return defaultName;
+        }
+        if (files.containsKey("solution" + fileExtension())) {
+            return "solution" + fileExtension();
         }
         if (files.containsKey("Solution" + fileExtension())) {
             return "Solution" + fileExtension();

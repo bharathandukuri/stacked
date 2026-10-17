@@ -124,9 +124,11 @@
     
                 if (language.type() == LanguageType.COMPILED) {
                     List<String> bashCompileCmd = getBashCompileCmd((CompiledLanguage) language, fileName, boxDir);
+                    long compilationTimeoutMs = executionConstraintResolver.resolveCompilationTimeoutMs(language);
                     DockerExecutionResult compileResult = dockerExecutionService.execContainer(
                             dockerContainer.id(),
-                            bashCompileCmd);
+                            bashCompileCmd,
+                            compilationTimeoutMs);
     
                     if (compileResult.exitCode() != 0) {
                         log.warn(
@@ -145,10 +147,14 @@
                     }
                 }
     
+                CodeExecutionConstraints effectiveConstraints = new CodeExecutionConstraints(
+                        executionConstraintResolver.resolveTimeLimitMs(language, request.getConstraints(), null),
+                        executionConstraintResolver.resolveMemoryLimitKb(language, request.getConstraints(), null)
+                );
                 IsolateExecutionConstraints isolateConstraints =
                         executionConstraintResolver.resolveIsolateConstraints(language, request.getConstraints(), null);
-    
-                List<String> runCommand = wrapWithBash(language.run(fileName));
+
+                List<String> runCommand = wrapWithBash(language.run(fileName, effectiveConstraints));
     
                 IsolateExecutionResult isolateResult = isolateExecutionService.executeWithConstraints(
                         sandBoxDetails,
@@ -278,9 +284,11 @@
                     List<String> filesToCompile = compiledLang.resolveFilesToCompile(request.getFiles());
     
                     List<String> bashCompileCmd = getBashCompileCmd(compiledLang, filesToCompile, boxDir);
+                    long compilationTimeoutMs = executionConstraintResolver.resolveCompilationTimeoutMs(language);
                     DockerExecutionResult compileResult = dockerExecutionService.execContainer(
                             dockerContainer.id(),
-                            bashCompileCmd
+                            bashCompileCmd,
+                            compilationTimeoutMs
                     );
     
                     if (compileResult.exitCode() != 0) {
@@ -326,18 +334,22 @@
                 for (int i = 0; i < request.getExecutions().size(); i++) {
                     BatchExecutionItem item = request.getExecutions().get(i);
                     try {
+                        CodeExecutionConstraints effectiveConstraints = new CodeExecutionConstraints(
+                                executionConstraintResolver.resolveTimeLimitMs(language, item.getConstraints(), request.getConstraints()),
+                                executionConstraintResolver.resolveMemoryLimitKb(language, item.getConstraints(), request.getConstraints())
+                        );
                         IsolateExecutionConstraints isolateConstraints =
                                 executionConstraintResolver.resolveIsolateConstraints(
                                         language,
                                         item.getConstraints(),
                                         request.getConstraints()
                                 );
-    
+
                         String targetExecutable = (item.getExecutablePath() != null && !item.getExecutablePath().isBlank())
                                 ? item.getExecutablePath()
                                 : defaultExecutable;
-    
-                        List<String> runCommand = wrapWithBash(language.run(targetExecutable));
+
+                        List<String> runCommand = wrapWithBash(language.run(targetExecutable, effectiveConstraints));
                         String stdin = item.getStdin() != null ? item.getStdin() : "";
     
                         IsolateExecutionResult isolateResult = isolateExecutionService.executeWithConstraints(
@@ -451,7 +463,7 @@
             DockerContainerDetails dockerContainer = null;
             try {
                 DockerContainerConstraints constraints =
-                        executionConstraintResolver.resolveDatabaseContainerConstraints();
+                        executionConstraintResolver.resolveDatabaseContainerConstraints(language);
                 dockerContainer = dockerExecutionService.createContainer(dockerImage, constraints);
                 dockerExecutionService.startContainer(dockerContainer.id());
                 waitForDatabaseReady(dockerContainer.id(), language);
@@ -467,7 +479,7 @@
                         targetPath,
                         code);
     
-                long timeLimitMs = executionConstraintResolver.resolveDatabaseTimeoutMs(request.getConstraints(), null);
+                long timeLimitMs = executionConstraintResolver.resolveDatabaseTimeoutMs(language, request.getConstraints(), null);
     
                 List<String> runCommand = language.run(targetPath);
                 long startNanos = System.nanoTime();
@@ -510,7 +522,7 @@
             DockerContainerDetails dockerContainer = null;
             try {
                 DockerContainerConstraints constraints =
-                        executionConstraintResolver.resolveDatabaseContainerConstraints();
+                        executionConstraintResolver.resolveDatabaseContainerConstraints(language);
                 dockerContainer = dockerExecutionService.createContainer(dockerImage, constraints);
                 dockerExecutionService.startContainer(dockerContainer.id());
                 waitForDatabaseReady(dockerContainer.id(), language);
@@ -539,6 +551,7 @@
                     BatchExecutionItem item = request.getExecutions().get(i);
                     try {
                         long timeLimitMs = executionConstraintResolver.resolveDatabaseTimeoutMs(
+                                language,
                                 item.getConstraints(),
                                 request.getConstraints()
                         );

@@ -140,9 +140,155 @@ class ExecutionConstraintResolverTest {
         DockerContainerConstraints constraints = resolver.resolveDatabaseContainerConstraints();
 
         assertThat(constraints.cpuLimit()).isEqualTo(properties.getDockerLimits().getContainerCpuLimit());
-        assertThat(constraints.memoryLimitKb()).isEqualTo(Math.min(properties.getDefaults().getMemoryLimitKb(), properties.getDockerLimits().getContainerMemoryLimitKb()));
+        assertThat(constraints.memoryLimitKb()).isEqualTo(properties.getDockerLimits().getContainerMemoryLimitKb());
         assertThat(constraints.pidsLimit()).isEqualTo(properties.getDockerLimits().getContainerPidsLimit());
         assertThat(constraints.networkDisabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Resolves language-specific defaults when constraints are null")
+    void resolvesLanguageSpecificDefaults() {
+        Language python = languageFactory.create("python-3.12");
+        Language cpp = languageFactory.create("cpp-23");
+
+        long pythonTime = resolver.resolveTimeLimitMs(python, null, null);
+        long pythonMem = resolver.resolveMemoryLimitKb(python, null, null);
+        assertThat(pythonTime).isEqualTo(3000L);
+        assertThat(pythonMem).isEqualTo(262144L);
+
+        long cppTime = resolver.resolveTimeLimitMs(cpp, null, null);
+        long cppMem = resolver.resolveMemoryLimitKb(cpp, null, null);
+        assertThat(cppTime).isEqualTo(1000L);
+        assertThat(cppMem).isEqualTo(131072L);
+    }
+
+    @Test
+    @DisplayName("Resolves JVM heap limits and scales proportionally to memory constraint")
+    void resolvesJvmMaxHeap() {
+        Language java = languageFactory.create("java-21");
+
+        // Base configured default
+        int defaultHeap = resolver.resolveJvmMaxHeapMb(java, null);
+        assertThat(defaultHeap).isEqualTo(192);
+
+        // Constrained memory 64MB -> 48MB heap
+        int scaledHeap = resolver.resolveJvmMaxHeapMb(java, 65536L);
+        assertThat(scaledHeap).isEqualTo(48);
+
+        // Very small memory -> minimum 16MB
+        int minHeap = resolver.resolveJvmMaxHeapMb(java, 10240L);
+        assertThat(minHeap).isEqualTo(16);
+    }
+
+    @Test
+    @DisplayName("Resolves Node.js V8 max-old-space-size limits")
+    void resolvesNodeMaxOldSpaceSize() {
+        Language node = languageFactory.create("javascript-node-20");
+
+        int defaultHeap = resolver.resolveNodeMaxOldSpaceSizeMb(node, null);
+        assertThat(defaultHeap).isEqualTo(192);
+
+        int scaledHeap = resolver.resolveNodeMaxOldSpaceSizeMb(node, 65536L);
+        assertThat(scaledHeap).isEqualTo(48);
+    }
+
+    @Test
+    @DisplayName("Respects explicitly configured problem limits and applies defaults only for missing values")
+    void respectsExplicitProblemLimitsAndAppliesDefaultsOnlyForMissing() {
+        Language cpp = languageFactory.create("cpp-23");
+        Language java = languageFactory.create("java-21");
+
+        // Problem specifies time limit 1500ms, memory is unspecified -> time is 1500ms, memory falls back to language default
+        CodeExecutionConstraints timeOnly = new CodeExecutionConstraints(1500L, null);
+        assertThat(resolver.resolveTimeLimitMs(cpp, timeOnly, null)).isEqualTo(1500L);
+        assertThat(resolver.resolveMemoryLimitKb(cpp, timeOnly, null)).isEqualTo(131072L); // C++ default 128MB
+        assertThat(resolver.resolveTimeLimitMs(java, timeOnly, null)).isEqualTo(1500L);
+        assertThat(resolver.resolveMemoryLimitKb(java, timeOnly, null)).isEqualTo(262144L); // Java default 256MB
+
+        // Problem specifies memory limit 512000KB, time is unspecified (0) -> memory is 512000KB, time falls back to language default
+        CodeExecutionConstraints memOnly = new CodeExecutionConstraints(0L, 512000L);
+        assertThat(resolver.resolveTimeLimitMs(cpp, memOnly, null)).isEqualTo(1000L); // C++ default 1000ms
+        assertThat(resolver.resolveMemoryLimitKb(cpp, memOnly, null)).isEqualTo(512000L);
+        assertThat(resolver.resolveTimeLimitMs(java, memOnly, null)).isEqualTo(2000L); // Java default 2000ms
+        assertThat(resolver.resolveMemoryLimitKb(java, memOnly, null)).isEqualTo(512000L);
+    }
+
+    @Test
+    @DisplayName("Resolves default time and memory for all 9 supported languages when constraints are null")
+    void resolvesAllSupportedLanguageDefaults() {
+        // C-17: 1000ms, 128MB
+        Language c = languageFactory.create("c-17");
+        assertThat(resolver.resolveTimeLimitMs(c, null, null)).isEqualTo(1000L);
+        assertThat(resolver.resolveMemoryLimitKb(c, null, null)).isEqualTo(131072L);
+
+        // CPP-23: 1000ms, 128MB
+        Language cpp = languageFactory.create("cpp-23");
+        assertThat(resolver.resolveTimeLimitMs(cpp, null, null)).isEqualTo(1000L);
+        assertThat(resolver.resolveMemoryLimitKb(cpp, null, null)).isEqualTo(131072L);
+
+        // Java-21: 2000ms, 256MB
+        Language java = languageFactory.create("java-21");
+        assertThat(resolver.resolveTimeLimitMs(java, null, null)).isEqualTo(2000L);
+        assertThat(resolver.resolveMemoryLimitKb(java, null, null)).isEqualTo(262144L);
+
+        // Python-3.12: 3000ms, 256MB
+        Language python = languageFactory.create("python-3.12");
+        assertThat(resolver.resolveTimeLimitMs(python, null, null)).isEqualTo(3000L);
+        assertThat(resolver.resolveMemoryLimitKb(python, null, null)).isEqualTo(262144L);
+
+        // JavaScript Node-20: 2000ms, 256MB
+        Language node = languageFactory.create("javascript-node-20");
+        assertThat(resolver.resolveTimeLimitMs(node, null, null)).isEqualTo(2000L);
+        assertThat(resolver.resolveMemoryLimitKb(node, null, null)).isEqualTo(262144L);
+
+        // SQLite-3: 5000ms query timeout, 256MB container memory
+        Language sqlite = languageFactory.create("sqlite-3");
+        assertThat(resolver.resolveDatabaseTimeoutMs(sqlite, null, null)).isEqualTo(5000L);
+        assertThat(resolver.resolveMemoryLimitKb(sqlite, null, null)).isEqualTo(262144L);
+        assertThat(resolver.resolveDatabaseContainerConstraints(sqlite).memoryLimitKb()).isEqualTo(262144L);
+
+        // PostgreSQL-16: 5000ms, 512MB
+        Language postgres = languageFactory.create("postgresql-16");
+        assertThat(resolver.resolveTimeLimitMs(postgres, null, null)).isEqualTo(5000L);
+        assertThat(resolver.resolveDatabaseTimeoutMs(postgres, null, null)).isEqualTo(5000L);
+        assertThat(resolver.resolveMemoryLimitKb(postgres, null, null)).isEqualTo(524288L);
+        assertThat(resolver.resolveDatabaseContainerConstraints(postgres).memoryLimitKb()).isEqualTo(524288L);
+
+        // MySQL-8.0: 5000ms, 512MB
+        Language mysql = languageFactory.create("mysql-8.0");
+        assertThat(resolver.resolveTimeLimitMs(mysql, null, null)).isEqualTo(5000L);
+        assertThat(resolver.resolveDatabaseTimeoutMs(mysql, null, null)).isEqualTo(5000L);
+        assertThat(resolver.resolveMemoryLimitKb(mysql, null, null)).isEqualTo(524288L);
+        assertThat(resolver.resolveDatabaseContainerConstraints(mysql).memoryLimitKb()).isEqualTo(524288L);
+
+        // MongoDB-8.0: 5000ms, 512MB
+        Language mongo = languageFactory.create("mongodb-8.0");
+        assertThat(resolver.resolveTimeLimitMs(mongo, null, null)).isEqualTo(5000L);
+        assertThat(resolver.resolveDatabaseTimeoutMs(mongo, null, null)).isEqualTo(5000L);
+        assertThat(resolver.resolveMemoryLimitKb(mongo, null, null)).isEqualTo(524288L);
+        assertThat(resolver.resolveDatabaseContainerConstraints(mongo).memoryLimitKb()).isEqualTo(524288L);
+    }
+
+    @Test
+    @DisplayName("Scales JVM heap and Node old-space up when problem setter specifies larger memory limit")
+    void scalesHeapUpWhenMemoryLimitIsLarge() {
+        Language java = languageFactory.create("java-21");
+        Language node = languageFactory.create("javascript-node-20");
+
+        // When problem allows 512MB, heap can scale up to 75% = 384MB
+        int javaHeap512 = resolver.resolveJvmMaxHeapMb(java, 524288L);
+        assertThat(javaHeap512).isEqualTo(384);
+
+        int nodeOldSpace512 = resolver.resolveNodeMaxOldSpaceSizeMb(node, 524288L);
+        assertThat(nodeOldSpace512).isEqualTo(384);
+    }
+
+    @Test
+    @DisplayName("Resolves compilation timeout per language")
+    void resolvesCompilationTimeout() {
+        Language cpp = languageFactory.create("cpp-23");
+        long cppCompileTimeout = resolver.resolveCompilationTimeoutMs(cpp);
+        assertThat(cppCompileTimeout).isEqualTo(10000L);
     }
 }
 

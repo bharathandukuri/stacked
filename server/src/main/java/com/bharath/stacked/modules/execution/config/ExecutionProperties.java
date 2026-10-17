@@ -9,6 +9,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Getter
 @Setter
 @Validated
@@ -38,6 +41,59 @@ public class ExecutionProperties {
     @Valid
     @NotNull
     private Cleanup cleanup = new Cleanup();
+
+    @NotNull
+    private Map<String, @Valid LanguageLimits> languages = new HashMap<>();
+
+    public ExecutionProperties() {
+        initDefaultLanguageLimits();
+    }
+
+    private void initDefaultLanguageLimits() {
+        languages.put("java-21", new LanguageLimits(2000L, 262144L, 10000L, 192, null, null));
+        languages.put("cpp-23", new LanguageLimits(1000L, 131072L, 10000L, null, null, null));
+        languages.put("c-17", new LanguageLimits(1000L, 131072L, 10000L, null, null, null));
+        languages.put("python-3.12", new LanguageLimits(3000L, 262144L, null, null, null, null));
+        languages.put("javascript-node-20", new LanguageLimits(2000L, 262144L, null, null, 192, null));
+        languages.put("sqlite-3", new LanguageLimits(null, 262144L, null, null, null, 5000L));
+        languages.put("postgresql-16", new LanguageLimits(null, 524288L, null, null, null, 5000L));
+        languages.put("mysql-8.0", new LanguageLimits(null, 524288L, null, null, null, 5000L));
+        languages.put("mongodb-8.0", new LanguageLimits(null, 524288L, null, null, null, 5000L));
+    }
+
+    @Getter
+    @Setter
+    public static class LanguageLimits {
+        @Positive
+        private Long timeLimitMs;
+
+        @Positive
+        private Long memoryLimitKb;
+
+        @Positive
+        private Long compilationTimeoutMs;
+
+        @Positive
+        private Integer maxHeapMb;
+
+        @Positive
+        private Integer maxOldSpaceSizeMb;
+
+        @Positive
+        private Long queryTimeoutMs;
+
+        public LanguageLimits() {}
+
+        public LanguageLimits(Long timeLimitMs, Long memoryLimitKb, Long compilationTimeoutMs,
+                              Integer maxHeapMb, Integer maxOldSpaceSizeMb, Long queryTimeoutMs) {
+            this.timeLimitMs = timeLimitMs;
+            this.memoryLimitKb = memoryLimitKb;
+            this.compilationTimeoutMs = compilationTimeoutMs;
+            this.maxHeapMb = maxHeapMb;
+            this.maxOldSpaceSizeMb = maxOldSpaceSizeMb;
+            this.queryTimeoutMs = queryTimeoutMs;
+        }
+    }
 
     @Getter
     @Setter

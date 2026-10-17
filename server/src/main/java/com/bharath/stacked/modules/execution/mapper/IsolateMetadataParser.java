@@ -36,7 +36,7 @@ public class IsolateMetadataParser {
         }
 
         return new IsolateExecutionResult(
-                parseStatus(values.get("status"), values.get("message"), values.get("exitcode")),
+                parseStatus(values.get("status"), values.get("message"), values.get("exitcode"), stderr),
                 stdout,
                 stderr,
                 parseDouble(values.get("time")),
@@ -50,8 +50,12 @@ public class IsolateMetadataParser {
         );
     }
 
-    private IsolateExecutionStatus parseStatus(String status, String message, String exitcode) {
-        if (message != null && message.toLowerCase().contains("memory")) {
+    private IsolateExecutionStatus parseStatus(String status, String message, String exitcode, String stderr) {
+        if ("TO".equalsIgnoreCase(status) || (message != null && message.toLowerCase().contains("time limit"))) {
+            return IsolateExecutionStatus.TIME_LIMIT_EXCEEDED;
+        }
+
+        if (isMemoryLimitExceeded(status, message, stderr)) {
             return IsolateExecutionStatus.MEMORY_LIMIT_EXCEEDED;
         }
 
@@ -68,6 +72,34 @@ public class IsolateMetadataParser {
             case "ML" -> IsolateExecutionStatus.MEMORY_LIMIT_EXCEEDED;
             default -> IsolateExecutionStatus.SYSTEM_ERROR;
         };
+    }
+
+    private boolean isMemoryLimitExceeded(String status, String message, String stderr) {
+        if ("ML".equalsIgnoreCase(status)) {
+            return true;
+        }
+        if (message != null && message.toLowerCase().contains("memory")) {
+            return true;
+        }
+        if (stderr != null && !stderr.isBlank()) {
+            String lowerStderr = stderr.toLowerCase();
+            // Stack exhaustion must be classified as RUNTIME_ERROR, not MEMORY_LIMIT_EXCEEDED
+            if (lowerStderr.contains("stackoverflowerror")
+                    || lowerStderr.contains("recursionerror")
+                    || lowerStderr.contains("maximum call stack size exceeded")) {
+                return false;
+            }
+
+            if (lowerStderr.contains("std::bad_alloc")
+                    || lowerStderr.contains("memoryerror")
+                    || lowerStderr.contains("outofmemoryerror")
+                    || lowerStderr.contains("heap out of memory")
+                    || lowerStderr.contains("out of memory")
+                    || (lowerStderr.contains("allocation failed") && lowerStderr.contains("heap"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Double parseDouble(String value) {

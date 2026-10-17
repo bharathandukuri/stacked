@@ -87,6 +87,8 @@ class CodeExecutionServiceImplTest {
         lenient().when(dockerExecutionService.isContainerRunning(anyString())).thenReturn(true);
         lenient().when(dockerExecutionService.execContainer(anyString(), anyList()))
                 .thenReturn(new DockerExecutionResult(0L, "", ""));
+        lenient().when(dockerExecutionService.execContainer(anyString(), anyList(), any()))
+                .thenReturn(new DockerExecutionResult(0L, "", ""));
     }
 
     @Test
@@ -132,9 +134,6 @@ class CodeExecutionServiceImplTest {
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
 
-        // Compilation succeeds
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
-                .thenReturn(new DockerExecutionResult(0L, "", ""));
 
         // Isolate execution succeeds
         IsolateExecutionResult isolateResult = new IsolateExecutionResult(
@@ -168,8 +167,8 @@ class CodeExecutionServiceImplTest {
         verify(isolateExecutionService).initialize(testContainer);
         verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/var/lib/isolate/42/box/Solution.java"),
                 anyString());
-        verify(dockerExecutionService).execContainer(eq(testContainer.id()), anyList());
-        List<String> expectedJavaRunCmd = List.of("/bin/bash", "-c", "exec \"$@\"", "--", "java", "-cp", ".",
+        verify(dockerExecutionService).execContainer(eq(testContainer.id()), anyList(), any());
+        List<String> expectedJavaRunCmd = List.of("/bin/bash", "-c", "exec \"$@\"", "--", "java", "-Xmx384m", "-cp", ".",
                 "Solution");
         ArgumentCaptor<IsolateExecutionConstraints> constraintsCaptor =
                 ArgumentCaptor.forClass(IsolateExecutionConstraints.class);
@@ -199,8 +198,6 @@ class CodeExecutionServiceImplTest {
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
-                .thenReturn(new DockerExecutionResult(0L, "", ""));
 
         IsolateExecutionResult isolateResult = new IsolateExecutionResult(
                 IsolateExecutionStatus.SUCCESS,
@@ -253,7 +250,7 @@ class CodeExecutionServiceImplTest {
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
 
         // Compilation fails
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), any()))
                 .thenReturn(new DockerExecutionResult(1L, "", "Solution.java:1: error: ';' expected\n"));
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -337,7 +334,6 @@ class CodeExecutionServiceImplTest {
         // Java defaults to Solution.java
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
-        when(dockerExecutionService.execContainer(any(), any())).thenReturn(new DockerExecutionResult(0L, "", ""));
         when(isolateExecutionService.executeWithConstraints(any(), any(), any(), any()))
                 .thenReturn(new IsolateExecutionResult(IsolateExecutionStatus.SUCCESS, "", "", 0.0, 0.0, 1000L, 0L, 0L,
                         false, 0L, 0L));
@@ -536,7 +532,7 @@ class CodeExecutionServiceImplTest {
                 ArgumentCaptor.forClass(DockerContainerConstraints.class);
         verify(dockerExecutionService).createContainer(eq(mysql.dockerImageDetails()), constraintsCaptor.capture());
         assertThat(constraintsCaptor.getValue().cpuLimit()).isEqualTo(1L);
-        assertThat(constraintsCaptor.getValue().memoryLimitKb()).isEqualTo(262144L);
+        assertThat(constraintsCaptor.getValue().memoryLimitKb()).isEqualTo(524288L);
 
         // Verify file written to /tmp/solution.sql
         verify(dockerExecutionService).writeFile(eq(testContainer.id()), eq("/tmp/solution.sql"), eq("SELECT 1;"));
@@ -768,7 +764,7 @@ class CodeExecutionServiceImplTest {
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), any()))
                 .thenThrow(new DockerExecutionException("Docker exec socket broken during compile"));
 
         SimpleCodeExecutionResult result = codeExecutionService.run(request);
@@ -796,8 +792,6 @@ class CodeExecutionServiceImplTest {
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
-                .thenReturn(new DockerExecutionResult(0L, "", ""));
 
         IsolateExecutionResult isolateResult = new IsolateExecutionResult(
                 IsolateExecutionStatus.SUCCESS,
@@ -836,8 +830,6 @@ class CodeExecutionServiceImplTest {
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
-                .thenReturn(new DockerExecutionResult(0L, "", ""));
 
         IsolateExecutionResult isolateResult = new IsolateExecutionResult(
                 IsolateExecutionStatus.RUNTIME_ERROR,
@@ -873,7 +865,7 @@ class CodeExecutionServiceImplTest {
         when(dockerExecutionService.createContainer(any(DockerImageDetails.class))).thenReturn(testContainer);
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), any()))
                 .thenReturn(new DockerExecutionResult(1L, "", "error: class, interface, enum, or record expected"));
 
         doThrow(new IsolateCleanupException("Cleanup failed", new RuntimeException()))
@@ -942,7 +934,7 @@ class CodeExecutionServiceImplTest {
         verify(isolateExecutionService).executeWithConstraints(eq(testSandbox), anyList(), anyString(),
                 constraintsCaptor.capture());
         IsolateExecutionConstraints captured = constraintsCaptor.getValue();
-        assertThat(captured.cpuTimeSeconds()).isEqualTo(2.0);
+        assertThat(captured.cpuTimeSeconds()).isEqualTo(3.0);
         assertThat(captured.wallTimeSeconds()).isEqualTo(5.0);
         assertThat(captured.memoryKb()).isEqualTo(262144L);
     }
@@ -1156,9 +1148,6 @@ class CodeExecutionServiceImplTest {
         doNothing().when(dockerExecutionService).startContainer(testContainer.id());
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
 
-        // Compilation succeeds
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
-                .thenReturn(new DockerExecutionResult(0L, "", ""));
 
         // Item 1 execution result
         IsolateExecutionResult res1 = new IsolateExecutionResult(
@@ -1214,7 +1203,7 @@ class CodeExecutionServiceImplTest {
         when(isolateExecutionService.initialize(testContainer)).thenReturn(testSandbox);
 
         // Compilation fails
-        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList()))
+        when(dockerExecutionService.execContainer(eq(testContainer.id()), anyList(), any()))
                 .thenReturn(new DockerExecutionResult(1L, "", "error: expected ';' before '}'"));
 
         BatchCodeExecutionResult batchResult = codeExecutionService.run(request);

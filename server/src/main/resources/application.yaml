@@ -96,6 +96,39 @@ stacked:
       process-limit: ${EXECUTION_DEFAULT_PROCESS_LIMIT:50}
       file-size-kb: ${EXECUTION_DEFAULT_FILE_SIZE_KB:10240}
       output-limit-bytes: ${EXECUTION_DEFAULT_OUTPUT_LIMIT_BYTES:10485760}
+    languages:
+      java-21:
+        time-limit-ms: ${EXECUTION_JAVA_TIME_LIMIT_MS:2000}
+        memory-limit-kb: ${EXECUTION_JAVA_MEMORY_LIMIT_KB:262144}
+        compilation-timeout-ms: ${EXECUTION_JAVA_COMPILATION_TIMEOUT_MS:10000}
+        max-heap-mb: ${EXECUTION_JAVA_MAX_HEAP_MB:192}
+      cpp-23:
+        time-limit-ms: ${EXECUTION_CPP_TIME_LIMIT_MS:1000}
+        memory-limit-kb: ${EXECUTION_CPP_MEMORY_LIMIT_KB:131072}
+        compilation-timeout-ms: ${EXECUTION_CPP_COMPILATION_TIMEOUT_MS:10000}
+      c-17:
+        time-limit-ms: ${EXECUTION_C_TIME_LIMIT_MS:1000}
+        memory-limit-kb: ${EXECUTION_C_MEMORY_LIMIT_KB:131072}
+        compilation-timeout-ms: ${EXECUTION_C_COMPILATION_TIMEOUT_MS:10000}
+      python-3.12:
+        time-limit-ms: ${EXECUTION_PYTHON_TIME_LIMIT_MS:3000}
+        memory-limit-kb: ${EXECUTION_PYTHON_MEMORY_LIMIT_KB:262144}
+      javascript-node-20:
+        time-limit-ms: ${EXECUTION_NODE_TIME_LIMIT_MS:2000}
+        memory-limit-kb: ${EXECUTION_NODE_MEMORY_LIMIT_KB:262144}
+        max-old-space-size-mb: ${EXECUTION_NODE_MAX_OLD_SPACE_SIZE_MB:192}
+      sqlite-3:
+        query-timeout-ms: ${EXECUTION_SQLITE_QUERY_TIMEOUT_MS:5000}
+        memory-limit-kb: ${EXECUTION_SQLITE_MEMORY_LIMIT_KB:262144}
+      postgresql-16:
+        query-timeout-ms: ${EXECUTION_POSTGRES_QUERY_TIMEOUT_MS:5000}
+        memory-limit-kb: ${EXECUTION_POSTGRES_MEMORY_LIMIT_KB:524288}
+      mysql-8.0:
+        query-timeout-ms: ${EXECUTION_MYSQL_QUERY_TIMEOUT_MS:5000}
+        memory-limit-kb: ${EXECUTION_MYSQL_MEMORY_LIMIT_KB:524288}
+      mongodb-8.0:
+        query-timeout-ms: ${EXECUTION_MONGODB_QUERY_TIMEOUT_MS:5000}
+        memory-limit-kb: ${EXECUTION_MONGODB_MEMORY_LIMIT_KB:524288}
     hard-limits:
       max-time-limit-ms: ${EXECUTION_MAX_TIME_LIMIT_MS:60000}
       max-memory-limit-kb: ${EXECUTION_MAX_MEMORY_LIMIT_KB:1048576}
@@ -119,4 +152,3 @@ stacked:
     cleanup:
       stale-retention-minutes: ${EXECUTION_STALE_RETENTION_MINUTES:30}
       cron: "${EXECUTION_CLEANUP_CRON:0 */5 * * * *}"
-

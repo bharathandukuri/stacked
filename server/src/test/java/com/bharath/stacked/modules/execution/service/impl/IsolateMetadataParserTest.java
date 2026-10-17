@@ -160,4 +160,44 @@ class IsolateMetadataParserTest {
         assertThat(result.status()).isEqualTo(IsolateExecutionStatus.RUNTIME_ERROR);
         assertThat(result.exitCode()).isEqualTo(1L);
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "terminate called after throwing an instance of 'std::bad_alloc'\n  what():  std::bad_alloc",
+            "Traceback (most recent call last):\n  File 'sol.py', line 2\nMemoryError",
+            "Exception in thread 'main' java.lang.OutOfMemoryError: Java heap space",
+            "<--- JS stacktrace --->\nFATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory",
+            "Out of memory: malloc failed"
+    })
+    @DisplayName("parseMetadata maps runtime errors with OOM patterns in stderr to MEMORY_LIMIT_EXCEEDED")
+    void parseMetadataMemoryLimitFromStderr(String oomStderr) {
+        String metadata = """
+                status:RE
+                exitcode:1
+                time:0.045
+                """;
+
+        IsolateExecutionResult result = parserService.parseMetadata(metadata, "", oomStderr);
+
+        assertThat(result.status()).isEqualTo(IsolateExecutionStatus.MEMORY_LIMIT_EXCEEDED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Exception in thread 'main' java.lang.StackOverflowError",
+            "RecursionError: maximum recursion depth exceeded while calling a Python object",
+            "RangeError: Maximum call stack size exceeded"
+    })
+    @DisplayName("parseMetadata keeps stack exhaustion as RUNTIME_ERROR instead of misclassifying as MLE")
+    void parseMetadataStackOverflowIsRuntimeError(String stackStderr) {
+        String metadata = """
+                status:RE
+                exitcode:1
+                time:0.045
+                """;
+
+        IsolateExecutionResult result = parserService.parseMetadata(metadata, "", stackStderr);
+
+        assertThat(result.status()).isEqualTo(IsolateExecutionStatus.RUNTIME_ERROR);
+    }
 }
