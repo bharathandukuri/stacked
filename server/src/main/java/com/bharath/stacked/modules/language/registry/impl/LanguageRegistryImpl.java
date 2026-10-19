@@ -8,6 +8,7 @@ import com.bharath.stacked.modules.language.LanguageType;
 import com.bharath.stacked.modules.language.exception.LanguageNotFoundException;
 import com.bharath.stacked.modules.language.exception.UnsupportedLanguageTypeException;
 import com.bharath.stacked.modules.language.factory.LanguageFactory;
+import com.bharath.stacked.modules.language.factory.impl.LanguageFactoryImpl;
 import com.bharath.stacked.modules.language.registry.LanguageRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -121,6 +122,129 @@ public class LanguageRegistryImpl implements LanguageRegistry {
             return false;
         }
         return registry.containsKey(normalizeId(id));
+    }
+
+    @Override
+    public String resolveReferenceSolutionFileName(Language language) {
+        if (language == null) {
+            throw new IllegalArgumentException("Language must not be null");
+        }
+        String id = normalizeId(language.id());
+        return switch (id) {
+            case LanguageFactoryImpl.ID_JAVA_21 -> "Solution.java";
+            case LanguageFactoryImpl.ID_CPP_23 -> "solution.cpp";
+            case LanguageFactoryImpl.ID_C_17 -> "solution.c";
+            case LanguageFactoryImpl.ID_PYTHON_3_12 -> "solution.py";
+            case LanguageFactoryImpl.ID_JAVASCRIPT_NODE_20 -> "solution.js";
+            case LanguageFactoryImpl.ID_SQLITE_3,
+                    LanguageFactoryImpl.ID_POSTGRESQL_16,
+                    LanguageFactoryImpl.ID_MYSQL_8_0 ->
+                "solution.sql";
+            case LanguageFactoryImpl.ID_MONGODB_8_0 -> "solution.js";
+            default -> {
+                String ext = language.fileExtension() != null ? language.fileExtension() : "";
+                yield language.type() == LanguageType.COMPILED && ext.equalsIgnoreCase(".java")
+                        ? "Solution" + ext
+                        : "solution" + ext;
+            }
+        };
+    }
+
+    @Override
+    public String resolveReferenceSolutionFileName(String languageId) {
+        return resolveReferenceSolutionFileName(get(languageId));
+    }
+
+    @Override
+    public String resolveVerificationScriptFileName(Language language) {
+        if (language == null) {
+            throw new IllegalArgumentException("Language must not be null");
+        }
+        String id = normalizeId(language.id());
+        return switch (id) {
+            case LanguageFactoryImpl.ID_JAVA_21 -> "Verifier.java";
+            case LanguageFactoryImpl.ID_CPP_23 -> "verifier.cpp";
+            case LanguageFactoryImpl.ID_C_17 -> "verifier.c";
+            case LanguageFactoryImpl.ID_PYTHON_3_12 -> "verifier.py";
+            case LanguageFactoryImpl.ID_JAVASCRIPT_NODE_20, LanguageFactoryImpl.ID_MONGODB_8_0 ->
+                "verifier.js";
+            case LanguageFactoryImpl.ID_SQLITE_3,
+                    LanguageFactoryImpl.ID_POSTGRESQL_16,
+                    LanguageFactoryImpl.ID_MYSQL_8_0 ->
+                "verifier.sql";
+            default -> {
+                String ext = language.fileExtension() != null ? language.fileExtension() : "";
+                yield language.type() == LanguageType.COMPILED && ext.equalsIgnoreCase(".java")
+                        ? "Verifier" + ext
+                        : "verifier" + ext;
+            }
+        };
+    }
+
+    @Override
+    public String resolveVerificationScriptFileName(String languageId) {
+        return resolveVerificationScriptFileName(get(languageId));
+    }
+
+    @Override
+    public String resolveDatabaseInitFileName(Language language) {
+        if (language == null) {
+            throw new IllegalArgumentException("Language must not be null");
+        }
+        String id = normalizeId(language.id());
+        return switch (id) {
+            case LanguageFactoryImpl.ID_SQLITE_3,
+                    LanguageFactoryImpl.ID_POSTGRESQL_16,
+                    LanguageFactoryImpl.ID_MYSQL_8_0 ->
+                "init.sql";
+            case LanguageFactoryImpl.ID_MONGODB_8_0 -> "init.js";
+            default -> {
+                String ext = language.fileExtension() != null ? language.fileExtension() : "";
+                yield "init" + ext;
+            }
+        };
+    }
+
+    @Override
+    public String resolveDatabaseInitFileName(String languageId) {
+        return resolveDatabaseInitFileName(get(languageId));
+    }
+
+    @Override
+    public String resolveDatabaseSolutionFileName(Language language) {
+        if (language == null) {
+            throw new IllegalArgumentException("Language must not be null");
+        }
+        String id = normalizeId(language.id());
+        return switch (id) {
+            case LanguageFactoryImpl.ID_SQLITE_3,
+                    LanguageFactoryImpl.ID_POSTGRESQL_16,
+                    LanguageFactoryImpl.ID_MYSQL_8_0 ->
+                "solution.sql";
+            case LanguageFactoryImpl.ID_MONGODB_8_0 -> "solution.js";
+            default -> {
+                String ext = language.fileExtension() != null ? language.fileExtension() : "";
+                yield "solution" + ext;
+            }
+        };
+    }
+
+    @Override
+    public String resolveDatabaseSolutionFileName(String languageId) {
+        return resolveDatabaseSolutionFileName(get(languageId));
+    }
+
+    @Override
+    public String resolveDefaultFileName(Language language) {
+        if (language == null) {
+            throw new IllegalArgumentException("Language must not be null");
+        }
+        return language.defaultFileName();
+    }
+
+    @Override
+    public String resolveDefaultFileName(String languageId) {
+        return resolveDefaultFileName(get(languageId));
     }
 
     private String normalizeId(String id) {

@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface CodingProblemRepository extends MongoRepository<CodingProblem, String> {
     Optional<CodingProblem> findBySlug(String slug);
+
+    boolean existsBySlug(String slug);
 }

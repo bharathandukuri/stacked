@@ -102,6 +102,9 @@ export interface MarkdownEditorProps {
    * - false: hide toolbar completely
    */
   toolbar?: boolean | ToolbarConfig
+  /** Whether to show the session images button in toolbar and footer. Defaults to true. */
+  showSessionImages?: boolean
   /** Optional save handler triggered by Mod+S shortcut */
   onSave?: (value: MarkdownEditorValue) => void | Promise<void>
 }
+

@@ -1,7 +1,9 @@
 package com.bharath.stacked.modules.coding_problem.model;
 
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
+import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +30,9 @@ public class CodingProblem {
     @Indexed(unique = true)
     private String slug;
 
+    @Builder.Default
+    private CodingProblemStatus status = CodingProblemStatus.UNPUBLISHED;
+
     private CodingProblemType problemType;
 
     private CodingProblemDifficulty difficulty;
@@ -43,14 +48,14 @@ public class CodingProblem {
     // language, code
     private Map<String, String> starterCode;
 
-
-    //since we need reference solution for judging, one solution is enough
+    // since we need reference solution for judging, one solution is enough
     private String referenceSolutionLanguage;
 
     private String referenceSolution;
 
-    //if there are multiple valid answers then we are also considering verification script
-    private boolean multipleValidAnswers;
+    // if there are multiple valid answers then we are also considering verification
+    // script
+    private boolean requireVerificationScript;
 
     private String verificationScriptLanguage;
 
@@ -60,5 +65,6 @@ public class CodingProblem {
 
     private List<TestCase> hiddenTestCases;
 
-    private ExecutionLimits executionLimits;
+    // languageId -> CodeExecutionConstraints
+    private Map<String, CodeExecutionConstraints> executionConstraints;
 }

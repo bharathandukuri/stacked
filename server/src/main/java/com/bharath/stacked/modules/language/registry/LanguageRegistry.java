@@ -8,7 +8,7 @@ import com.bharath.stacked.modules.language.LanguageType;
 
 import java.util.List;
 
-public interface LanguageRegistry {
+public interface LanguageRegistry extends LanguageFileNameRegistry {
 
     void register(Language language);
 

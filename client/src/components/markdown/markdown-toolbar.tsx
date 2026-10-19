@@ -32,6 +32,7 @@ export interface MarkdownToolbarProps {
   onOpenImageDialog: () => void
   onOpenSessionImagesDialog: () => void
   sessionImageCount?: number
+  showSessionImages?: boolean
   canUndo?: boolean
   canRedo?: boolean
   disabled?: boolean
@@ -45,6 +46,7 @@ export function MarkdownToolbar({
   onOpenImageDialog,
   onOpenSessionImagesDialog,
   sessionImageCount = 0,
+  showSessionImages: showSessionImagesProp = true,
   canUndo = true,
   canRedo = true,
   disabled = false,
@@ -119,7 +121,8 @@ export function MarkdownToolbar({
 
   const showLink = isEnabled("link", "link")
   const showImage = isEnabled("image", "image")
-  const showSessionImages = isEnabled("session-images", "session-images")
+  const showSessionImages =
+    showSessionImagesProp && isEnabled("session-images", "session-images")
 
   if (toolbar === false) {
     return null

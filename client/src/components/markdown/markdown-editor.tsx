@@ -56,6 +56,7 @@ export function MarkdownEditor({
   readOnly = false,
   isLoading = false,
   toolbar = "all",
+  showSessionImages = true,
 }: MarkdownEditorProps) {
   const generatedId = useId()
   const editorId = id ?? generatedId
@@ -506,6 +507,7 @@ export function MarkdownEditor({
         >
           <MarkdownToolbar
             toolbar={toolbar}
+            showSessionImages={showSessionImages}
             onExecuteAction={handleExecuteAction}
             onOpenLinkDialog={handleOpenLinkDialog}
             onOpenImageDialog={handleOpenImageDialog}
@@ -571,7 +573,7 @@ export function MarkdownEditor({
               <span>&bull;</span>
               <span>{stats.chars} chars</span>
 
-              {uploadedImages.length > 0 && (
+              {showSessionImages && uploadedImages.length > 0 && (
                 <>
                   <span>&bull;</span>
                   <button

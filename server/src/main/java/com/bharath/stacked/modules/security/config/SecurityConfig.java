@@ -58,7 +58,10 @@ public class SecurityConfig {
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
                                 "/actuator/health",
-                                "/api/files/*/content")
+                                "/api/files/*/content",
+                                "/api/coding-problem/check-slug",
+                                "/api/coding-problem/supported-languages",
+                                "/api/coding-problem/languages")
                         .permitAll()
                         .requestMatchers("/api/auth/me").authenticated()
                         .requestMatchers("/api/judge/**").authenticated()

@@ -20,6 +20,7 @@ export interface FormMarkdownProps extends FormControlProps {
   readOnly?: boolean
   defaultViewMode?: MarkdownViewMode
   toolbar?: boolean | ToolbarConfig
+  showSessionImages?: boolean
 }
 
 export function FormMarkdown(props: FormMarkdownProps) {
@@ -93,18 +94,27 @@ export function FormMarkdown(props: FormMarkdownProps) {
   return (
     <FormBase {...props} labelAction={props.labelAction ?? modeSwitcher}>
       {viewMode === "edit" && (
-        <MarkdownEditor
-          id={field.name}
-          value={value}
-          onChange={handleChange}
-          onBlur={field.handleBlur}
-          height={height}
-          minHeight={minHeight}
-          placeholder={props.placeholder}
-          readOnly={props.readOnly}
-          toolbar={props.toolbar}
-          className={props.className}
-        />
+        <div
+          style={{ height, minHeight }}
+          className={cn(
+            "w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
+            props.className
+          )}
+        >
+          <MarkdownEditor
+            id={field.name}
+            value={value}
+            onChange={handleChange}
+            onBlur={field.handleBlur}
+            height="100%"
+            minHeight="100%"
+            placeholder={props.placeholder}
+            readOnly={props.readOnly}
+            toolbar={props.toolbar}
+            showSessionImages={props.showSessionImages}
+            className="h-full rounded-none border-0 shadow-none"
+          />
+        </div>
       )}
 
       {viewMode === "preview" && (
@@ -138,6 +148,7 @@ export function FormMarkdown(props: FormMarkdownProps) {
                 placeholder={props.placeholder}
                 readOnly={props.readOnly}
                 toolbar={props.toolbar}
+                showSessionImages={props.showSessionImages}
                 className="rounded-none border-0 shadow-none"
               />
             }

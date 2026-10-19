@@ -1,137 +1,189 @@
-import { useState, useImperativeHandle, forwardRef } from "react"
-import { AlertCircle } from "lucide-react"
-import { toast } from "@/components/ui/toast"
+import {
+  useState,
+  useImperativeHandle,
+  forwardRef,
+  useCallback,
+} from "react";
+import { AlertCircle } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
-} from "@/components/ui/resizable"
-import { cn } from "@/lib/utils"
-import { useCodingProblemStore } from "../store"
-import { getLanguageById } from "@/config/languages"
-import { IdeToolbar } from "./solutions/ide-toolbar"
-import { IdeEditorsPanel } from "./solutions/ide-editors-panel"
-import { IdeTestcasesPanel } from "./solutions/ide-testcases-panel"
+} from "@/components/ui/resizable";
+import { cn } from "@/lib/utils";
+import { useCodingProblemStore } from "../store";
+import { getLanguageById } from "@/config/languages";
+import { IdeToolbar } from "./solutions/ide-toolbar";
+import { IdeEditorsPanel } from "./solutions/ide-editors-panel";
+import { IdeTestcasesPanel } from "./solutions/ide-testcases-panel";
+import {
+  codingProblemService,
+  buildCreateCodingProblemRequest,
+} from "@/services/coding-problem-service";
 
 export interface StepSolutionsHandle {
-  submit: () => boolean
+  submit: () => Promise<boolean>;
 }
 
 export interface StepSolutionsProps {
-  onBack?: () => void
-  onSaved?: () => void
-  className?: string
+  onBack?: () => void;
+  onSaved?: () => void;
+  className?: string;
 }
 
 export const StepSolutions = forwardRef<
   StepSolutionsHandle,
   StepSolutionsProps
 >(function StepSolutions({ onSaved, className }, ref) {
-  const values = useCodingProblemStore((state) => state.values)
-  const actions = useCodingProblemStore((state) => state.actions)
-
+  const values = useCodingProblemStore((state) => state.values);
   const activeCodeLanguage = useCodingProblemStore(
     (state) =>
       state.activeCodeLanguage || values.languages[0] || "javascript-node-20"
-  )
+  );
+  const starterCodes = useCodingProblemStore((state) => state.starterCodes);
   const referenceSolutions = useCodingProblemStore(
     (state) => state.referenceSolutions
-  )
+  );
   const solutionValidators = useCodingProblemStore(
     (state) => state.solutionValidators
-  )
+  );
   const databaseSolution = useCodingProblemStore(
     (state) => state.databaseSolution
-  )
+  );
+  const databaseValidationMode = useCodingProblemStore(
+    (state) => state.databaseValidationMode
+  );
+  const databaseCustomValidator = useCodingProblemStore(
+    (state) => state.databaseCustomValidator
+  );
+  const actions = useCodingProblemStore((state) => state.actions);
 
-  const [validationError, setValidationError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  const isDatabaseProblem = values.problemType === "DATABASE"
+  const isDatabaseProblem = values.problemType === "DATABASE";
   const selectedLanguages =
-    values.languages.length > 0 ? values.languages : ["javascript-node-20"]
+    values.languages.length > 0 ? values.languages : ["javascript-node-20"];
 
-  // Validation on publish/save
-  const validateAndSave = (): boolean => {
-    setValidationError(null)
+  // Validation & problem creation via API
+  const validateAndSave = useCallback(async (): Promise<boolean> => {
+    setValidationError(null);
 
     if (isDatabaseProblem) {
       if (!databaseSolution.trim()) {
-        const msg = "Reference SQL query is required for database problems."
-        setValidationError(msg)
+        const msg = "Reference SQL query is required for database problems.";
+        setValidationError(msg);
         toast.add({
           title: "Missing Reference Solution",
           description: msg,
           type: "error",
-        })
-        return false
+        });
+        return false;
       }
     } else {
       // Generic: ensure every selected language has both a solution and validator
       for (const langId of selectedLanguages) {
-        const langName = getLanguageById(langId)?.name || langId
-        const sol = referenceSolutions[langId]?.trim()
-        const val = solutionValidators[langId]?.trim()
+        const langName = getLanguageById(langId)?.name || langId;
+        const sol = referenceSolutions[langId]?.trim();
+        const val = solutionValidators[langId]?.trim();
 
         if (!sol) {
-          actions.setActiveCodeLanguage(langId)
-          const msg = `Reference solution is missing for ${langName}. Please provide a solution.`
-          setValidationError(msg)
+          actions.setActiveCodeLanguage(langId);
+          const msg = `Reference solution is missing for ${langName}. Please provide a solution.`;
+          setValidationError(msg);
           toast.add({
             title: "Missing Solution",
             description: msg,
             type: "error",
-          })
-          return false
+          });
+          return false;
         }
 
         if (!val) {
-          actions.setActiveCodeLanguage(langId)
-          const msg = `Solution validator is missing for ${langName}. Please provide a validator script.`
-          setValidationError(msg)
+          actions.setActiveCodeLanguage(langId);
+          const msg = `Solution validator is missing for ${langName}. Please provide a validator script.`;
+          setValidationError(msg);
           toast.add({
             title: "Missing Validator",
             description: msg,
             type: "error",
-          })
-          return false
+          });
+          return false;
         }
       }
     }
 
-    toast.add({
-      title: "Problem Published Successfully",
-      description:
-        "All problem statement details, code templates, reference solutions, and validators have been validated.",
-      type: "success",
-    })
+    actions.setIsSaving(true);
+    try {
+      const payload = buildCreateCodingProblemRequest({
+        values,
+        activeCodeLanguage,
+        starterCodes,
+        referenceSolutions,
+        solutionValidators,
+        databaseSolution,
+        databaseValidationMode,
+        databaseCustomValidator,
+      });
 
-    onSaved?.()
-    return true
-  }
+      const created = await codingProblemService.createCodingProblem(payload);
+      actions.setCreatedProblemId(created.id);
+      actions.setStatus(created.status || "UNPUBLISHED");
+
+      toast.add({
+        title: "Coding Problem Created Successfully",
+        description: `Problem "${created.title}" is saved as Unpublished. Reference solutions passed sandbox judge verification.`,
+        type: "success",
+      });
+
+      onSaved?.();
+      return true;
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      const msg =
+        error.message ||
+        "Failed to create coding problem. Please verify code syntax and judge execution.";
+      setValidationError(msg);
+      toast.add({
+        title: "Problem Creation Error",
+        description: msg,
+        type: "error",
+      });
+      return false;
+    } finally {
+      actions.setIsSaving(false);
+    }
+  }, [
+    isDatabaseProblem,
+    databaseSolution,
+    selectedLanguages,
+    referenceSolutions,
+    solutionValidators,
+    actions,
+    values,
+    activeCodeLanguage,
+    starterCodes,
+    databaseValidationMode,
+    databaseCustomValidator,
+    onSaved,
+  ]);
 
   useImperativeHandle(
     ref,
     () => ({
       submit: () => validateAndSave(),
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      selectedLanguages,
-      referenceSolutions,
-      solutionValidators,
-      databaseSolution,
-      isDatabaseProblem,
-    ]
-  )
+    [validateAndSave]
+  );
 
   const handleRunSampleTests = async () => {
-    await actions.runSampleTestcases(activeCodeLanguage)
+    await actions.runSampleTestcases(activeCodeLanguage);
     toast.add({
       title: "Test Run Completed",
       description: `Executed against ${values.testCases.length} sample test case(s).`,
       type: "success",
-    })
-  }
+    });
+  };
 
   return (
     <div
@@ -190,7 +242,7 @@ export const StepSolutions = forwardRef<
         </ResizablePanelGroup>
       </div>
     </div>
-  )
-})
+  );
+});
 
-export default StepSolutions
+export default StepSolutions;

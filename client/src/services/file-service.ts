@@ -12,12 +12,7 @@ export const fileService = {
 
     const response = await API.post<ApiResponse<FileMetadata>>(
       "/files/temporary",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
+      formData
     )
     return response.data.data
   },
@@ -31,12 +26,7 @@ export const fileService = {
 
     const response = await API.post<ApiResponse<FileMetadata>>(
       "/files/permanent",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
+      formData
     )
     return response.data.data
   },

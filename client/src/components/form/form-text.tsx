@@ -17,6 +17,8 @@ export interface FormTextProps extends FormControlProps {
   className?: string
   inputClassName?: string
   inputProps?: React.InputHTMLAttributes<HTMLInputElement>
+  startAddon?: React.ReactNode
+  endAddon?: React.ReactNode
 }
 
 export function FormText(props: FormTextProps) {
@@ -33,6 +35,8 @@ export function FormText(props: FormTextProps) {
             <props.icon size={18} />
           </InputGroupAddon>
         )}
+
+        {props.startAddon}
 
         <InputGroupInput
           id={field.name}
@@ -52,6 +56,8 @@ export function FormText(props: FormTextProps) {
           className={cn(props.inputClassName)}
           {...props.inputProps}
         />
+
+        {props.endAddon}
 
         {props.type === "password" && (
           <InputGroupButton onClick={() => setShow(!show)}>

@@ -65,15 +65,16 @@ public class CreateCodingProblemRequest {
 
     @Valid
     @NotEmpty(message = "At least one sample test case is required")
-    @Size(max = 10, message = "Sample testcases must not exceed 10")
+    @Size(max = 20, message = "Sample testcases must not exceed 10")
     private List<TestcaseRequest> sampleTestcases;
 
     @Valid
     @NotEmpty(message = "At least one hidden test case is required")
-    @Size(max = 10, message = "Hidden testcases must not exceed 10")
+    @Size(max = 20, message = "Hidden testcases must not exceed 10")
     private List<TestcaseRequest> hiddenTestcases;
 
-    @NotNull(message = "Execution limits are required")
-    @Valid
-    private ExecutionLimitsRequest executionLimits;
+    private Map<
+            @NotBlank(message = "Language ID cannot be blank") String,
+            @Valid ExecutionConstraintRequest
+    > executionConstraints;
 }

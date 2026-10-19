@@ -84,6 +84,9 @@ API.interceptors.request.use(
     if (token && !config.headers.get("Authorization")) {
       config.headers.set("Authorization", `Bearer ${token}`)
     }
+    if (config.data instanceof FormData) {
+      config.headers.delete("Content-Type")
+    }
     return config
   },
   (error) => Promise.reject(error)

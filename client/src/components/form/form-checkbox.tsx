@@ -154,26 +154,29 @@ export function FormCheckboxGroup({
 
           if (card) {
             return (
-              <button
+              <label
                 key={option.value}
-                type="button"
-                disabled={option.disabled}
-                onClick={() => handleToggle(option.value)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (!option.disabled) {
+                    handleToggle(option.value);
+                  }
+                }}
                 className={cn(
-                  "group flex cursor-pointer items-center justify-between gap-2 rounded-xl border p-3 text-left transition-all duration-150",
+                  "group flex cursor-pointer items-center justify-between gap-2 rounded-xl border p-3 text-left transition-all duration-150 select-none",
                   isSelected
                     ? "border-primary/50 bg-primary/10 text-foreground ring-2 ring-primary/20 shadow-xs font-semibold"
                     : "border-border/80 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground",
                   option.disabled && "cursor-not-allowed opacity-50"
                 )}
               >
-                <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
                   <div
                     className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+                      "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
                       isSelected
                         ? "border-primary bg-primary text-primary-foreground"
-                        : "border-muted-foreground/40 bg-transparent group-hover:border-muted-foreground"
+                        : "border-muted-foreground/40 bg-transparent group-hover:border-foreground"
                     )}
                   >
                     {isSelected && <Check className="size-3 stroke-[3]" />}
@@ -184,13 +187,13 @@ export function FormCheckboxGroup({
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-semibold tracking-tight">
+                    <span className="truncate text-xs font-semibold tracking-tight text-foreground block">
                       {option.label}
-                    </div>
+                    </span>
                     {option.description && (
-                      <div className="truncate text-[10px] text-muted-foreground">
+                      <p className="truncate text-[10px] text-muted-foreground">
                         {option.description}
-                      </div>
+                      </p>
                     )}
                   </div>
                 </div>
@@ -198,7 +201,7 @@ export function FormCheckboxGroup({
                 {option.badge && (
                   <span className="shrink-0">{option.badge}</span>
                 )}
-              </button>
+              </label>
             )
           }
 

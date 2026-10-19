@@ -1,5 +1,6 @@
 package com.bharath.stacked.modules.language;
 
+import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
 import com.bharath.stacked.modules.execution.registry.DockerImageRegistry;
 
@@ -38,7 +39,7 @@ public interface Language {
         return run(fileName != null ? List.of(fileName) : List.of());
     }
 
-    default List<String> run(String fileName, com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints constraints) {
+    default List<String> run(String fileName, CodeExecutionConstraints constraints) {
         return run(fileName != null ? List.of(fileName) : List.of(), constraints);
     }
 

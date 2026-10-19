@@ -1,4 +1,4 @@
-import { Plus, Trash2, Lightbulb, ChevronUp, ChevronDown } from "lucide-react"
+import { Plus, Trash2, Lightbulb } from "lucide-react"
 import { FormBase, type FormControlProps } from "@/components/form/form-base"
 import { useFieldContext } from "@/hooks/form/create-form-hooks"
 import { Button } from "@/components/ui/button"
@@ -36,17 +36,6 @@ export function FormHints({
 
   const handleRemoveHint = (index: number) => {
     field.handleChange(hints.filter((_, i) => i !== index))
-  }
-
-  const handleMoveHint = (fromIndex: number, direction: -1 | 1) => {
-    const toIndex = fromIndex + direction
-    if (toIndex < 0 || toIndex >= hints.length) return
-
-    const next = [...hints]
-    const item = next[fromIndex]
-    next[fromIndex] = next[toIndex]
-    next[toIndex] = item
-    field.handleChange(next)
   }
 
   return (
@@ -94,9 +83,6 @@ export function FormHints({
         ) : (
           <div className="space-y-3">
             {hints.map((hint, index) => {
-              const isFirst = index === 0
-              const isLast = index === hints.length - 1
-
               return (
                 <div
                   key={index}
@@ -113,43 +99,6 @@ export function FormHints({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {/* Reorder Buttons */}
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-xs"
-                              disabled={isFirst}
-                              onClick={() => handleMoveHint(index, -1)}
-                              className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground disabled:opacity-30"
-                            >
-                              <ChevronUp className="size-3.5" />
-                            </Button>
-                          }
-                        />
-                        <TooltipContent>Move Up</TooltipContent>
-                      </Tooltip>
-
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-xs"
-                              disabled={isLast}
-                              onClick={() => handleMoveHint(index, 1)}
-                              className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground disabled:opacity-30"
-                            >
-                              <ChevronDown className="size-3.5" />
-                            </Button>
-                          }
-                        />
-                        <TooltipContent>Move Down</TooltipContent>
-                      </Tooltip>
-
                       {/* Delete */}
                       <Tooltip>
                         <TooltipTrigger

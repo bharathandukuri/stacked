@@ -164,4 +164,63 @@ class LanguageRegistryTest {
         registry.unregister("   ");
         assertThat(registry.getAll()).hasSize(9);
     }
+
+    @Test
+    @DisplayName("resolveReferenceSolutionFileName resolves correct filenames for all languages")
+    void testResolveReferenceSolutionFileName() {
+        assertThat(registry.resolveReferenceSolutionFileName("java-21")).isEqualTo("Solution.java");
+        assertThat(registry.resolveReferenceSolutionFileName("python-3.12")).isEqualTo("solution.py");
+        assertThat(registry.resolveReferenceSolutionFileName("cpp-23")).isEqualTo("solution.cpp");
+        assertThat(registry.resolveReferenceSolutionFileName("c-17")).isEqualTo("solution.c");
+        assertThat(registry.resolveReferenceSolutionFileName("javascript-node-20")).isEqualTo("solution.js");
+        assertThat(registry.resolveReferenceSolutionFileName("sqlite-3")).isEqualTo("solution.sql");
+        assertThat(registry.resolveReferenceSolutionFileName("postgresql-16")).isEqualTo("solution.sql");
+        assertThat(registry.resolveReferenceSolutionFileName("mysql-8.0")).isEqualTo("solution.sql");
+        assertThat(registry.resolveReferenceSolutionFileName("mongodb-8.0")).isEqualTo("solution.js");
+    }
+
+    @Test
+    @DisplayName("resolveVerificationScriptFileName resolves correct filenames for all languages")
+    void testResolveVerificationScriptFileName() {
+        assertThat(registry.resolveVerificationScriptFileName("java-21")).isEqualTo("Verifier.java");
+        assertThat(registry.resolveVerificationScriptFileName("python-3.12")).isEqualTo("verifier.py");
+        assertThat(registry.resolveVerificationScriptFileName("cpp-23")).isEqualTo("verifier.cpp");
+        assertThat(registry.resolveVerificationScriptFileName("c-17")).isEqualTo("verifier.c");
+        assertThat(registry.resolveVerificationScriptFileName("javascript-node-20")).isEqualTo("verifier.js");
+        assertThat(registry.resolveVerificationScriptFileName("sqlite-3")).isEqualTo("verifier.sql");
+        assertThat(registry.resolveVerificationScriptFileName("postgresql-16")).isEqualTo("verifier.sql");
+        assertThat(registry.resolveVerificationScriptFileName("mysql-8.0")).isEqualTo("verifier.sql");
+        assertThat(registry.resolveVerificationScriptFileName("mongodb-8.0")).isEqualTo("verifier.js");
+    }
+
+    @Test
+    @DisplayName("resolveDatabaseInitFileName and resolveDatabaseSolutionFileName resolve correct filenames for database engines")
+    void testDatabaseFileNameResolution() {
+        assertThat(registry.resolveDatabaseInitFileName("sqlite-3")).isEqualTo("init.sql");
+        assertThat(registry.resolveDatabaseSolutionFileName("sqlite-3")).isEqualTo("solution.sql");
+
+        assertThat(registry.resolveDatabaseInitFileName("postgresql-16")).isEqualTo("init.sql");
+        assertThat(registry.resolveDatabaseSolutionFileName("postgresql-16")).isEqualTo("solution.sql");
+
+        assertThat(registry.resolveDatabaseInitFileName("mysql-8.0")).isEqualTo("init.sql");
+        assertThat(registry.resolveDatabaseSolutionFileName("mysql-8.0")).isEqualTo("solution.sql");
+
+        assertThat(registry.resolveDatabaseInitFileName("mongodb-8.0")).isEqualTo("init.js");
+        assertThat(registry.resolveDatabaseSolutionFileName("mongodb-8.0")).isEqualTo("solution.js");
+    }
+
+    @Test
+    @DisplayName("Filename resolution methods validate null arguments")
+    void testFileNameResolutionNullHandling() {
+        assertThatThrownBy(() -> registry.resolveReferenceSolutionFileName((Language) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registry.resolveVerificationScriptFileName((Language) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registry.resolveDatabaseInitFileName((Language) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registry.resolveDatabaseSolutionFileName((Language) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registry.resolveDefaultFileName((Language) null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
