@@ -1,11 +1,17 @@
 package com.bharath.stacked.modules.coding_problem.judge.impl;
 
 import com.bharath.stacked.exception.BadRequestException;
+import com.bharath.stacked.modules.coding_problem.dto.request.PreviewTestcaseRequest;
 import com.bharath.stacked.modules.coding_problem.dto.request.TestcaseRequest;
+import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemExecutionResponse;
+import com.bharath.stacked.modules.coding_problem.dto.response.PreviewRunResponse;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
 import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService;
+import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.CandidateTestcaseItem;
 import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.InitializedTestcases;
+import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.JudgeCandidateExecutionRequest;
 import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.JudgeInitializationRequest;
+import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.JudgePreviewRequest;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
 import com.bharath.stacked.modules.execution.dto.request.BatchCodeExecutionRequest;
 import com.bharath.stacked.modules.execution.dto.request.SimpleCodeExecutionRequest;
@@ -305,8 +311,8 @@ class CodingProblemJudgeServiceImplTest {
 
         InitializedTestcases result = judgeService.initializeExpectedOutputs(request);
 
-        assertThat(result.sampleTestCases().get(0).getOutput()).isEqualTo("verified_final_1\n");
-        assertThat(result.hiddenTestCases().get(0).getOutput()).isEqualTo("verified_final_2\n");
+        assertThat(result.sampleTestCases().get(0).getOutput()).isEqualTo("raw_out_1\n");
+        assertThat(result.hiddenTestCases().get(0).getOutput()).isEqualTo("raw_out_2\n");
 
         ArgumentCaptor<BatchCodeExecutionRequest> captor = ArgumentCaptor.forClass(BatchCodeExecutionRequest.class);
         verify(codeExecutionService, times(2)).run(captor.capture());
@@ -1098,6 +1104,410 @@ class CodingProblemJudgeServiceImplTest {
         assertThatThrownBy(() -> judgeService.initializeExpectedOutputs(req2))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Hidden testcase at index 0 cannot be null");
+    }
+
+    // =========================================================================
+    // Preview Execution Tests
+    // =========================================================================
+
+    @Test
+    @DisplayName("previewExecution: Generic problem runs batch and returns SUCCESS without storing")
+    void testPreviewGenericExecutionSuccess() {
+        when(languageFileNameRegistry.resolveReferenceSolutionFileName(javaLanguage)).thenReturn("Solution.java");
+
+        SimpleCodeExecutionResult r1 = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("3")
+                .stderr("")
+                .exitCode(0L)
+                .executionTimeMs(15L)
+                .memoryUsageKb(20480L)
+                .build();
+        SimpleCodeExecutionResult r2 = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("7")
+                .stderr("")
+                .exitCode(0L)
+                .executionTimeMs(18L)
+                .memoryUsageKb(21500L)
+                .build();
+
+        when(codeExecutionService.run(any(BatchCodeExecutionRequest.class)))
+                .thenReturn(BatchCodeExecutionResult.builder()
+                        .results(List.of(r1, r2))
+                        .totalExecutionTimeMs(33L)
+                        .totalExecutions(2)
+                        .successfulExecutions(2)
+                        .failedExecutions(0)
+                        .build());
+
+        JudgePreviewRequest request = new JudgePreviewRequest(
+                CodingProblemType.GENERIC,
+                javaLanguage,
+                "class Solution {}",
+                new CodeExecutionConstraints(2000L, 262144L),
+                false,
+                null,
+                null,
+                null,
+                List.of(
+                        new PreviewTestcaseRequest("case-1", "1 2", null),
+                        new PreviewTestcaseRequest("case-2", "3 4", null)
+                )
+        );
+
+        PreviewRunResponse response = judgeService.previewExecution(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("SUCCESS");
+        assertThat(response.getTotalTestcases()).isEqualTo(2);
+        assertThat(response.getPassedTestcases()).isEqualTo(2);
+        assertThat(response.getFailedTestcases()).isEqualTo(0);
+        assertThat(response.getResults()).hasSize(2);
+        assertThat(response.getResults().get(0).getStatus()).isEqualTo("SUCCESS");
+        assertThat(response.getResults().get(0).getStdout()).isEqualTo("3");
+        assertThat(response.getResults().get(1).getStdout()).isEqualTo("7");
+    }
+
+    @Test
+    @DisplayName("previewExecution: Compilation error returns COMPILATION_ERROR status without throwing exception")
+    void testPreviewGenericExecutionCompilationError() {
+        when(languageFileNameRegistry.resolveReferenceSolutionFileName(javaLanguage)).thenReturn("Solution.java");
+
+        SimpleCodeExecutionResult compileErr = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.COMPILATION_ERROR)
+                .stdout("")
+                .stderr("error: ';' expected at line 4")
+                .exitCode(1L)
+                .build();
+
+        when(codeExecutionService.run(any(BatchCodeExecutionRequest.class)))
+                .thenReturn(BatchCodeExecutionResult.builder()
+                        .results(List.of(compileErr))
+                        .totalExecutionTimeMs(0L)
+                        .totalExecutions(1)
+                        .successfulExecutions(0)
+                        .failedExecutions(1)
+                        .build());
+
+        JudgePreviewRequest request = new JudgePreviewRequest(
+                CodingProblemType.GENERIC,
+                javaLanguage,
+                "class Solution broken",
+                new CodeExecutionConstraints(2000L, 262144L),
+                false,
+                null,
+                null,
+                null,
+                List.of(new PreviewTestcaseRequest("case-1", "1 2", null))
+        );
+
+        PreviewRunResponse response = judgeService.previewExecution(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("COMPILATION_ERROR");
+        assertThat(response.getPassedTestcases()).isEqualTo(0);
+        assertThat(response.getFailedTestcases()).isEqualTo(1);
+        assertThat(response.getResults().get(0).getStatus()).isEqualTo("COMPILATION_ERROR");
+        assertThat(response.getResults().get(0).getStderr()).contains("';' expected");
+    }
+
+    @Test
+    @DisplayName("previewExecution: Database execution runs init and solution")
+    void testPreviewDatabaseExecutionSuccess() {
+        when(languageFileNameRegistry.resolveDatabaseInitFileName(sqliteLanguage)).thenReturn("init.sql");
+        when(languageFileNameRegistry.resolveDatabaseSolutionFileName(sqliteLanguage)).thenReturn("solution.sql");
+
+        SimpleCodeExecutionResult initRes = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("")
+                .exitCode(0L)
+                .executionTimeMs(10L)
+                .build();
+        SimpleCodeExecutionResult solRes = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("1|Alice\n2|Bob")
+                .exitCode(0L)
+                .executionTimeMs(12L)
+                .memoryUsageKb(15000L)
+                .build();
+
+        when(codeExecutionService.run(any(BatchCodeExecutionRequest.class)))
+                .thenReturn(BatchCodeExecutionResult.builder()
+                        .results(List.of(initRes, solRes))
+                        .totalExecutionTimeMs(22L)
+                        .totalExecutions(2)
+                        .successfulExecutions(2)
+                        .failedExecutions(0)
+                        .build());
+
+        JudgePreviewRequest request = new JudgePreviewRequest(
+                CodingProblemType.DATABASE,
+                sqliteLanguage,
+                "SELECT * FROM Users;",
+                new CodeExecutionConstraints(2000L, 262144L),
+                false,
+                null,
+                null,
+                null,
+                List.of(new PreviewTestcaseRequest("case-1", null, "CREATE TABLE Users (id INT, name TEXT);"))
+        );
+
+        PreviewRunResponse response = judgeService.previewExecution(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("SUCCESS");
+        assertThat(response.getResults()).hasSize(1);
+        assertThat(response.getResults().get(0).getStatus()).isEqualTo("SUCCESS");
+        assertThat(response.getResults().get(0).getStdout()).isEqualTo("1|Alice\n2|Bob");
+    }
+
+    @Test
+    @DisplayName("executeGenerator executes code via CodeExecutionService and returns mapped response")
+    void testExecuteGenerator_Success() {
+        when(pythonLanguage.type()).thenReturn(LanguageType.INTERPRETED);
+        when(languageFileNameRegistry.resolveDefaultFileName(pythonLanguage)).thenReturn("generator.py");
+
+        SimpleCodeExecutionResult execResult = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("1 2 3\n---STACKED_TESTCASE_DELIMITER---\n4 5 6\n")
+                .stderr("")
+                .exitCode(0L)
+                .executionTimeMs(85L)
+                .memoryUsageKb(12345L)
+                .build();
+
+        when(codeExecutionService.run(any(SimpleCodeExecutionRequest.class))).thenReturn(execResult);
+
+        CodeExecutionConstraints constraints = new CodeExecutionConstraints(3000L, 262144L);
+        com.bharath.stacked.modules.coding_problem.dto.response.TestcaseGeneratorRunResponse response =
+                judgeService.executeGenerator(pythonLanguage, "print('code')", "seed_123", constraints);
+
+        assertThat(response).isNotNull();
+        assertThat(response.status()).isEqualTo(CodeExecutionStatus.SUCCESS);
+        assertThat(response.stdout()).isEqualTo("1 2 3\n---STACKED_TESTCASE_DELIMITER---\n4 5 6\n");
+        assertThat(response.executionTimeMs()).isEqualTo(85L);
+        assertThat(response.memoryUsageKb()).isEqualTo(12345L);
+        assertThat(response.error()).isNull();
+
+        ArgumentCaptor<SimpleCodeExecutionRequest> captor = ArgumentCaptor.forClass(SimpleCodeExecutionRequest.class);
+        verify(codeExecutionService).run(captor.capture());
+        SimpleCodeExecutionRequest captured = captor.getValue();
+        assertThat(captured.getLanguage()).isEqualTo(pythonLanguage);
+        assertThat(captured.getFileName()).isEqualTo("generator.py");
+        assertThat(captured.getCode()).isEqualTo("print('code')");
+        assertThat(captured.getStdin()).isEqualTo("seed_123");
+        assertThat(captured.getConstraints()).isEqualTo(constraints);
+    }
+
+    @Test
+    @DisplayName("executeGenerator maps error diagnostics when script execution fails")
+    void testExecuteGenerator_Failure() {
+        when(pythonLanguage.type()).thenReturn(LanguageType.INTERPRETED);
+        when(languageFileNameRegistry.resolveDefaultFileName(pythonLanguage)).thenReturn("generator.py");
+
+        SimpleCodeExecutionResult execResult = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.RUNTIME_ERROR)
+                .stdout("")
+                .stderr("ZeroDivisionError: division by zero")
+                .exitCode(1L)
+                .executionTimeMs(50L)
+                .memoryUsageKb(10000L)
+                .build();
+
+        when(codeExecutionService.run(any(SimpleCodeExecutionRequest.class))).thenReturn(execResult);
+
+        com.bharath.stacked.modules.coding_problem.dto.response.TestcaseGeneratorRunResponse response =
+                judgeService.executeGenerator(pythonLanguage, "print(1/0)", null, new CodeExecutionConstraints(2000L, 262144L));
+
+        assertThat(response).isNotNull();
+        assertThat(response.status()).isEqualTo(CodeExecutionStatus.RUNTIME_ERROR);
+        assertThat(response.error()).contains("ZeroDivisionError");
+    }
+
+    @Test
+    @DisplayName("executeGenerator throws BadRequestException if database language is used")
+    void testExecuteGenerator_DatabaseLanguage_ThrowsBadRequest() {
+        when(sqliteLanguage.type()).thenReturn(LanguageType.DATABASE);
+
+        assertThatThrownBy(() -> judgeService.executeGenerator(
+                sqliteLanguage,
+                "SELECT 1;",
+                "",
+                new CodeExecutionConstraints(2000L, 262144L)
+        )).isInstanceOf(BadRequestException.class)
+          .hasMessageContaining("Database languages cannot be used for testcase generation.");
+    }
+
+    @Test
+    @DisplayName("executeCandidate without verification script compares actual and expected output")
+    void testExecuteCandidate_DirectComparison_SuccessAndWrongAnswer() {
+        List<CandidateTestcaseItem> items = List.of(
+                new CandidateTestcaseItem("case-1", 1, "1 2", null, "3", false, true),
+                new CandidateTestcaseItem("case-2", 2, "3 4", null, "7", false, true)
+        );
+
+        JudgeCandidateExecutionRequest request = new JudgeCandidateExecutionRequest(
+                CodingProblemType.GENERIC,
+                pythonLanguage,
+                "import sys\nnums=sys.stdin.read().split()\nprint(int(nums[0])+int(nums[1]))",
+                new CodeExecutionConstraints(2000L, 262144L),
+                pythonLanguage,
+                "print(3)",
+                new CodeExecutionConstraints(2000L, 262144L),
+                false,
+                null,
+                null,
+                null,
+                items
+        );
+
+        SimpleCodeExecutionResult r1 = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("3\n")
+                .stderr("")
+                .exitCode(0L)
+                .executionTimeMs(50L)
+                .memoryUsageKb(10240L)
+                .build();
+
+        SimpleCodeExecutionResult r2 = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("999\n") // Wrong answer
+                .stderr("")
+                .exitCode(0L)
+                .executionTimeMs(60L)
+                .memoryUsageKb(10240L)
+                .build();
+
+        when(codeExecutionService.run(any(BatchCodeExecutionRequest.class)))
+                .thenReturn(BatchCodeExecutionResult.builder().results(List.of(r1, r2)).totalExecutions(2).build());
+
+        CodingProblemExecutionResponse response = judgeService.executeCandidate(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("WRONG_ANSWER");
+        assertThat(response.getTotalTestcases()).isEqualTo(2);
+        assertThat(response.getPassedTestcases()).isEqualTo(1);
+        assertThat(response.getFailedTestcases()).isEqualTo(1);
+
+        assertThat(response.getResults().get(0).getStatus()).isEqualTo("PASSED");
+        assertThat(response.getResults().get(0).getActualOutput()).isEqualTo("3\n");
+        assertThat(response.getResults().get(0).getExpectedOutput()).isEqualTo("3");
+
+        assertThat(response.getResults().get(1).getStatus()).isEqualTo("WRONG_ANSWER");
+        assertThat(response.getResults().get(1).getActualOutput()).isEqualTo("999\n");
+        assertThat(response.getResults().get(1).getExpectedOutput()).isEqualTo("7");
+    }
+
+    @Test
+    @DisplayName("executeCandidate with verification script gives reference solution output as expected output when candidate is wrong")
+    void testExecuteCandidate_WithVerificationScript_WrongAnswerGivesReferenceOutput() {
+        List<CandidateTestcaseItem> items = List.of(
+                new CandidateTestcaseItem("case-1", 1, "4 9\n2 7 11 15", null, null, false, true)
+        );
+
+        JudgeCandidateExecutionRequest request = new JudgeCandidateExecutionRequest(
+                CodingProblemType.GENERIC,
+                pythonLanguage,
+                "def solve(): pass",
+                new CodeExecutionConstraints(2000L, 262144L),
+                pythonLanguage,
+                "print('0 1')",
+                new CodeExecutionConstraints(2000L, 262144L),
+                true,
+                pythonLanguage,
+                "assert False, 'custom verifier failed'",
+                new CodeExecutionConstraints(2000L, 262144L),
+                items
+        );
+
+        // 1. Reference solution execution returns "0 1"
+        SimpleCodeExecutionResult refResult = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("0 1\n")
+                .stderr("")
+                .exitCode(0L)
+                .executionTimeMs(40L)
+                .build();
+
+        // 2. Candidate solution execution returns "99 99"
+        SimpleCodeExecutionResult candResult = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("99 99\n")
+                .stderr("")
+                .exitCode(0L)
+                .executionTimeMs(50L)
+                .build();
+
+        // 3. Verifier execution fails (exit code 1)
+        SimpleCodeExecutionResult verResult = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.SUCCESS)
+                .stdout("Verifier assertion log")
+                .stderr("AssertionError: custom verifier failed")
+                .exitCode(1L)
+                .executionTimeMs(30L)
+                .build();
+
+        when(codeExecutionService.run(any(BatchCodeExecutionRequest.class)))
+                .thenReturn(BatchCodeExecutionResult.builder().results(List.of(refResult)).totalExecutions(1).build())  // Reference batch
+                .thenReturn(BatchCodeExecutionResult.builder().results(List.of(candResult)).totalExecutions(1).build()) // Candidate batch
+                .thenReturn(BatchCodeExecutionResult.builder().results(List.of(verResult)).totalExecutions(1).build()); // Verifier batch
+
+        CodingProblemExecutionResponse response = judgeService.executeCandidate(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("WRONG_ANSWER");
+        assertThat(response.getResults()).hasSize(1);
+
+        var result = response.getResults().get(0);
+        assertThat(result.getStatus()).isEqualTo("WRONG_ANSWER");
+        // User rule: actualOutput is candidate stdout
+        assertThat(result.getActualOutput()).isEqualTo("99 99\n");
+        // User rule: expectedOutput is reference solution output, NOT verifier output!
+        assertThat(result.getExpectedOutput()).isEqualTo("0 1\n");
+        assertThat(result.getExpectedOutput()).isNotEqualTo("Verifier assertion log");
+    }
+
+    @Test
+    @DisplayName("executeCandidate with compilation error marks overall and all testcases as COMPILATION_ERROR")
+    void testExecuteCandidate_CompilationError() {
+        List<CandidateTestcaseItem> items = List.of(
+                new CandidateTestcaseItem("case-1", 1, "1 2", null, "3", false, true)
+        );
+
+        JudgeCandidateExecutionRequest request = new JudgeCandidateExecutionRequest(
+                CodingProblemType.GENERIC,
+                javaLanguage,
+                "class Solution { syntax error }",
+                new CodeExecutionConstraints(2000L, 262144L),
+                javaLanguage,
+                "class Solution {}",
+                new CodeExecutionConstraints(2000L, 262144L),
+                false,
+                null,
+                null,
+                null,
+                items
+        );
+
+        SimpleCodeExecutionResult candResult = SimpleCodeExecutionResult.builder()
+                .executionStatus(CodeExecutionStatus.COMPILATION_ERROR)
+                .stdout("")
+                .stderr("javac: syntax error")
+                .exitCode(1L)
+                .executionTimeMs(100L)
+                .build();
+
+        when(codeExecutionService.run(any(BatchCodeExecutionRequest.class)))
+                .thenReturn(BatchCodeExecutionResult.builder().results(List.of(candResult)).totalExecutions(1).build());
+
+        CodingProblemExecutionResponse response = judgeService.executeCandidate(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("COMPILATION_ERROR");
+        assertThat(response.getResults().get(0).getStatus()).isEqualTo("COMPILATION_ERROR");
+        assertThat(response.getResults().get(0).getStderr()).isEqualTo("javac: syntax error");
     }
 }
 

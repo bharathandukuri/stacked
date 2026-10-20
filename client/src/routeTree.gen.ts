@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
+import { Route as AdminCodingProblemIndexRouteImport } from './routes/admin/coding-problem/index'
+import { Route as AdminCodingProblemStudioProblemIdRouteImport } from './routes/admin/coding-problem/studio/$problemId'
 import { Route as AdminCodingProblemStudioNewRouteImport } from './routes/admin/coding-problem/studio/new'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +31,17 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
   path: '/admin/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminCodingProblemIndexRoute = AdminCodingProblemIndexRouteImport.update({
+  id: '/admin/coding-problem/',
+  path: '/admin/coding-problem/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminCodingProblemStudioProblemIdRoute =
+  AdminCodingProblemStudioProblemIdRouteImport.update({
+    id: '/admin/coding-problem/studio/$problemId',
+    path: '/admin/coding-problem/studio/$problemId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdminCodingProblemStudioNewRoute =
   AdminCodingProblemStudioNewRouteImport.update({
     id: '/admin/coding-problem/studio/new',
@@ -40,12 +53,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/coding-problem/': typeof AdminCodingProblemIndexRoute
+  '/admin/coding-problem/studio/$problemId': typeof AdminCodingProblemStudioProblemIdRoute
   '/admin/coding-problem/studio/new': typeof AdminCodingProblemStudioNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin': typeof AdminIndexRoute
+  '/admin/coding-problem': typeof AdminCodingProblemIndexRoute
+  '/admin/coding-problem/studio/$problemId': typeof AdminCodingProblemStudioProblemIdRoute
   '/admin/coding-problem/studio/new': typeof AdminCodingProblemStudioNewRoute
 }
 export interface FileRoutesById {
@@ -53,19 +70,34 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/coding-problem/': typeof AdminCodingProblemIndexRoute
+  '/admin/coding-problem/studio/$problemId': typeof AdminCodingProblemStudioProblemIdRoute
   '/admin/coding-problem/studio/new': typeof AdminCodingProblemStudioNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/admin/login' | '/admin/' | '/admin/coding-problem/studio/new'
+    | '/'
+    | '/admin/login'
+    | '/admin/'
+    | '/admin/coding-problem/'
+    | '/admin/coding-problem/studio/$problemId'
+    | '/admin/coding-problem/studio/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin/login' | '/admin' | '/admin/coding-problem/studio/new'
+  to:
+    | '/'
+    | '/admin/login'
+    | '/admin'
+    | '/admin/coding-problem'
+    | '/admin/coding-problem/studio/$problemId'
+    | '/admin/coding-problem/studio/new'
   id:
     | '__root__'
     | '/'
     | '/admin/login'
     | '/admin/'
+    | '/admin/coding-problem/'
+    | '/admin/coding-problem/studio/$problemId'
     | '/admin/coding-problem/studio/new'
   fileRoutesById: FileRoutesById
 }
@@ -73,6 +105,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminCodingProblemIndexRoute: typeof AdminCodingProblemIndexRoute
+  AdminCodingProblemStudioProblemIdRoute: typeof AdminCodingProblemStudioProblemIdRoute
   AdminCodingProblemStudioNewRoute: typeof AdminCodingProblemStudioNewRoute
 }
 
@@ -99,6 +133,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/coding-problem/': {
+      id: '/admin/coding-problem/'
+      path: '/admin/coding-problem'
+      fullPath: '/admin/coding-problem/'
+      preLoaderRoute: typeof AdminCodingProblemIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/coding-problem/studio/$problemId': {
+      id: '/admin/coding-problem/studio/$problemId'
+      path: '/admin/coding-problem/studio/$problemId'
+      fullPath: '/admin/coding-problem/studio/$problemId'
+      preLoaderRoute: typeof AdminCodingProblemStudioProblemIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/coding-problem/studio/new': {
       id: '/admin/coding-problem/studio/new'
       path: '/admin/coding-problem/studio/new'
@@ -113,6 +161,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminCodingProblemIndexRoute: AdminCodingProblemIndexRoute,
+  AdminCodingProblemStudioProblemIdRoute:
+    AdminCodingProblemStudioProblemIdRoute,
   AdminCodingProblemStudioNewRoute: AdminCodingProblemStudioNewRoute,
 }
 export const routeTree = rootRouteImport

@@ -90,12 +90,19 @@ export function FormMarkdown(props: FormMarkdownProps) {
 
   const height = props.height ?? 420
   const minHeight = props.minHeight ?? 240
+  const effectiveHeight = typeof height === "number" ? `${height}px` : height
+  const effectiveMinHeight =
+    typeof minHeight === "number" ? `${minHeight}px` : minHeight
 
   return (
     <FormBase {...props} labelAction={props.labelAction ?? modeSwitcher}>
       {viewMode === "edit" && (
         <div
-          style={{ height, minHeight }}
+          style={{
+            height: effectiveHeight,
+            minHeight: effectiveMinHeight,
+            maxHeight: effectiveHeight,
+          }}
           className={cn(
             "w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
             props.className
@@ -119,9 +126,13 @@ export function FormMarkdown(props: FormMarkdownProps) {
 
       {viewMode === "preview" && (
         <div
-          style={{ height, minHeight }}
+          style={{
+            height: effectiveHeight,
+            minHeight: effectiveMinHeight,
+            maxHeight: effectiveHeight,
+          }}
           className={cn(
-            "w-full overflow-hidden rounded-lg border border-border bg-card p-4 shadow-xs",
+            "w-full overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-xs",
             props.className
           )}
         >
@@ -131,7 +142,11 @@ export function FormMarkdown(props: FormMarkdownProps) {
 
       {viewMode === "split" && (
         <div
-          style={{ height, minHeight }}
+          style={{
+            height: effectiveHeight,
+            minHeight: effectiveMinHeight,
+            maxHeight: effectiveHeight,
+          }}
           className={cn(
             "w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
             props.className
@@ -145,22 +160,23 @@ export function FormMarkdown(props: FormMarkdownProps) {
                 onChange={handleChange}
                 onBlur={field.handleBlur}
                 height="100%"
+                minHeight="100%"
                 placeholder={props.placeholder}
                 readOnly={props.readOnly}
                 toolbar={props.toolbar}
                 showSessionImages={props.showSessionImages}
-                className="rounded-none border-0 shadow-none"
+                className="h-full rounded-none border-0 shadow-none"
               />
             }
             secondPane={
-              <div className="h-full min-h-0 w-full overflow-hidden bg-background p-4">
+              <div className="h-full min-h-0 w-full overflow-y-auto bg-background p-4">
                 <MarkdownPreview content={content} />
               </div>
             }
             defaultSize={50}
             minSize={20}
             maxSize={80}
-            className="h-full w-full"
+            className="h-full w-full max-h-full min-h-0"
           />
         </div>
       )}

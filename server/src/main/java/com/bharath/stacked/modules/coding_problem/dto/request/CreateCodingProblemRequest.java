@@ -4,15 +4,11 @@ import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 import java.util.Map;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Data
 public class CreateCodingProblemRequest {
 
@@ -57,7 +53,7 @@ public class CreateCodingProblemRequest {
     @NotBlank(message = "Reference solution cannot be empty")
     private String referenceSolution;
 
-    private boolean requireVerificationScript = false;
+    private boolean requireVerificationScript;
 
     private String verificationScriptLanguage;
 
@@ -65,16 +61,77 @@ public class CreateCodingProblemRequest {
 
     @Valid
     @NotEmpty(message = "At least one sample test case is required")
-    @Size(max = 20, message = "Sample testcases must not exceed 10")
+    @Size(max = 20, message = "Sample testcases must not exceed 20")
     private List<TestcaseRequest> sampleTestcases;
 
     @Valid
     @NotEmpty(message = "At least one hidden test case is required")
-    @Size(max = 20, message = "Hidden testcases must not exceed 10")
+    @Size(max = 20, message = "Hidden testcases must not exceed 20")
     private List<TestcaseRequest> hiddenTestcases;
 
     private Map<
             @NotBlank(message = "Language ID cannot be blank") String,
             @Valid ExecutionConstraintRequest
     > executionConstraints;
+
+    private String generatorLanguage;
+
+    private String generatorScript;
+
+    private String generatorStdin;
+
+    private String generatorDelimiter;
+
+    private List<String> imageFileIds;
+
+    public CreateCodingProblemRequest() {
+    }
+
+    public CreateCodingProblemRequest(
+            String title,
+            String slug,
+            CodingProblemType problemType,
+            CodingProblemDifficulty difficulty,
+            List<String> supportedLanguageIds,
+            String statement,
+            List<String> topics,
+            List<String> hints,
+            Map<String, String> starterCode,
+            String referenceSolutionLanguage,
+            String referenceSolution,
+            boolean requireVerificationScript,
+            String verificationScriptLanguage,
+            String verificationScript,
+            List<TestcaseRequest> sampleTestcases,
+            List<TestcaseRequest> hiddenTestcases,
+            Map<String, ExecutionConstraintRequest> executionConstraints,
+            String generatorLanguage,
+            String generatorScript,
+            String generatorStdin,
+            String generatorDelimiter,
+            List<String> imageFileIds
+    ) {
+        this.title = title;
+        this.slug = slug;
+        this.problemType = problemType;
+        this.difficulty = difficulty;
+        this.supportedLanguageIds = supportedLanguageIds;
+        this.statement = statement;
+        this.topics = topics;
+        this.hints = hints;
+        this.starterCode = starterCode;
+        this.referenceSolutionLanguage = referenceSolutionLanguage;
+        this.referenceSolution = referenceSolution;
+        this.requireVerificationScript = requireVerificationScript;
+        this.verificationScriptLanguage = verificationScriptLanguage;
+        this.verificationScript = verificationScript;
+        this.sampleTestcases = sampleTestcases;
+        this.hiddenTestcases = hiddenTestcases;
+        this.executionConstraints = executionConstraints;
+        this.generatorLanguage = generatorLanguage;
+        this.generatorScript = generatorScript;
+        this.generatorStdin = generatorStdin;
+        this.generatorDelimiter = generatorDelimiter;
+        this.imageFileIds = imageFileIds;
+    }
 }

@@ -1,10 +1,17 @@
 package com.bharath.stacked.modules.coding_problem.controller;
 
 import com.bharath.stacked.common.api.ApiResponse;
+import com.bharath.stacked.common.api.PageResponse;
+import com.bharath.stacked.modules.coding_problem.dto.request.CodingProblemFilterRequest;
 import com.bharath.stacked.modules.coding_problem.dto.request.CreateCodingProblemRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.RunCodingProblemPreviewRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.RunTestcaseGeneratorRequest;
 import com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemStatusRequest;
+import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse;
+import com.bharath.stacked.modules.coding_problem.dto.response.PreviewRunResponse;
 import com.bharath.stacked.modules.coding_problem.dto.response.SlugAvailabilityResponse;
 import com.bharath.stacked.modules.coding_problem.dto.response.SupportedLanguageResponse;
+import com.bharath.stacked.modules.coding_problem.dto.response.TestcaseGeneratorRunResponse;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
 import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
 import com.bharath.stacked.modules.coding_problem.service.CodingProblemService;
@@ -17,11 +24,21 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/coding-problem")
-@RequiredArgsConstructor
 public class CodingProblemController {
 
     private final CodingProblemService codingProblemService;
-    
+
+    public CodingProblemController(CodingProblemService codingProblemService) {
+        this.codingProblemService = codingProblemService;
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<PageResponse<CodingProblemSummaryResponse>>> getCodingProblems(
+            @ModelAttribute CodingProblemFilterRequest filter) {
+        PageResponse<CodingProblemSummaryResponse> response = codingProblemService.findAll(filter);
+        return ApiResponse.success(response, "Coding problems retrieved successfully");
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<CodingProblem>> createCodingProblem(
             @Valid @RequestBody CreateCodingProblemRequest createCodingProblemRequest) {
@@ -29,10 +46,49 @@ public class CodingProblemController {
         return ApiResponse.created(codingProblem, "Coding Problem Created");
     }
 
+    @PostMapping({"/run-preview", "/test-run"})
+    public ResponseEntity<ApiResponse<PreviewRunResponse>> runPreview(
+            @Valid @RequestBody RunCodingProblemPreviewRequest request) {
+        PreviewRunResponse response = codingProblemService.runPreview(request);
+        return ApiResponse.success(response, "Preview testcases executed successfully");
+    }
+
+    @PostMapping({"/run-generator", "/generate-testcases"})
+    public ResponseEntity<ApiResponse<TestcaseGeneratorRunResponse>> runGenerator(
+            @Valid @RequestBody RunTestcaseGeneratorRequest request) {
+        TestcaseGeneratorRunResponse response = codingProblemService.runGenerator(request);
+        return ApiResponse.success(response, "Generator script executed successfully");
+    }
+
+    @GetMapping("/{idOrSlug}")
+    public ResponseEntity<ApiResponse<CodingProblem>> getCodingProblem(
+            @PathVariable("idOrSlug") String idOrSlug) {
+        CodingProblem codingProblem = codingProblemService.findByIdOrSlug(idOrSlug);
+        return ApiResponse.success(codingProblem, "Coding problem retrieved successfully");
+    }
+
+    @PutMapping("/{idOrSlug}")
+    public ResponseEntity<ApiResponse<CodingProblem>> updateCodingProblem(
+            @PathVariable("idOrSlug") String idOrSlug,
+            @Valid @RequestBody com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest request) {
+        CodingProblem codingProblem = codingProblemService.update(idOrSlug, request);
+        return ApiResponse.success(codingProblem, "Coding problem updated successfully");
+    }
+
+    @DeleteMapping("/{idOrSlug}")
+    public ResponseEntity<ApiResponse<Void>> deleteCodingProblem(
+            @PathVariable("idOrSlug") String idOrSlug) {
+        codingProblemService.delete(idOrSlug);
+        return ApiResponse.success(null, "Coding problem deleted successfully");
+    }
+
     @GetMapping("/check-slug")
     public ResponseEntity<ApiResponse<SlugAvailabilityResponse>> checkSlugAvailability(
-            @RequestParam("slug") String slug) {
-        boolean available = codingProblemService.isSlugAvailable(slug);
+            @RequestParam("slug") String slug,
+            @RequestParam(value = "excludeId", required = false) String excludeId) {
+        boolean available = (excludeId != null && !excludeId.isBlank())
+                ? codingProblemService.isSlugAvailable(slug, excludeId)
+                : codingProblemService.isSlugAvailable(slug);
         return ApiResponse.success(new SlugAvailabilityResponse(slug, available));
     }
 

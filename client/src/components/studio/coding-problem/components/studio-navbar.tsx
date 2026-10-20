@@ -1,49 +1,31 @@
 import {
-  ArrowLeft,
-  Check,
-  Loader2,
   Code2,
   FileText,
   ChevronRight,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
+  FlaskConical,
+  ClipboardCheck,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export interface StudioNavbarProps {
-  mode: "create" | "edit"
-  problemId?: string
-  problemTitle?: string
-  currentStep?: number
-  onStepChange?: (step: number) => void
-  onBack?: () => void
-  onSubmit?: () => void
-  isSubmitting?: boolean
-  submitLabel?: string
-  className?: string
+  mode: "create" | "edit";
+  problemId?: string;
+  problemTitle?: string;
+  currentStep?: number;
+  className?: string;
 }
 
 export function StudioNavbar({
   mode,
-  problemId,
   problemTitle,
   currentStep = 1,
-  onStepChange,
-  onBack,
-  onSubmit,
-  isSubmitting = false,
-  submitLabel,
   className,
 }: StudioNavbarProps) {
   const displayTitle =
     mode === "create"
       ? problemTitle?.trim() || "New Coding Problem"
-      : problemTitle?.trim() || `Problem #${problemId}`
+      : problemTitle?.trim() || "Edit Coding Problem";
 
   return (
     <header
@@ -52,27 +34,8 @@ export function StudioNavbar({
         className
       )}
     >
-      {/* Left: Back & Title */}
+      {/* Left: Title & Mode Indicator */}
       <div className="flex min-w-0 items-center gap-3">
-        {onBack && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={onBack}
-                  className="shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
-                >
-                  <ArrowLeft className="size-4" />
-                </Button>
-              }
-            />
-            <TooltipContent>Go Back</TooltipContent>
-          </Tooltip>
-        )}
-
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-2 shrink-0 animate-pulse rounded-full bg-primary" />
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
@@ -92,80 +55,78 @@ export function StudioNavbar({
         </div>
       </div>
 
-      {/* Center: Step Progress Stepper */}
+      {/* Center: Step Progress Stepper (Display Only - No Navigation) */}
       <div className="hidden items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 text-xs md:flex">
-        <button
-          type="button"
-          onClick={() => onStepChange?.(1)}
+        {/* Step 1: Problem Details */}
+        <div
           className={cn(
-            "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-colors select-none",
+            "flex items-center gap-1.5 rounded-md px-3 py-1 font-medium select-none transition-colors",
             currentStep === 1
               ? "bg-background font-semibold text-foreground shadow-2xs"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground"
           )}
         >
           <FileText className="size-3.5" />
           <span>1. Problem Details</span>
-        </button>
+        </div>
 
         <ChevronRight className="size-3 text-muted-foreground/50" />
 
-        <button
-          type="button"
-          onClick={() => onStepChange?.(2)}
+        {/* Step 2: Solutions & Validation */}
+        <div
           className={cn(
-            "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-colors select-none",
+            "flex items-center gap-1.5 rounded-md px-3 py-1 font-medium select-none transition-colors",
             currentStep === 2
               ? "bg-background font-semibold text-foreground shadow-2xs"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground"
           )}
         >
           <Code2 className="size-3.5" />
           <span>2. Solutions & Validation</span>
-        </button>
+        </div>
+
+        <ChevronRight className="size-3 text-muted-foreground/50" />
+
+        {/* Step 3: Hidden Testcases */}
+        <div
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-3 py-1 font-medium select-none transition-colors",
+            currentStep === 3
+              ? "bg-background font-semibold text-foreground shadow-2xs"
+              : "text-muted-foreground"
+          )}
+        >
+          <FlaskConical className="size-3.5" />
+          <span>3. Hidden Testcases</span>
+        </div>
+
+        <ChevronRight className="size-3 text-muted-foreground/50" />
+
+        {/* Step 4: Review & Submit */}
+        <div
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-3 py-1 font-medium select-none transition-colors",
+            currentStep === 4
+              ? "bg-background font-semibold text-foreground shadow-2xs"
+              : "text-muted-foreground"
+          )}
+        >
+          <ClipboardCheck className="size-3.5" />
+          <span>4. Review & Submit</span>
+        </div>
       </div>
 
-      {/* Right: Actions */}
+      {/* Right: Step Indicator for Small Screens */}
       <div className="flex shrink-0 items-center gap-2">
-        {currentStep === 2 && onStepChange && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onStepChange(1)}
-            className="cursor-pointer gap-1.5 px-3 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-3.5" />
-            <span className="hidden sm:inline">Back to Details</span>
-          </Button>
-        )}
-
-        {onSubmit && (
-          <Button
-            type="button"
-            size="sm"
-            disabled={isSubmitting}
-            onClick={onSubmit}
-            className="cursor-pointer gap-1.5 px-4 text-xs font-semibold shadow-xs"
-          >
-            {isSubmitting ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Check className="size-3.5" />
-            )}
-            <span>
-              {isSubmitting
-                ? "Saving..."
-                : submitLabel ||
-                  (currentStep === 1
-                    ? "Next: Code & Solutions →"
-                    : "Save Problem")}
-            </span>
-          </Button>
-        )}
+        <Badge
+          variant="outline"
+          className="font-mono text-xs md:hidden border-border/80 text-muted-foreground"
+        >
+          Step {currentStep} of 4
+        </Badge>
       </div>
     </header>
-  )
+  );
 }
 
-export default StudioNavbar
+export default StudioNavbar;

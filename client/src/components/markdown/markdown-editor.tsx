@@ -471,9 +471,14 @@ export function MarkdownEditor({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onPaste={handlePaste}
+        style={{
+          height: height === "100%" ? "100%" : effectiveHeight,
+          maxHeight: height === "100%" ? "100%" : effectiveHeight,
+          minHeight: height === "100%" ? "100%" : effectiveMinHeight,
+        }}
         className={cn(
-          "group flex w-full flex-col text-foreground",
-          height === "100%" && "h-full min-h-0 flex-1",
+          "group flex w-full min-h-0 flex-col overflow-hidden text-foreground",
+          height === "100%" && "h-full flex-1 max-h-full",
           className
         )}
       >
@@ -502,7 +507,7 @@ export function MarkdownEditor({
         <div
           className={cn(
             "relative flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-colors focus-within:border-primary/60",
-            height === "100%" && "h-full min-h-0 flex-1"
+            height === "100%" && "h-full min-h-0 flex-1 max-h-full"
           )}
         >
           <MarkdownToolbar
@@ -518,8 +523,9 @@ export function MarkdownEditor({
 
           <div
             style={{
-              height: height === "100%" ? undefined : effectiveHeight,
-              minHeight: height === "100%" ? undefined : effectiveMinHeight,
+              height: height === "100%" ? "100%" : effectiveHeight,
+              minHeight: height === "100%" ? "100%" : effectiveMinHeight,
+              maxHeight: height === "100%" ? "100%" : effectiveHeight,
             }}
             className="relative min-h-0 w-full flex-1 overflow-hidden"
           >

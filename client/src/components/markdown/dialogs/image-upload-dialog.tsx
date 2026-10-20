@@ -280,50 +280,94 @@ function ImageEditorContent({
     }
   }, [originalSrc])
 
-  const handleFileSelect = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.add({
-        title: "Invalid File Type",
-        description: "Please select an image file (PNG, JPEG, WebP, GIF, SVG).",
-        type: "error",
-      })
-      return
+  const handleFileSelect = React.useCallback(
+    (file: File) => {
+      if (!file.type.startsWith("image/")) {
+        toast.add({
+          title: "Invalid File Type",
+          description:
+            "Please select an image file (PNG, JPEG, WebP, GIF, SVG).",
+          type: "error",
+        })
+        return
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        toast.add({
+          title: "File Too Large",
+          description: "Image size must be less than 10MB.",
+          type: "error",
+        })
+        return
+      }
+
+      if (originalSrc && originalSrc.startsWith("blob:")) {
+        URL.revokeObjectURL(originalSrc)
+      }
+
+      const url = URL.createObjectURL(file)
+      setSelectedFile(file)
+      setOriginalSrc(url)
+      setImageSrc(url)
+      setIsModified(false)
+      setCropBox({ x: 0, y: 0, w: 100, h: 100 })
+      setCropAspectPreset("free")
+
+      const img = new Image()
+      img.onload = () => {
+        setImgWidth(img.naturalWidth)
+        setImgHeight(img.naturalHeight)
+        setOriginalWidth(img.naturalWidth)
+        setOriginalHeight(img.naturalHeight)
+      }
+      img.src = url
+
+      if (!altText) {
+        setAltText(file.name.replace(/\.[^/.]+$/, ""))
+      }
+    },
+    [altText, originalSrc]
+  )
+
+  // Handle clipboard paste of image files anywhere inside the dialog
+  React.useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      // Don't intercept paste if user is typing in a text input (e.g. alt text or link url)
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA") &&
+        (target as HTMLInputElement).type !== "file"
+      ) {
+        return
+      }
+
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile()
+          if (file) {
+            e.preventDefault()
+            handleFileSelect(file)
+            toast.add({
+              title: "Image Pasted",
+              description: `Loaded image from clipboard`,
+              type: "success",
+            })
+            return
+          }
+        }
+      }
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.add({
-        title: "File Too Large",
-        description: "Image size must be less than 10MB.",
-        type: "error",
-      })
-      return
+    window.addEventListener("paste", handlePaste)
+    return () => {
+      window.removeEventListener("paste", handlePaste)
     }
-
-    if (originalSrc && originalSrc.startsWith("blob:")) {
-      URL.revokeObjectURL(originalSrc)
-    }
-
-    const url = URL.createObjectURL(file)
-    setSelectedFile(file)
-    setOriginalSrc(url)
-    setImageSrc(url)
-    setIsModified(false)
-    setCropBox({ x: 0, y: 0, w: 100, h: 100 })
-    setCropAspectPreset("free")
-
-    const img = new Image()
-    img.onload = () => {
-      setImgWidth(img.naturalWidth)
-      setImgHeight(img.naturalHeight)
-      setOriginalWidth(img.naturalWidth)
-      setOriginalHeight(img.naturalHeight)
-    }
-    img.src = url
-
-    if (!altText) {
-      setAltText(file.name.replace(/\.[^/.]+$/, ""))
-    }
-  }
+  }, [handleFileSelect])
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -878,7 +922,7 @@ function ImageEditorContent({
               <Upload className="size-6" />
             </div>
             <p className="text-sm font-semibold text-foreground">
-              Click to browse or drag &amp; drop an image
+              Click to browse, drag &amp; drop, or paste an image (Ctrl+V)
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               PNG, JPG, WebP, GIF, SVG up to 10MB

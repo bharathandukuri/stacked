@@ -27,6 +27,7 @@ export interface MonacoEditorProps {
   onChange?: (value: string) => void
   onBlur?: () => void
   language?: string
+  path?: string
   theme?: MonacoTheme
   readOnly?: boolean
   height?: string | number
@@ -60,6 +61,7 @@ export const MonacoEditor = React.forwardRef<
     defaultValue = "",
     onChange,
     language = "markdown",
+    path,
     theme: themeProp = "auto",
     readOnly = false,
     height = "320px",
@@ -278,6 +280,29 @@ export const MonacoEditor = React.forwardRef<
     onMount?.(editor, monacoInstance)
   }
 
+  // Synchronize controlled value changes to the editor instance model
+  React.useEffect(() => {
+    const editor = editorRef.current
+    if (editor && value !== undefined) {
+      const model = editor.getModel()
+      if (model && model.getValue() !== value) {
+        model.setValue(value)
+      }
+    }
+  }, [value])
+
+  // Synchronize language changes to the active model
+  React.useEffect(() => {
+    const editor = editorRef.current
+    const monacoInstance = monacoRef.current
+    if (editor && monacoInstance && language) {
+      const model = editor.getModel()
+      if (model) {
+        monacoInstance.editor.setModelLanguage(model, language)
+      }
+    }
+  }, [language])
+
   const defaultOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
     readOnly,
     wordWrap: "on",
@@ -286,7 +311,7 @@ export const MonacoEditor = React.forwardRef<
     lineHeight: 20,
     fontFamily:
       "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-    tabSize: 2,
+    tabSize: 4,
     insertSpaces: true,
     lineNumbers: "on",
     lineNumbersMinChars: 3,
@@ -296,7 +321,12 @@ export const MonacoEditor = React.forwardRef<
     automaticLayout: true,
     overviewRulerLanes: 0,
     hideCursorInOverviewRuler: true,
-    renderLineHighlight: "none",
+    renderLineHighlight: "all",
+    cursorBlinking: "smooth",
+    cursorSmoothCaretAnimation: "on",
+    smoothScrolling: true,
+    bracketPairColorization: { enabled: true },
+    formatOnPaste: false,
     padding: { top: 8, bottom: 8 },
     scrollbar: {
       vertical: "visible",
@@ -316,10 +346,11 @@ export const MonacoEditor = React.forwardRef<
       ref={containerRef}
       style={{
         height: typeof height === "number" ? `${height}px` : height,
+        maxHeight: typeof height === "number" ? `${height}px` : height === "100%" ? "100%" : height,
         width: typeof width === "number" ? `${width}px` : width,
       }}
       className={cn(
-        "relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background",
+        "relative flex h-full max-h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background",
         showBorder && "rounded-md border border-border/80",
         className
       )}
@@ -334,6 +365,7 @@ export const MonacoEditor = React.forwardRef<
           height="100%"
           width="100%"
           language={language}
+          path={path}
           value={value}
           defaultValue={defaultValue}
           theme={resolvedTheme}

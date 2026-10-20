@@ -28,6 +28,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -134,6 +135,27 @@ public class FileServiceImpl implements FileService {
 
         fileMetadataRepository.delete(metadata);
         log.info("File [{}] permanently deleted by owner [{}]", fileId, ownerId);
+    }
+
+    @Override
+    public void deleteFile(@NonNull String fileId) {
+        Optional<FileMetadata> optionalMetadata = fileMetadataRepository.findById(fileId);
+        if (optionalMetadata.isEmpty()) {
+            log.warn("File metadata not found for deletion: [{}]", fileId);
+            return;
+        }
+
+        FileMetadata metadata = optionalMetadata.get();
+        Path filePath = Paths.get(metadata.getStoragePath()).toAbsolutePath().normalize();
+        try {
+            Files.deleteIfExists(filePath);
+            log.debug("Deleted physical file at [{}]", filePath);
+        } catch (IOException e) {
+            log.warn("Failed to delete physical file at [{}]: {}", filePath, e.getMessage());
+        }
+
+        fileMetadataRepository.delete(metadata);
+        log.info("File [{}] permanently deleted by internal service", fileId);
     }
 
     @Override

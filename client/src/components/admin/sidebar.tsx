@@ -34,10 +34,10 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
       active: currentPath === "/admin",
     },
     {
-      title: "Problem Studio",
+      title: "Coding Problems",
       icon: Code2,
-      to: "/admin/coding-problem/studio/new",
-      active: currentPath.startsWith("/admin/coding-problem/studio"),
+      to: "/admin/coding-problem",
+      active: currentPath.startsWith("/admin/coding-problem"),
     },
     {
       title: "Assessments",

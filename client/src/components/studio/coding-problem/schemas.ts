@@ -3,11 +3,7 @@ import { DATABASE_LANGUAGES } from "./types";
 
 const DATABASE_LANGUAGE_IDS: ReadonlySet<string> = new Set([
   ...DATABASE_LANGUAGES.map((l) => l.id),
-  "mysql-8.0",
-  "postgresql-16",
-  "sqlite-3",
   "sqlite-3.45",
-  "mongodb-8.0",
 ]);
 
 /**

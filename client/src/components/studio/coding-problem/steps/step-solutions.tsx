@@ -3,9 +3,11 @@ import {
   useImperativeHandle,
   forwardRef,
   useCallback,
+  useMemo,
 } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight } from "lucide-react";
 import { toast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -13,14 +15,9 @@ import {
 } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 import { useCodingProblemStore } from "../store";
-import { getLanguageById } from "@/config/languages";
 import { IdeToolbar } from "./solutions/ide-toolbar";
 import { IdeEditorsPanel } from "./solutions/ide-editors-panel";
 import { IdeTestcasesPanel } from "./solutions/ide-testcases-panel";
-import {
-  codingProblemService,
-  buildCreateCodingProblemRequest,
-} from "@/services/coding-problem-service";
 
 export interface StepSolutionsHandle {
   submit: () => Promise<boolean>;
@@ -28,6 +25,7 @@ export interface StepSolutionsHandle {
 
 export interface StepSolutionsProps {
   onBack?: () => void;
+  onNext?: () => void;
   onSaved?: () => void;
   className?: string;
 }
@@ -35,136 +33,122 @@ export interface StepSolutionsProps {
 export const StepSolutions = forwardRef<
   StepSolutionsHandle,
   StepSolutionsProps
->(function StepSolutions({ onSaved, className }, ref) {
+>(function StepSolutions({ onBack, onSaved, className }, ref) {
   const values = useCodingProblemStore((state) => state.values);
-  const activeCodeLanguage = useCodingProblemStore(
-    (state) =>
-      state.activeCodeLanguage || values.languages[0] || "javascript-node-20"
+  const referenceSolution = useCodingProblemStore(
+    (state) => state.referenceSolution
   );
-  const starterCodes = useCodingProblemStore((state) => state.starterCodes);
-  const referenceSolutions = useCodingProblemStore(
-    (state) => state.referenceSolutions
+  const requireVerificationScript = useCodingProblemStore(
+    (state) => state.requireVerificationScript
   );
-  const solutionValidators = useCodingProblemStore(
-    (state) => state.solutionValidators
+  const verificationScript = useCodingProblemStore(
+    (state) => state.verificationScript
   );
-  const databaseSolution = useCodingProblemStore(
-    (state) => state.databaseSolution
-  );
-  const databaseValidationMode = useCodingProblemStore(
-    (state) => state.databaseValidationMode
-  );
-  const databaseCustomValidator = useCodingProblemStore(
-    (state) => state.databaseCustomValidator
+  const sampleTestcases = useCodingProblemStore(
+    (state) => state.sampleTestcases
   );
   const actions = useCodingProblemStore((state) => state.actions);
 
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const isDatabaseProblem = values.problemType === "DATABASE";
-  const selectedLanguages =
-    values.languages.length > 0 ? values.languages : ["javascript-node-20"];
+  const isDatabase = values.problemType === "DATABASE";
+  const supportedLanguages = useMemo(
+    () =>
+      values.supportedLanguageIds.length > 0
+        ? values.supportedLanguageIds
+        : values.languages.length > 0
+          ? values.languages
+          : ["javascript-node-20"],
+    [values.supportedLanguageIds, values.languages]
+  );
 
-  // Validation & problem creation via API
+  // =========================================================================
+  // Validate and Submit to Backend API
+  // =========================================================================
   const validateAndSave = useCallback(async (): Promise<boolean> => {
     setValidationError(null);
 
-    if (isDatabaseProblem) {
-      if (!databaseSolution.trim()) {
-        const msg = "Reference SQL query is required for database problems.";
+    // 1. Validate Reference Solution
+    if (!referenceSolution || !referenceSolution.trim()) {
+      actions.setActiveEditorMode("reference");
+      const msg = "Reference solution is required before saving.";
+      setValidationError(msg);
+      toast.add({
+        title: "Missing Reference Solution",
+        description: msg,
+        type: "error",
+      });
+      return false;
+    }
+
+    // 2. Validate Verification Script if enabled
+    if (requireVerificationScript) {
+      if (!verificationScript || !verificationScript.trim()) {
+        actions.setActiveEditorMode("verification");
+        const msg =
+          "Verification script source code cannot be empty when verification script is enabled.";
         setValidationError(msg);
         toast.add({
-          title: "Missing Reference Solution",
+          title: "Missing Verification Script",
           description: msg,
           type: "error",
         });
         return false;
       }
-    } else {
-      // Generic: ensure every selected language has both a solution and validator
-      for (const langId of selectedLanguages) {
-        const langName = getLanguageById(langId)?.name || langId;
-        const sol = referenceSolutions[langId]?.trim();
-        const val = solutionValidators[langId]?.trim();
-
-        if (!sol) {
-          actions.setActiveCodeLanguage(langId);
-          const msg = `Reference solution is missing for ${langName}. Please provide a solution.`;
-          setValidationError(msg);
-          toast.add({
-            title: "Missing Solution",
-            description: msg,
-            type: "error",
-          });
-          return false;
-        }
-
-        if (!val) {
-          actions.setActiveCodeLanguage(langId);
-          const msg = `Solution validator is missing for ${langName}. Please provide a validator script.`;
-          setValidationError(msg);
-          toast.add({
-            title: "Missing Validator",
-            description: msg,
-            type: "error",
-          });
-          return false;
-        }
-      }
     }
 
-    actions.setIsSaving(true);
-    try {
-      const payload = buildCreateCodingProblemRequest({
-        values,
-        activeCodeLanguage,
-        starterCodes,
-        referenceSolutions,
-        solutionValidators,
-        databaseSolution,
-        databaseValidationMode,
-        databaseCustomValidator,
-      });
-
-      const created = await codingProblemService.createCodingProblem(payload);
-      actions.setCreatedProblemId(created.id);
-      actions.setStatus(created.status || "UNPUBLISHED");
-
-      toast.add({
-        title: "Coding Problem Created Successfully",
-        description: `Problem "${created.title}" is saved as Unpublished. Reference solutions passed sandbox judge verification.`,
-        type: "success",
-      });
-
-      onSaved?.();
-      return true;
-    } catch (err: unknown) {
-      const error = err as { message?: string };
-      const msg =
-        error.message ||
-        "Failed to create coding problem. Please verify code syntax and judge execution.";
+    // 3. Validate Sample Testcases (Starter code is optional)
+    if (!sampleTestcases || sampleTestcases.length === 0) {
+      actions.setActiveTestcaseTab("testcases");
+      const msg = "At least one sample testcase is required.";
       setValidationError(msg);
       toast.add({
-        title: "Problem Creation Error",
+        title: "Missing Sample Testcase",
         description: msg,
         type: "error",
       });
       return false;
-    } finally {
-      actions.setIsSaving(false);
     }
+
+    for (let i = 0; i < sampleTestcases.length; i++) {
+      const tc = sampleTestcases[i];
+      const hasContent = isDatabase
+        ? Boolean(tc.dbInit?.trim())
+        : Boolean(tc.stdin?.trim());
+
+      if (!hasContent) {
+        actions.setActiveTestcaseTab("testcases");
+        actions.setActiveTestcaseIndex(i);
+        const msg = isDatabase
+          ? `Sample testcase ${i + 1} is missing database initialization SQL (dbInit).`
+          : `Sample testcase ${i + 1} is missing standard input (stdin).`;
+        setValidationError(msg);
+        toast.add({
+          title: "Incomplete Testcase",
+          description: msg,
+          type: "error",
+        });
+        return false;
+      }
+    }
+
+    // 4. Step 2 Validated: Advance to Step 3 (Hidden Testcases)
+    toast.add({
+      title: "Solutions & Validation Verified",
+      description: "Proceeding to Step 3: Hidden Testcases.",
+      type: "success",
+    });
+
+    if (onSaved) onSaved();
+    actions.setCurrentStep(3);
+    return true;
   }, [
-    isDatabaseProblem,
-    databaseSolution,
-    selectedLanguages,
-    referenceSolutions,
-    solutionValidators,
+    isDatabase,
+    referenceSolution,
+    requireVerificationScript,
+    verificationScript,
+    sampleTestcases,
     actions,
-    values,
-    activeCodeLanguage,
-    starterCodes,
-    databaseValidationMode,
-    databaseCustomValidator,
     onSaved,
   ]);
 
@@ -176,11 +160,23 @@ export const StepSolutions = forwardRef<
     [validateAndSave]
   );
 
+  // =========================================================================
+  // Run Button Handler
+  // =========================================================================
   const handleRunSampleTests = async () => {
-    await actions.runSampleTestcases(activeCodeLanguage);
+    if (sampleTestcases.length === 0) {
+      toast.add({
+        title: "Testcases Required",
+        description: "Please add at least one sample testcase.",
+        type: "error",
+      });
+      return;
+    }
+
+    await actions.runSampleTestcases();
     toast.add({
       title: "Test Run Completed",
-      description: `Executed against ${values.testCases.length} sample test case(s).`,
+      description: `Executed against ${sampleTestcases.length} sample testcase(s).`,
       type: "success",
     });
   };
@@ -210,20 +206,15 @@ export const StepSolutions = forwardRef<
       )}
 
       {/* Workbench Header Toolbar */}
-      <IdeToolbar
-        onRunTestcases={handleRunSampleTests}
-        onResetReferenceSolution={() =>
-          actions.resetReferenceSolutionToStarter(activeCodeLanguage)
-        }
-      />
+      <IdeToolbar onRunTestcases={handleRunSampleTests} />
 
-      {/* Main IDE Workspace: Split Panes (Left: Editors, Right: Testcases & Console) */}
+      {/* Main IDE Workspace: Split Panes (Left: Code Editors, Right: Testcases & Results) */}
       <div className="min-h-0 w-full flex-1 overflow-hidden">
         <ResizablePanelGroup orientation="horizontal" className="h-full w-full">
           {/* Left Panel: Code Editors */}
           <ResizablePanel
-            defaultSize={60}
-            minSize={35}
+            defaultSize={58}
+            minSize={30}
             className="flex flex-col overflow-hidden"
           >
             <IdeEditorsPanel />
@@ -231,15 +222,51 @@ export const StepSolutions = forwardRef<
 
           <ResizableHandle withHandle />
 
-          {/* Right Panel: Testcases & Verification Console */}
+          {/* Right Panel: Testcases and Results */}
           <ResizablePanel
-            defaultSize={40}
+            defaultSize={42}
             minSize={25}
             className="flex flex-col overflow-hidden border-l border-border/80"
           >
             <IdeTestcasesPanel onRunTestcases={handleRunSampleTests} />
           </ResizablePanel>
         </ResizablePanelGroup>
+      </div>
+
+      {/* Bottom Navigation & Next Bar */}
+      <div className="flex h-11 shrink-0 items-center justify-between border-t border-border/80 bg-background/95 px-4 backdrop-blur-xs">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="flex size-2 rounded-full bg-emerald-500" />
+          <span>
+            {values.problemType} Problem • {supportedLanguages.length} Language(s)
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (onBack) onBack();
+              else actions.setCurrentStep(1);
+            }}
+            className="cursor-pointer gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Back to Statement</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => validateAndSave()}
+            className="cursor-pointer gap-1.5 bg-primary px-5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
+          >
+            <span>Next: Hidden Testcases</span>
+            <ArrowRight className="size-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );

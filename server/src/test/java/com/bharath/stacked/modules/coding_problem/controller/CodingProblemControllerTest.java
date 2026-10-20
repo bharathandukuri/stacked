@@ -3,7 +3,12 @@ package com.bharath.stacked.modules.coding_problem.controller;
 import com.bharath.stacked.exception.GlobalExceptionHandler;
 import com.bharath.stacked.exception.ResourceNotFoundException;
 import com.bharath.stacked.modules.coding_problem.dto.request.CreateCodingProblemRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.PreviewTestcaseRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.RunCodingProblemPreviewRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.RunTestcaseGeneratorRequest;
 import com.bharath.stacked.modules.coding_problem.dto.request.TestcaseRequest;
+import com.bharath.stacked.modules.coding_problem.dto.response.PreviewRunResponse;
+import com.bharath.stacked.modules.coding_problem.dto.response.PreviewTestcaseResultResponse;
 import com.bharath.stacked.modules.coding_problem.dto.response.SupportedLanguageResponse;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
@@ -275,5 +280,260 @@ class CodingProblemControllerTest {
                 .andExpect(jsonPath("$.data[0].id").value("sqlite-3"));
 
         verify(codingProblemService).getSupportedLanguages(null);
+    }
+
+    @Test
+    @DisplayName("POST /api/coding-problem/run-preview returns 200 with preview execution results")
+    void runPreview_Success() throws Exception {
+        PreviewTestcaseResultResponse res1 = PreviewTestcaseResultResponse.builder()
+                .testCaseId("case-1")
+                .caseIndex(1)
+                .status("SUCCESS")
+                .stdout("output-1")
+                .exitCode(0L)
+                .runtimeMs(14L)
+                .memoryMb(18.2)
+                .build();
+
+        PreviewRunResponse previewResponse = PreviewRunResponse.builder()
+                .overallStatus("SUCCESS")
+                .totalExecutionTimeMs(14L)
+                .totalTestcases(1)
+                .passedTestcases(1)
+                .failedTestcases(0)
+                .logs("[Execution Summary]\nPassed: 1/1")
+                .results(List.of(res1))
+                .build();
+
+        when(codingProblemService.runPreview(any(RunCodingProblemPreviewRequest.class))).thenReturn(previewResponse);
+
+        String json = """
+                {
+                    "problemType": "GENERIC",
+                    "referenceSolutionLanguage": "python-3.12",
+                    "referenceSolution": "print('hello')",
+                    "requireVerificationScript": false,
+                    "testcases": [
+                        {
+                            "id": "case-1",
+                            "stdin": "input-1"
+                        }
+                    ]
+                }
+                """;
+
+        mockMvc.perform(post("/api/coding-problem/run-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Preview testcases executed successfully"))
+                .andExpect(jsonPath("$.data.overallStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.results[0].stdout").value("output-1"));
+
+        verify(codingProblemService).runPreview(any(RunCodingProblemPreviewRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/coding-problem/run-generator returns 200 on successful script execution")
+    void testRunGenerator_Success() throws Exception {
+        com.bharath.stacked.modules.coding_problem.dto.response.TestcaseGeneratorRunResponse generatorResponse =
+                com.bharath.stacked.modules.coding_problem.dto.response.TestcaseGeneratorRunResponse.builder()
+                        .status(com.bharath.stacked.modules.execution.enums.CodeExecutionStatus.SUCCESS)
+                        .stdout("10\n---STACKED_TESTCASE_DELIMITER---\n20\n")
+                        .stderr("")
+                        .exitCode(0L)
+                        .executionTimeMs(120L)
+                        .memoryUsageKb(15000L)
+                        .build();
+
+        when(codingProblemService.runGenerator(any(RunTestcaseGeneratorRequest.class))).thenReturn(generatorResponse);
+
+        String json = """
+                {
+                    "language": "python-3.12",
+                    "script": "print('10\\\\n---STACKED_TESTCASE_DELIMITER---\\\\n20')",
+                    "stdin": ""
+                }
+                """;
+
+        mockMvc.perform(post("/api/coding-problem/run-generator")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Generator script executed successfully"))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.stdout").value("10\n---STACKED_TESTCASE_DELIMITER---\n20\n"))
+                .andExpect(jsonPath("$.data.executionTimeMs").value(120));
+
+        verify(codingProblemService).runGenerator(any(RunTestcaseGeneratorRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/coding-problem/run-generator returns 400 when script is blank")
+    void testRunGenerator_BlankScript_Returns400() throws Exception {
+        String json = """
+                {
+                    "language": "python-3.12",
+                    "script": ""
+                }
+                """;
+
+        mockMvc.perform(post("/api/coding-problem/run-generator")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("GET /api/coding-problem returns paginated problem summaries")
+    void testGetCodingProblems_ReturnsPageResponse() throws Exception {
+        com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse summary =
+                com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse.builder()
+                        .id("prob-123")
+                        .title("Two Sum")
+                        .slug("two-sum")
+                        .status(CodingProblemStatus.PUBLISHED)
+                        .problemType(CodingProblemType.GENERIC)
+                        .difficulty(CodingProblemDifficulty.EASY)
+                        .supportedLanguageIds(List.of("python-3.12", "javascript-node-20"))
+                        .sampleTestCaseCount(2)
+                        .hiddenTestCaseCount(5)
+                        .build();
+
+        com.bharath.stacked.common.api.PageResponse<com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse> pageResponse =
+                com.bharath.stacked.common.api.PageResponse.of(List.of(summary), 0, 20, 1);
+
+        when(codingProblemService.findAll(any())).thenReturn(pageResponse);
+
+        mockMvc.perform(get("/api/coding-problem")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("status", "PUBLISHED")
+                        .param("search", "two"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.items[0].id").value("prob-123"))
+                .andExpect(jsonPath("$.data.items[0].title").value("Two Sum"))
+                .andExpect(jsonPath("$.data.items[0].slug").value("two-sum"))
+                .andExpect(jsonPath("$.data.items[0].status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1));
+
+        verify(codingProblemService).findAll(any());
+    }
+
+    @Test
+    @DisplayName("GET /api/coding-problem/{idOrSlug} returns problem details")
+    void testGetCodingProblem_ReturnsDetails() throws Exception {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-123")
+                .title("Two Sum")
+                .slug("two-sum")
+                .status(CodingProblemStatus.PUBLISHED)
+                .problemType(CodingProblemType.GENERIC)
+                .difficulty(CodingProblemDifficulty.EASY)
+                .statement("Solve two sum")
+                .build();
+
+        when(codingProblemService.findByIdOrSlug("two-sum")).thenReturn(problem);
+
+        mockMvc.perform(get("/api/coding-problem/two-sum"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value("prob-123"))
+                .andExpect(jsonPath("$.data.title").value("Two Sum"))
+                .andExpect(jsonPath("$.data.slug").value("two-sum"));
+
+        verify(codingProblemService).findByIdOrSlug("two-sum");
+    }
+
+    @Test
+    @DisplayName("PUT /api/coding-problem/{idOrSlug} updates problem successfully")
+    void testUpdateCodingProblem_Success() throws Exception {
+        CodingProblem updatedProblem = CodingProblem.builder()
+                .id("prob-123")
+                .title("Two Sum Updated")
+                .slug("two-sum")
+                .status(CodingProblemStatus.PUBLISHED)
+                .problemType(CodingProblemType.GENERIC)
+                .difficulty(CodingProblemDifficulty.MEDIUM)
+                .build();
+
+        when(codingProblemService.update(eq("prob-123"), any())).thenReturn(updatedProblem);
+
+        String json = """
+                {
+                    "title": "Two Sum Updated",
+                    "slug": "two-sum",
+                    "problemType": "GENERIC",
+                    "difficulty": "MEDIUM",
+                    "supportedLanguageIds": ["python-3.12"],
+                    "statement": "Updated statement",
+                    "topics": ["Array"],
+                    "hints": ["Hint 1"],
+                    "starterCode": { "python-3.12": "def solution(): pass" },
+                    "referenceSolutionLanguage": "python-3.12",
+                    "referenceSolution": "def solution(): return 42",
+                    "requireVerificationScript": false,
+                    "sampleTestcases": [
+                        { "stdin": "1\\n", "dbInit": null }
+                    ],
+                    "hiddenTestcases": [
+                        { "stdin": "2\\n", "dbInit": null }
+                    ]
+                }
+                """;
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/coding-problem/prob-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.title").value("Two Sum Updated"))
+                .andExpect(jsonPath("$.data.difficulty").value("MEDIUM"));
+
+        verify(codingProblemService).update(eq("prob-123"), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/coding-problem/check-slug with excludeId returns available")
+    void testCheckSlug_WithExcludeId() throws Exception {
+        when(codingProblemService.isSlugAvailable("two-sum", "prob-123")).thenReturn(true);
+
+        mockMvc.perform(get("/api/coding-problem/check-slug")
+                        .param("slug", "two-sum")
+                        .param("excludeId", "prob-123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.slug").value("two-sum"))
+                .andExpect(jsonPath("$.data.available").value(true));
+
+        verify(codingProblemService).isSlugAvailable("two-sum", "prob-123");
+    }
+
+    @Test
+    @DisplayName("DELETE /api/coding-problem/{idOrSlug} returns success")
+    void testDeleteCodingProblem_Success() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/coding-problem/prob-123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Coding problem deleted successfully"));
+
+        verify(codingProblemService).delete("prob-123");
+    }
+
+    @Test
+    @DisplayName("DELETE /api/coding-problem/{idOrSlug} returns 404 when not found")
+    void testDeleteCodingProblem_NotFound() throws Exception {
+        org.mockito.Mockito.doThrow(new ResourceNotFoundException("CodingProblem", "id or slug", "prob-999"))
+                .when(codingProblemService).delete("prob-999");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/coding-problem/prob-999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+
+        verify(codingProblemService).delete("prob-999");
     }
 }

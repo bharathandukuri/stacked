@@ -58,6 +58,11 @@ public interface FileService {
     void deleteFile(@NonNull String fileId, @NonNull String ownerId);
 
     /**
+     * Delete a file permanently for internal module consumers (e.g. Assessment/Coding Problem).
+     */
+    void deleteFile(@NonNull String fileId);
+
+    /**
      * Clean up expired temporary files from disk and database.
      * 
      * @return count of deleted files

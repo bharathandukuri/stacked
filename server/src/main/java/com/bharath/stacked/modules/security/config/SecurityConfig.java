@@ -61,7 +61,11 @@ public class SecurityConfig {
                                 "/api/files/*/content",
                                 "/api/coding-problem/check-slug",
                                 "/api/coding-problem/supported-languages",
-                                "/api/coding-problem/languages")
+                                "/api/coding-problem/languages",
+                                "/api/coding-problem/run-preview",
+                                "/api/coding-problem/test-run",
+                                "/api/coding-problem/run-generator",
+                                "/api/coding-problem/generate-testcases")
                         .permitAll()
                         .requestMatchers("/api/auth/me").authenticated()
                         .requestMatchers("/api/judge/**").authenticated()

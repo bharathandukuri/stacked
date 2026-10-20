@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   Sparkles,
@@ -38,11 +37,11 @@ import {
   type ProblemType,
 } from "../schemas";
 import { POPULAR_TOPIC_TAGS } from "../types";
+import { codingProblemService } from "@/services/coding-problem-service";
 import {
-  codingProblemService,
-  type SupportedLanguage,
-} from "@/services/coding-problem-service";
-import { getGenericLanguages, getDatabaseLanguages } from "@/config/languages";
+  getDatabaseLanguages,
+  getLanguageCheckboxOptions,
+} from "@/config/languages";
 
 /* ==========================================================================
    Difficulty Selector Component
@@ -275,44 +274,22 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
   const storeValues = useCodingProblemStore((state) => state.values);
   const setValues = useCodingProblemStore((state) => state.setValues);
   const setCurrentStep = useCodingProblemStore((state) => state.setCurrentStep);
+  const editingProblemId = useCodingProblemStore(
+    (state) => state.editingProblemId
+  );
   const storeSetUniqueSlug = useCodingProblemStore(
     (state) => state.setUniqueSlug
   );
 
-  // Fetch languages dynamically from API
-  const { data: apiLanguages, isLoading: isLoadingLanguages } = useQuery<
-    SupportedLanguage[]
-  >({
-    queryKey: ["coding-problem-supported-languages"],
-    queryFn: () => codingProblemService.getSupportedLanguages(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const genericLanguages = useMemo(() => {
-    if (apiLanguages && apiLanguages.length > 0) {
-      return apiLanguages
-        .filter((l) => l.type !== "DATABASE")
-        .map((l) => ({ id: l.id, name: l.name }));
-    }
-    return getGenericLanguages().map((l) => ({ id: l.id, name: l.name }));
-  }, [apiLanguages]);
-
-  const databaseLanguages = useMemo(() => {
-    if (apiLanguages && apiLanguages.length > 0) {
-      return apiLanguages
-        .filter((l) => l.type === "DATABASE")
-        .map((l) => ({ id: l.id, name: l.name }));
-    }
-    return getDatabaseLanguages().map((l) => ({ id: l.id, name: l.name }));
-  }, [apiLanguages]);
+  // Supported languages stored directly in frontend configuration
+  const databaseLanguages = useMemo(
+    () => getDatabaseLanguages().map((l) => ({ id: l.id, name: l.name })),
+    []
+  );
 
   const genericCheckboxOptions: readonly FormCheckboxOption[] = useMemo(
-    () =>
-      genericLanguages.map((l) => ({
-        value: l.id,
-        label: l.name,
-      })),
-    [genericLanguages]
+    () => getLanguageCheckboxOptions("GENERIC"),
+    []
   );
 
   // uniqueSlug boolean variable autofilled by debounced query
@@ -344,6 +321,25 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
     },
   });
 
+  // Sync form state if editingProblemId is set or changed
+  useEffect(() => {
+    if (editingProblemId) {
+      form.reset({
+        title: storeValues.title ?? "",
+        slug: storeValues.slug ?? "",
+        problemType: storeValues.problemType ?? "GENERIC",
+        difficulty: storeValues.difficulty ?? "EASY",
+        supportedLanguageIds:
+          storeValues.supportedLanguageIds?.length > 0
+            ? storeValues.supportedLanguageIds
+            : ["javascript-node-20", "python-3.12", "java-21"],
+        statement: storeValues.statement ?? "",
+        topics: storeValues.topics ?? [],
+        hints: storeValues.hints ?? [],
+      });
+    }
+  }, [editingProblemId]);
+
   // Watch slug reactively via store and trigger debounced query to set uniqueSlug
   const slugValue = useStore(form.store, (state) => state.values.slug);
 
@@ -363,7 +359,10 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
 
       setIsCheckingSlug(true);
       try {
-        const isAvailable = await codingProblemService.checkSlug(trimmed);
+        const isAvailable = await codingProblemService.checkSlug(
+          trimmed,
+          editingProblemId || undefined
+        );
         setUniqueSlug(isAvailable);
         storeSetUniqueSlug(isAvailable);
       } catch (err) {
@@ -376,7 +375,7 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [slugValue, storeSetUniqueSlug]);
+  }, [slugValue, editingProblemId, storeSetUniqueSlug]);
 
   // Generate slug from title
   const handleGenerateSlug = useCallback(() => {
@@ -614,12 +613,7 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
             selector={(state) => state.values.problemType}
             children={(problemType) => (
               <FieldSet className="gap-2">
-                {isLoadingLanguages ? (
-                  <div className="flex h-20 items-center justify-center rounded-xl border border-dashed text-xs text-muted-foreground">
-                    <Loader2 className="mr-2 size-4 animate-spin text-primary" />
-                    Loading supported languages...
-                  </div>
-                ) : problemType === "DATABASE" ? (
+                {problemType === "DATABASE" ? (
                   <form.AppField
                     name="supportedLanguageIds"
                     children={() => (

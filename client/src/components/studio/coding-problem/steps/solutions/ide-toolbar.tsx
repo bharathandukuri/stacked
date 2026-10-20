@@ -1,186 +1,230 @@
+import { useState } from "react";
 import {
   Play,
   Loader2,
+  FileCode,
+  Sparkles,
+  ShieldCheck,
+  ShieldAlert,
+  Gauge,
   CheckCircle2,
-  AlertCircle,
-  RotateCcw,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-import { useCodingProblemStore } from "../../store"
-import { getLanguageById } from "@/config/languages"
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useCodingProblemStore } from "../../store";
+import { ExecutionLimitsDialog } from "./execution-limits-dialog";
 
 export interface IdeToolbarProps {
-  onRunTestcases: () => void
-  onResetReferenceSolution?: () => void
-  className?: string
+  onRunTestcases: () => void;
+  className?: string;
 }
 
-export function IdeToolbar({
-  onRunTestcases,
-  onResetReferenceSolution,
-  className,
-}: IdeToolbarProps) {
-  const values = useCodingProblemStore((state) => state.values)
-  const activeCodeLanguage = useCodingProblemStore(
-    (state) =>
-      state.activeCodeLanguage || values.languages[0] || "javascript-node-20"
-  )
-  const isTesting = useCodingProblemStore((state) => state.isTesting)
-  const referenceSolutions = useCodingProblemStore(
-    (state) => state.referenceSolutions
-  )
-  const solutionValidators = useCodingProblemStore(
-    (state) => state.solutionValidators
-  )
-  const databaseSolution = useCodingProblemStore(
-    (state) => state.databaseSolution
-  )
-  const actions = useCodingProblemStore((state) => state.actions)
+export function IdeToolbar({ onRunTestcases, className }: IdeToolbarProps) {
+  const values = useCodingProblemStore((state) => state.values);
+  const activeEditorMode = useCodingProblemStore(
+    (state) => state.activeEditorMode
+  );
+  const starterCodes = useCodingProblemStore((state) => state.starterCodes);
+  const referenceSolution = useCodingProblemStore(
+    (state) => state.referenceSolution
+  );
+  const requireVerificationScript = useCodingProblemStore(
+    (state) => state.requireVerificationScript
+  );
+  const executionConstraints = useCodingProblemStore(
+    (state) => state.executionConstraints
+  );
+  const isTesting = useCodingProblemStore((state) => state.isTesting);
+  const actions = useCodingProblemStore((state) => state.actions);
 
-  const isDatabase = values.problemType === "DATABASE"
-  const selectedLanguages =
-    values.languages.length > 0 ? values.languages : ["javascript-node-20"]
+  const [limitsDialogOpen, setLimitsDialogOpen] = useState(false);
 
-  const isLanguageReady = (langId: string) => {
-    if (isDatabase) {
-      return Boolean(databaseSolution.trim())
-    }
-    const sol = referenceSolutions[langId]?.trim()
-    const val = solutionValidators[langId]?.trim()
-    return Boolean(sol && val)
-  }
+  const supportedLanguages =
+    values.supportedLanguageIds.length > 0
+      ? values.supportedLanguageIds
+      : values.languages.length > 0
+        ? values.languages
+        : ["javascript-node-20"];
 
-  const completedCount = selectedLanguages.filter(isLanguageReady).length
-  const totalCount = selectedLanguages.length
-  const allReady = completedCount === totalCount
+  // Count starter codes filled
+  const starterCodesFilled = supportedLanguages.filter(
+    (langId) => Boolean(starterCodes[langId]?.trim())
+  ).length;
+
+  const isRefSolutionFilled = Boolean(referenceSolution.trim());
+
+  // Count configured constraints
+  const configuredLimitsCount = Object.keys(executionConstraints).length;
 
   return (
-    <div
-      className={cn(
-        "flex h-11 w-full shrink-0 items-center justify-between border-b border-border/80 bg-card/60 px-3 backdrop-blur-xs select-none",
-        className
-      )}
-    >
-      {/* Left: Language Tabs */}
-      <div className="no-scrollbar flex min-w-0 items-center gap-1.5 overflow-x-auto py-1">
-        {selectedLanguages.map((langId) => {
-          const lang = getLanguageById(langId)
-          const isActive = activeCodeLanguage === langId
-          const ready = isLanguageReady(langId)
-
-          return (
+    <>
+      <div
+        className={cn(
+          "flex h-12 w-full shrink-0 items-center justify-between border-b border-border/80 bg-card/60 px-3 backdrop-blur-xs select-none",
+          className
+        )}
+      >
+        {/* Left: Mode Switcher Tabs */}
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex items-center rounded-lg border border-border/70 bg-muted/30 p-0.5 text-xs">
+            {/* Starter Code Mode */}
             <button
-              key={langId}
               type="button"
-              onClick={() => actions.setActiveCodeLanguage(langId)}
+              onClick={() => actions.setActiveEditorMode("starter")}
               className={cn(
-                "group flex h-7.5 shrink-0 cursor-pointer items-center gap-2 rounded-md px-2.5 text-xs font-medium transition-all",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-2xs"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 font-medium transition-colors select-none",
+                activeEditorMode === "starter"
+                  ? "bg-background text-foreground shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               )}
             >
-              <span className="truncate">{lang?.name || langId}</span>
-              {ready ? (
-                <CheckCircle2
-                  className={cn(
-                    "size-3.5 shrink-0",
-                    isActive ? "text-primary-foreground" : "text-emerald-500"
-                  )}
-                />
+              <FileCode className="size-3.5 text-primary" />
+              <span>Starter Code</span>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                ({starterCodesFilled}/{supportedLanguages.length})
+              </span>
+            </button>
+
+            {/* Reference Solution Mode */}
+            <button
+              type="button"
+              onClick={() => actions.setActiveEditorMode("reference")}
+              className={cn(
+                "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 font-medium transition-colors select-none",
+                activeEditorMode === "reference"
+                  ? "bg-background text-foreground shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              <Sparkles className="size-3.5 text-emerald-500" />
+              <span>Reference Solution</span>
+              {isRefSolutionFilled ? (
+                <CheckCircle2 className="size-3 text-emerald-500" />
               ) : (
-                <span
-                  className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    isActive ? "bg-primary-foreground/70" : "bg-amber-500"
-                  )}
-                />
+                <span className="size-1.5 rounded-full bg-amber-500" />
               )}
             </button>
-          )
-        })}
-      </div>
 
-      {/* Right: Actions & Status */}
-      <div className="flex shrink-0 items-center gap-2 pl-3">
-        {/* Readiness Pill */}
-        <Badge
-          variant="outline"
-          className={cn(
-            "hidden h-6 gap-1 px-2 font-mono text-[10px] sm:inline-flex",
-            allReady
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-          )}
-        >
-          {allReady ? (
-            <>
-              <CheckCircle2 className="size-3" />
-              <span>
-                All Ready ({completedCount}/{totalCount})
-              </span>
-            </>
-          ) : (
-            <>
-              <AlertCircle className="size-3" />
-              <span>
-                {completedCount}/{totalCount} Completed
-              </span>
-            </>
-          )}
-        </Badge>
+            {/* Verification Script Mode */}
+            <button
+              type="button"
+              onClick={() => actions.setActiveEditorMode("verification")}
+              className={cn(
+                "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 font-medium transition-colors select-none",
+                activeEditorMode === "verification"
+                  ? "bg-background text-foreground shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              {requireVerificationScript ? (
+                <ShieldCheck className="size-3.5 text-blue-500" />
+              ) : (
+                <ShieldAlert className="size-3.5 text-muted-foreground/60" />
+              )}
+              <span>Verification Script</span>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "h-4 px-1 text-[9px] font-mono leading-none",
+                  requireVerificationScript
+                    ? "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                    : "border-border/60 text-muted-foreground/70"
+                )}
+              >
+                {requireVerificationScript ? "ON" : "OFF"}
+              </Badge>
+            </button>
+          </div>
 
-        {/* Optional Reset Shortcut */}
-        {!isDatabase && onResetReferenceSolution && (
+          {/* Toggle for Verification Script */}
+          {activeEditorMode === "verification" && (
+            <>
+              <div className="hidden h-5 w-px bg-border/80 sm:block" />
+              <div className="flex items-center gap-1.5 text-xs">
+                <Switch
+                  id="enable-verifier-switch"
+                  checked={requireVerificationScript}
+                  onCheckedChange={actions.setRequireVerificationScript}
+                />
+                <label
+                  htmlFor="enable-verifier-switch"
+                  className="cursor-pointer text-[11px] font-medium text-foreground select-none"
+                >
+                  Enable Script
+                </label>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right: Actions (Execution Limits & Single Run Button) */}
+        <div className="flex shrink-0 items-center gap-2 pl-3">
+          {/* Execution Limits Configuration Trigger */}
           <Tooltip>
             <TooltipTrigger
               render={
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="xs"
-                  onClick={onResetReferenceSolution}
-                  className="h-7 cursor-pointer text-muted-foreground hover:text-foreground"
+                  onClick={() => setLimitsDialogOpen(true)}
+                  className="h-7 cursor-pointer gap-1.5 px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground"
                 >
-                  <RotateCcw className="size-3.5" />
-                  <span className="hidden text-[11px] lg:inline">
-                    Reset Solution
-                  </span>
+                  <Gauge className="size-3.5 text-primary" />
+                  <span className="hidden sm:inline">Limits</span>
+                  <Badge
+                    variant="secondary"
+                    className="h-4 px-1 text-[9px] font-mono leading-none"
+                  >
+                    {configuredLimitsCount}
+                  </Badge>
                 </Button>
               }
             />
-            <TooltipContent>Reset solution code to starter stub</TooltipContent>
+            <TooltipContent>
+              Configure CPU time & memory execution limits per language
+            </TooltipContent>
           </Tooltip>
-        )}
 
-        {/* Run Reference Solution Button */}
-        <Button
-          type="button"
-          size="xs"
-          disabled={isTesting}
-          onClick={onRunTestcases}
-          className="h-7.5 cursor-pointer gap-1.5 px-3 text-xs font-semibold shadow-xs"
-        >
-          {isTesting ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin" />
-              <span>Running...</span>
-            </>
-          ) : (
-            <>
-              <Play className="size-3.5 fill-current" />
-              <span>Run Solution</span>
-            </>
-          )}
-        </Button>
+          {/* Single Run Button */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="xs"
+                  disabled={isTesting}
+                  onClick={onRunTestcases}
+                  className="h-7 cursor-pointer gap-1.5 px-3 text-xs font-semibold shadow-xs bg-emerald-600 text-white hover:bg-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  {isTesting ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Play className="size-3.5 fill-current" />
+                  )}
+                  <span>{isTesting ? "Executing..." : "Run"}</span>
+                </Button>
+              }
+            />
+            <TooltipContent>
+              Execute reference solution against sample testcases
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
-    </div>
-  )
+
+      {/* Execution Limits Dialog */}
+      <ExecutionLimitsDialog
+        open={limitsDialogOpen}
+        onOpenChange={setLimitsDialogOpen}
+      />
+    </>
+  );
 }

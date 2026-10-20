@@ -1,8 +1,8 @@
 /**
  * Language Configuration
  *
- * Lightweight client configuration for supported programming languages and compilers.
- * Language entries are flattened with descriptive names like "Java (OpenJDK 21)".
+ * Single source of truth for programming languages and compilers supported and registered
+ * at the backend (LanguageFactoryImpl & LanguageRegistryImpl).
  */
 
 export type ProblemCategory = "GENERIC" | "DATABASE"
@@ -18,24 +18,15 @@ export interface LanguageConfig {
 }
 
 export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
-  // --- Generic Algorithmic Languages ---
+  // --- Generic Algorithmic Languages (5 supported by backend) ---
   {
     id: "javascript-node-20",
     name: "JavaScript (Node.js 20)",
     category: "GENERIC",
     monacoLanguage: "javascript",
     defaultExtension: ".js",
-    defaultStarterCode: `/**\n * @param {string} input\n * @return {any}\n */\nfunction solve(input) {\n    // Write your solution here\n    \n}\n`,
-    defaultValidatorCode: `// Solution Validator (reads input and actual output separated by delimiter)\nconst fs = require('fs');\n\nconst raw = fs.readFileSync(0, 'utf-8');\nconst [input, actualOutput] = raw.split('\\n---OUTPUT---\\n');\n\n// Assert validity (exit with 0 on pass, non-zero on fail)\nif (actualOutput === undefined || actualOutput.trim() === '') {\n    process.exit(1);\n}\nprocess.exit(0);\n`,
-  },
-  {
-    id: "typescript-node-20",
-    name: "TypeScript (Node.js 20)",
-    category: "GENERIC",
-    monacoLanguage: "typescript",
-    defaultExtension: ".ts",
-    defaultStarterCode: `function solve(input: string): any {\n    // Write your solution here\n    \n}\n`,
-    defaultValidatorCode: `import * as fs from 'fs';\n\nconst raw = fs.readFileSync(0, 'utf-8');\nconst [input, actualOutput] = raw.split('\\n---OUTPUT---\\n');\n\nif (actualOutput === undefined || actualOutput.trim() === '') {\n    process.exit(1);\n}\nprocess.exit(0);\n`,
+    defaultStarterCode: `// File: solution.js\n`,
+    defaultValidatorCode: `// File: verifier.js\n`,
   },
   {
     id: "python-3.12",
@@ -43,17 +34,8 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "python",
     defaultExtension: ".py",
-    defaultStarterCode: `class Solution:\n    def solve(self, input_data: str):\n        # Write your solution here\n        pass\n`,
-    defaultValidatorCode: `import sys\n\nraw = sys.stdin.read()\nparts = raw.split('\\n---OUTPUT---\\n')\ninput_data = parts[0]\nactual_output = parts[1] if len(parts) > 1 else ''\n\n# Assert validity (exit with 0 on pass, non-zero on fail)\nif not actual_output.strip():\n    sys.exit(1)\nsys.exit(0)\n`,
-  },
-  {
-    id: "python-pypy",
-    name: "Python (PyPy 3.10)",
-    category: "GENERIC",
-    monacoLanguage: "python",
-    defaultExtension: ".py",
-    defaultStarterCode: `class Solution:\n    def solve(self, input_data: str):\n        # Write your solution here\n        pass\n`,
-    defaultValidatorCode: `import sys\n\nraw = sys.stdin.read()\nparts = raw.split('\\n---OUTPUT---\\n')\ninput_data = parts[0]\nactual_output = parts[1] if len(parts) > 1 else ''\n\nif not actual_output.strip():\n    sys.exit(1)\nsys.exit(0)\n`,
+    defaultStarterCode: `# File: solution.py\n`,
+    defaultValidatorCode: `# File: verifier.py\n`,
   },
   {
     id: "java-21",
@@ -61,17 +43,8 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "java",
     defaultExtension: ".java",
-    defaultStarterCode: `class Solution {\n    public Object solve(String input) {\n        // Write your solution here\n        return null;\n    }\n}\n`,
-    defaultValidatorCode: `import java.util.Scanner;\n\npublic class Validator {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        StringBuilder sb = new StringBuilder();\n        while (scanner.hasNextLine()) {\n            sb.append(scanner.nextLine()).append("\\n");\n        }\n        String raw = sb.toString();\n        String[] parts = raw.split("\\n---OUTPUT---\\n");\n        if (parts.length < 2 || parts[1].trim().isEmpty()) {\n            System.exit(1);\n        }\n        System.exit(0);\n    }\n}\n`,
-  },
-  {
-    id: "java-17",
-    name: "Java (OpenJDK 17)",
-    category: "GENERIC",
-    monacoLanguage: "java",
-    defaultExtension: ".java",
-    defaultStarterCode: `class Solution {\n    public Object solve(String input) {\n        // Write your solution here\n        return null;\n    }\n}\n`,
-    defaultValidatorCode: `import java.util.Scanner;\n\npublic class Validator {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        StringBuilder sb = new StringBuilder();\n        while (scanner.hasNextLine()) {\n            sb.append(scanner.nextLine()).append("\\n");\n        }\n        String raw = sb.toString();\n        String[] parts = raw.split("\\n---OUTPUT---\\n");\n        if (parts.length < 2 || parts[1].trim().isEmpty()) {\n            System.exit(1);\n        }\n        System.exit(0);\n    }\n}\n`,
+    defaultStarterCode: `// File: Solution.java\n`,
+    defaultValidatorCode: `// File: Verifier.java\n`,
   },
   {
     id: "cpp-23",
@@ -79,17 +52,8 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "cpp",
     defaultExtension: ".cpp",
-    defaultStarterCode: `#include <iostream>\n#include <string>\n\nclass Solution {\npublic:\n    void solve(const std::string& input) {\n        // Write your solution here\n    }\n};\n`,
-    defaultValidatorCode: `#include <iostream>\n#include <string>\n\nint main() {\n    std::string line, raw;\n    while (std::getline(std::cin, line)) {\n        raw += line + "\\n";\n    }\n    std::string delimiter = "\\n---OUTPUT---\\n";\n    size_t pos = raw.find(delimiter);\n    if (pos == std::string::npos) {\n        return 1;\n    }\n    return 0;\n}\n`,
-  },
-  {
-    id: "cpp-clang-17",
-    name: "C++ (Clang 17)",
-    category: "GENERIC",
-    monacoLanguage: "cpp",
-    defaultExtension: ".cpp",
-    defaultStarterCode: `#include <iostream>\n#include <string>\n\nclass Solution {\npublic:\n    void solve(const std::string& input) {\n        // Write your solution here\n    }\n};\n`,
-    defaultValidatorCode: `#include <iostream>\n#include <string>\n\nint main() {\n    std::string line, raw;\n    while (std::getline(std::cin, line)) {\n        raw += line + "\\n";\n    }\n    std::string delimiter = "\\n---OUTPUT---\\n";\n    size_t pos = raw.find(delimiter);\n    if (pos == std::string::npos) {\n        return 1;\n    }\n    return 0;\n}\n`,
+    defaultStarterCode: `// File: solution.cpp\n`,
+    defaultValidatorCode: `// File: verifier.cpp\n`,
   },
   {
     id: "c-17",
@@ -97,46 +61,19 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "c",
     defaultExtension: ".c",
-    defaultStarterCode: `#include <stdio.h>\n#include <stdlib.h>\n\nvoid solve(const char* input) {\n    // Write your solution here\n}\n`,
-    defaultValidatorCode: `#include <stdio.h>\n#include <string.h>\n\nint main() {\n    return 0;\n}\n`,
-  },
-  {
-    id: "csharp-dotnet-8",
-    name: "C# (.NET 8.0)",
-    category: "GENERIC",
-    monacoLanguage: "csharp",
-    defaultExtension: ".cs",
-    defaultStarterCode: `public class Solution {\n    public void Solve(string input) {\n        // Write your solution here\n    }\n}\n`,
-    defaultValidatorCode: `using System;\n\npublic class Validator {\n    public static int Main() {\n        string input = Console.In.ReadToEnd();\n        string[] parts = input.Split("\\n---OUTPUT---\\n");\n        if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[1])) return 1;\n        return 0;\n    }\n}\n`,
-  },
-  {
-    id: "go-1.22",
-    name: "Go (1.22)",
-    category: "GENERIC",
-    monacoLanguage: "go",
-    defaultExtension: ".go",
-    defaultStarterCode: `package main\n\nfunc solve(input string) {\n    // Write your solution here\n}\n`,
-    defaultValidatorCode: `package main\n\nimport (\n    "io"\n    "os"\n    "strings"\n)\n\nfunc main() {\n    bytes, _ := io.ReadAll(os.Stdin)\n    parts := strings.Split(string(bytes), "\\n---OUTPUT---\\n")\n    if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {\n        os.Exit(1)\n    }\n    os.Exit(0)\n}\n`,
-  },
-  {
-    id: "rust-1.76",
-    name: "Rust (1.76)",
-    category: "GENERIC",
-    monacoLanguage: "rust",
-    defaultExtension: ".rs",
-    defaultStarterCode: `impl Solution {\n    pub fn solve(input: String) {\n        // Write your solution here\n    }\n}\n`,
-    defaultValidatorCode: `use std::io::{self, Read};\n\nfn main() {\n    let mut buffer = String::new();\n    io::stdin().read_to_string(&mut buffer).unwrap();\n    let parts: Vec<&str> = buffer.split("\\n---OUTPUT---\\n").collect();\n    if parts.len() < 2 || parts[1].trim().is_empty() {\n        std::process::exit(1);\n    }\n    std::process::exit(0);\n}\n`,
+    defaultStarterCode: `// File: solution.c\n`,
+    defaultValidatorCode: `// File: verifier.c\n`,
   },
 
-  // --- Database SQL Engines ---
+  // --- Database Engines (4 supported by backend) ---
   {
     id: "mysql-8.0",
     name: "MySQL (8.0)",
     category: "DATABASE",
     monacoLanguage: "sql",
     defaultExtension: ".sql",
-    defaultStarterCode: "",
-    defaultValidatorCode: `-- Reference SQL query for MySQL (8.0)\nSELECT\n    *\nFROM\n    Person;\n`,
+    defaultStarterCode: `-- File: solution.sql\n`,
+    defaultValidatorCode: `-- File: verifier.sql\n`,
   },
   {
     id: "postgresql-16",
@@ -144,17 +81,26 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "DATABASE",
     monacoLanguage: "sql",
     defaultExtension: ".sql",
-    defaultStarterCode: "",
-    defaultValidatorCode: `-- Reference SQL query for PostgreSQL (16)\nSELECT\n    *\nFROM\n    Person;\n`,
+    defaultStarterCode: `-- File: solution.sql\n`,
+    defaultValidatorCode: `-- File: verifier.sql\n`,
   },
   {
-    id: "sqlite-3.45",
+    id: "sqlite-3",
     name: "SQLite (3.45)",
     category: "DATABASE",
     monacoLanguage: "sql",
     defaultExtension: ".sql",
-    defaultStarterCode: "",
-    defaultValidatorCode: `-- Reference SQL query for SQLite (3.45)\nSELECT\n    *\nFROM\n    Person;\n`,
+    defaultStarterCode: `-- File: solution.sql\n`,
+    defaultValidatorCode: `-- File: verifier.sql\n`,
+  },
+  {
+    id: "mongodb-8.0",
+    name: "MongoDB (8.0)",
+    category: "DATABASE",
+    monacoLanguage: "javascript",
+    defaultExtension: ".js",
+    defaultStarterCode: `// File: solution.js\n`,
+    defaultValidatorCode: `// File: verifier.js\n`,
   },
 ] as const
 
@@ -175,14 +121,25 @@ export function getDatabaseLanguages(): LanguageConfig[] {
 }
 
 export function getLanguageById(id: string): LanguageConfig | undefined {
-  return LANGUAGE_REGISTRY.find((lang) => lang.id === id)
+  const normalized = id.trim().toLowerCase()
+  if (
+    normalized === "sqlite-3.45" ||
+    normalized === "sqlite" ||
+    normalized === "sqlite3"
+  ) {
+    return LANGUAGE_REGISTRY.find((lang) => lang.id === "sqlite-3")
+  }
+  if (normalized === "mongodb" || normalized === "mongo") {
+    return LANGUAGE_REGISTRY.find((lang) => lang.id === "mongodb-8.0")
+  }
+  return LANGUAGE_REGISTRY.find((lang) => lang.id === normalized)
 }
 
 export function getDefaultLanguageIds(category: ProblemCategory): string[] {
   if (category === "DATABASE") {
-    return ["mysql-8.0", "postgresql-16", "sqlite-3.45"]
+    return ["postgresql-16"]
   }
-  return ["javascript-node-20", "typescript-node-20", "python-3.12"]
+  return ["javascript-node-20", "python-3.12", "java-21"]
 }
 
 export function getLanguageCheckboxOptions(category: ProblemCategory) {
@@ -192,4 +149,96 @@ export function getLanguageCheckboxOptions(category: ProblemCategory) {
     value: lang.id,
     label: lang.name,
   }))
+}
+
+/* ==========================================================================
+   Filename and Constraint Utilities (Matching LanguageFileNameRegistry)
+   ========================================================================== */
+
+export function resolveReferenceSolutionFileName(langId: string): string {
+  const id = langId.toLowerCase().trim()
+  if (id === "java-21") return "Solution.java"
+  if (id === "cpp-23") return "solution.cpp"
+  if (id === "c-17") return "solution.c"
+  if (id === "python-3.12") return "solution.py"
+  if (id === "javascript-node-20") return "solution.js"
+  if (
+    id === "sqlite-3" ||
+    id === "sqlite-3.45" ||
+    id === "postgresql-16" ||
+    id === "mysql-8.0"
+  ) {
+    return "solution.sql"
+  }
+  if (id === "mongodb-8.0") {
+    return "solution.js"
+  }
+  const lang = getLanguageById(langId)
+  return lang ? `solution${lang.defaultExtension}` : "solution.txt"
+}
+
+export function resolveVerificationScriptFileName(langId: string): string {
+  const id = langId.toLowerCase().trim()
+  if (id === "java-21") return "Verifier.java"
+  if (id === "cpp-23") return "verifier.cpp"
+  if (id === "c-17") return "verifier.c"
+  if (id === "python-3.12") return "verifier.py"
+  if (id === "javascript-node-20" || id === "mongodb-8.0") return "verifier.js"
+  if (
+    id === "sqlite-3" ||
+    id === "sqlite-3.45" ||
+    id === "postgresql-16" ||
+    id === "mysql-8.0"
+  ) {
+    return "verifier.sql"
+  }
+  const lang = getLanguageById(langId)
+  return lang ? `verifier${lang.defaultExtension}` : "verifier.txt"
+}
+
+export function resolveStarterCodeFileName(langId: string): string {
+  return resolveReferenceSolutionFileName(langId)
+}
+
+export function resolveGeneratorScriptFileName(langId: string): string {
+  const id = langId.toLowerCase().trim()
+  if (id === "java-21") return "Generator.java"
+  if (id === "cpp-23") return "generator.cpp"
+  if (id === "c-17") return "generator.c"
+  if (id === "python-3.12") return "generator.py"
+  if (id === "javascript-node-20") return "generator.js"
+  const lang = getLanguageById(langId)
+  return lang ? `generator${lang.defaultExtension}` : "generator.txt"
+}
+
+export function resolveDatabaseInitFileName(langId: string): string {
+  const id = langId.toLowerCase().trim()
+  if (id === "mongodb-8.0" || id.includes("mongo")) return "init.js"
+  return "init.sql"
+}
+
+export function getDefaultExecutionConstraints(langId: string): {
+  timeLimitMs: number
+  memoryLimitKb: number
+} {
+  const id = langId.toLowerCase().trim()
+  if (id === "java-21") {
+    return { timeLimitMs: 2000, memoryLimitKb: 262144 } // 2s, 256MB
+  }
+  if (id === "cpp-23" || id === "c-17") {
+    return { timeLimitMs: 1000, memoryLimitKb: 131072 } // 1s, 128MB
+  }
+  if (id === "python-3.12") {
+    return { timeLimitMs: 3000, memoryLimitKb: 262144 } // 3s, 256MB
+  }
+  if (id === "javascript-node-20") {
+    return { timeLimitMs: 2000, memoryLimitKb: 262144 } // 2s, 256MB
+  }
+  if (id === "sqlite-3" || id === "sqlite-3.45") {
+    return { timeLimitMs: 5000, memoryLimitKb: 262144 } // 5s, 256MB
+  }
+  if (id === "postgresql-16" || id === "mysql-8.0" || id === "mongodb-8.0") {
+    return { timeLimitMs: 5000, memoryLimitKb: 524288 } // 5s, 512MB
+  }
+  return { timeLimitMs: 2000, memoryLimitKb: 262144 }
 }

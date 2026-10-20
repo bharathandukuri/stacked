@@ -4,14 +4,23 @@ import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
 import com.bharath.stacked.modules.coding_problem.dto.request.CreateCodingProblemRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.CustomTestcaseRequest;
 import com.bharath.stacked.modules.coding_problem.dto.request.ExecutionConstraintRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.RunSampleTestcasesRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.RunTestcaseGeneratorRequest;
+import com.bharath.stacked.modules.coding_problem.dto.request.SubmitCodingProblemRequest;
 import com.bharath.stacked.modules.coding_problem.dto.request.TestcaseRequest;
+import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemExecutionResponse;
+import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemTestcaseResultResponse;
 import com.bharath.stacked.modules.coding_problem.dto.response.SupportedLanguageResponse;
+import com.bharath.stacked.modules.coding_problem.dto.response.TestcaseGeneratorRunResponse;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
 import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService;
+import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.CandidateTestcaseItem;
 import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.InitializedTestcases;
+import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.JudgeCandidateExecutionRequest;
 import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService.JudgeInitializationRequest;
 import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
 import com.bharath.stacked.modules.coding_problem.model.TestCase;
@@ -20,6 +29,7 @@ import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
 import com.bharath.stacked.modules.execution.resolver.ExecutionConstraintResolver;
 import com.bharath.stacked.modules.language.Language;
 import com.bharath.stacked.modules.language.LanguageType;
+import com.bharath.stacked.modules.file.service.FileService;
 import com.bharath.stacked.modules.language.registry.LanguageRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -66,6 +76,12 @@ class CodingProblemServiceImplTest {
 
     @Mock
     private Language sqliteLanguage;
+
+    @Mock
+    private com.bharath.stacked.modules.file.service.FileService fileService;
+
+    @Mock
+    private org.springframework.data.mongodb.core.MongoTemplate mongoTemplate;
 
     @InjectMocks
     private CodingProblemServiceImpl codingProblemService;
@@ -670,5 +686,559 @@ class CodingProblemServiceImplTest {
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).id()).isEqualTo("sqlite-3");
         assertThat(responses.get(0).type()).isEqualTo(LanguageType.DATABASE);
+    }
+
+    @Test
+    @DisplayName("runGenerator resolves constraints and delegates execution to judge service")
+    void testRunGenerator_Success() {
+        when(languageRegistry.isSupported("python-3.12")).thenReturn(true);
+        when(languageRegistry.get("python-3.12")).thenReturn(pythonLanguage);
+        when(pythonLanguage.type()).thenReturn(LanguageType.INTERPRETED);
+
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(pythonLanguage), any(), any())).thenReturn(4000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(pythonLanguage), any(), any())).thenReturn(262144L);
+
+        TestcaseGeneratorRunResponse judgeResponse = TestcaseGeneratorRunResponse.builder()
+                .status(com.bharath.stacked.modules.execution.enums.CodeExecutionStatus.SUCCESS)
+                .stdout("1 2 3\n---STACKED_TESTCASE_DELIMITER---\n4 5 6\n")
+                .executionTimeMs(110L)
+                .memoryUsageKb(14000L)
+                .build();
+
+        when(codingProblemJudgeService.executeGenerator(
+                eq(pythonLanguage),
+                eq("print('test')"),
+                eq("seed"),
+                eq(new CodeExecutionConstraints(4000L, 262144L))
+        )).thenReturn(judgeResponse);
+
+        RunTestcaseGeneratorRequest request = RunTestcaseGeneratorRequest.builder()
+                .language("python-3.12")
+                .script("print('test')")
+                .stdin("seed")
+                .constraints(new ExecutionConstraintRequest(4000L, 262144L))
+                .build();
+
+        TestcaseGeneratorRunResponse result = codingProblemService.runGenerator(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.status()).isEqualTo(com.bharath.stacked.modules.execution.enums.CodeExecutionStatus.SUCCESS);
+        assertThat(result.stdout()).isEqualTo("1 2 3\n---STACKED_TESTCASE_DELIMITER---\n4 5 6\n");
+    }
+
+    @Test
+    @DisplayName("runGenerator throws BadRequestException if language is unsupported")
+    void testRunGenerator_UnsupportedLanguage() {
+        when(languageRegistry.isSupported("unknown-lang")).thenReturn(false);
+
+        RunTestcaseGeneratorRequest request = RunTestcaseGeneratorRequest.builder()
+                .language("unknown-lang")
+                .script("print('hi')")
+                .build();
+
+        assertThatThrownBy(() -> codingProblemService.runGenerator(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not supported");
+    }
+
+    @Test
+    @DisplayName("runGenerator throws BadRequestException if database language is used")
+    void testRunGenerator_DatabaseLanguage() {
+        when(languageRegistry.isSupported("sqlite-3")).thenReturn(true);
+        when(languageRegistry.get("sqlite-3")).thenReturn(sqliteLanguage);
+        when(sqliteLanguage.type()).thenReturn(LanguageType.DATABASE);
+
+        RunTestcaseGeneratorRequest request = RunTestcaseGeneratorRequest.builder()
+                .language("sqlite-3")
+                .script("SELECT 1;")
+                .build();
+
+        assertThatThrownBy(() -> codingProblemService.runGenerator(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Database languages cannot be used for testcase generation.");
+    }
+
+    @Test
+    @DisplayName("findAll returns PageResponse with mapped CodingProblemSummaryResponse items")
+    void testFindAll_ReturnsPageResponse() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .title("Two Sum")
+                .slug("two-sum")
+                .status(CodingProblemStatus.PUBLISHED)
+                .problemType(CodingProblemType.GENERIC)
+                .difficulty(CodingProblemDifficulty.EASY)
+                .supportedLanguageIds(List.of("python-3.12"))
+                .sampleTestCases(List.of(new TestCase("tc-1", "in1", null, "out1")))
+                .hiddenTestCases(List.of(new TestCase("tc-2", "in2", null, "out2")))
+                .build();
+
+        when(mongoTemplate.count(any(org.springframework.data.mongodb.core.query.Query.class), eq(CodingProblem.class)))
+                .thenReturn(1L);
+        when(mongoTemplate.find(any(org.springframework.data.mongodb.core.query.Query.class), eq(CodingProblem.class)))
+                .thenReturn(List.of(problem));
+
+        com.bharath.stacked.modules.coding_problem.dto.request.CodingProblemFilterRequest filter =
+                com.bharath.stacked.modules.coding_problem.dto.request.CodingProblemFilterRequest.builder()
+                        .status(CodingProblemStatus.PUBLISHED)
+                        .search("two")
+                        .page(0)
+                        .size(10)
+                        .build();
+
+        com.bharath.stacked.common.api.PageResponse<com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse> response =
+                codingProblemService.findAll(filter);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTotalElements()).isEqualTo(1L);
+        assertThat(response.getTotalPages()).isEqualTo(1);
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).getTitle()).isEqualTo("Two Sum");
+        assertThat(response.getItems().get(0).getSampleTestCaseCount()).isEqualTo(1);
+        assertThat(response.getItems().get(0).getHiddenTestCaseCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("findByIdOrSlug returns problem when found by id or slug")
+    void testFindByIdOrSlug_Success() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .title("Two Sum")
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+
+        CodingProblem found = codingProblemService.findByIdOrSlug("prob-1");
+        assertThat(found).isNotNull();
+        assertThat(found.getTitle()).isEqualTo("Two Sum");
+    }
+
+    @Test
+    @DisplayName("findByIdOrSlug throws ResourceNotFoundException when problem not found")
+    void testFindByIdOrSlug_NotFound() {
+        when(codingProblemRepository.findById("unknown")).thenReturn(Optional.empty());
+        when(codingProblemRepository.findBySlug("unknown")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> codingProblemService.findByIdOrSlug("unknown"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("CodingProblem not found");
+    }
+
+    @Test
+    @DisplayName("isSlugAvailable with excludeId returns true when same problem owns slug")
+    void testIsSlugAvailable_WithExcludeId_SameOwner() {
+        CodingProblem existing = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .build();
+
+        when(codingProblemRepository.findBySlug("two-sum")).thenReturn(Optional.of(existing));
+
+        boolean available = codingProblemService.isSlugAvailable("two-sum", "prob-1");
+        assertThat(available).isTrue();
+    }
+
+    @Test
+    @DisplayName("isSlugAvailable with excludeId returns false when different problem owns slug")
+    void testIsSlugAvailable_WithExcludeId_DifferentOwner() {
+        CodingProblem existing = CodingProblem.builder()
+                .id("prob-2")
+                .slug("two-sum")
+                .build();
+
+        when(codingProblemRepository.findBySlug("two-sum")).thenReturn(Optional.of(existing));
+
+        boolean available = codingProblemService.isSlugAvailable("two-sum", "prob-1");
+        assertThat(available).isFalse();
+    }
+
+    @Test
+    @DisplayName("update throws ConflictException when new slug belongs to another problem")
+    void testUpdate_SlugConflictWithOtherProblem() {
+        CodingProblem current = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum-old")
+                .title("Two Sum")
+                .build();
+
+        CodingProblem other = CodingProblem.builder()
+                .id("prob-2")
+                .slug("two-sum-new")
+                .title("Other Problem")
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(current));
+        when(codingProblemRepository.findBySlug("two-sum-new")).thenReturn(Optional.of(other));
+
+        com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest request =
+                new com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest();
+        request.setTitle("Two Sum");
+        request.setSlug("two-sum-new");
+
+        assertThatThrownBy(() -> codingProblemService.update("prob-1", request))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("two-sum-new");
+    }
+
+    private com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest buildValidUpdateRequest() {
+        com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest request =
+                new com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest();
+        request.setTitle("Two Sum Updated");
+        request.setSlug("two-sum");
+        request.setProblemType(CodingProblemType.GENERIC);
+        request.setDifficulty(CodingProblemDifficulty.MEDIUM);
+        request.setSupportedLanguageIds(List.of("java-21", "python-3.12"));
+        request.setStatement("Updated statement without old image.");
+        request.setTopics(List.of("Array", "Hash Table"));
+        request.setHints(List.of("Use a hash table"));
+        request.setStarterCode(Map.of("java-21", "class Solution {}", "python-3.12", "def twoSum(): pass"));
+        request.setReferenceSolutionLanguage("java-21");
+        request.setReferenceSolution("public class Solution { public static void main(String[] args) {} }");
+        request.setRequireVerificationScript(false);
+
+        TestcaseRequest sampleTc = new TestcaseRequest("4 9\n2 7 11 15", null);
+        request.setSampleTestcases(List.of(sampleTc));
+
+        TestcaseRequest hiddenTc = new TestcaseRequest("3 6\n3 2 4", null);
+        request.setHiddenTestcases(List.of(hiddenTc));
+
+        Map<String, ExecutionConstraintRequest> constraints = Map.of(
+                "java-21", new ExecutionConstraintRequest(2000L, 262144L),
+                "python-3.12", new ExecutionConstraintRequest(3000L, 262144L)
+        );
+        request.setExecutionConstraints(constraints);
+
+        return request;
+    }
+
+    @Test
+    @DisplayName("update cleans removed images when not used by another problem")
+    void testUpdate_CleansRemovedImages_WhenNotUsedElsewhere() {
+        CodingProblem current = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .title("Two Sum")
+                .imageFileIds(new java.util.ArrayList<>(List.of("img-retained", "img-to-delete")))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(current));
+        when(languageRegistry.isSupported("java-21")).thenReturn(true);
+        when(languageRegistry.isSupported("python-3.12")).thenReturn(true);
+        when(languageRegistry.get("java-21")).thenReturn(javaLanguage);
+        when(languageRegistry.get("python-3.12")).thenReturn(pythonLanguage);
+
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(javaLanguage), any(), any())).thenReturn(2000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(javaLanguage), any(), any())).thenReturn(262144L);
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(pythonLanguage), any(), any())).thenReturn(3000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(pythonLanguage), any(), any())).thenReturn(262144L);
+
+        TestCase sampleTc = new TestCase("s1", "4 9\n2 7 11 15", null, "0 1");
+        TestCase hiddenTc = new TestCase("h1", "3 6\n3 2 4", null, "1 2");
+        when(codingProblemJudgeService.initializeExpectedOutputs(any(JudgeInitializationRequest.class)))
+                .thenReturn(new InitializedTestcases(List.of(sampleTc), List.of(hiddenTc)));
+
+        when(codingProblemRepository.isImageUsedByOtherProblem("img-to-delete", "prob-1")).thenReturn(false);
+        when(codingProblemRepository.save(any(CodingProblem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var request = buildValidUpdateRequest();
+        request.setStatement("Statement keeping ![img](/api/files/img-retained/content) and adding ![new](/api/files/img-new-created/content)");
+
+        CodingProblem updated = codingProblemService.update("prob-1", request);
+
+        assertThat(updated).isNotNull();
+        // img-to-delete was removed and should be deleted
+        verify(fileService).deleteFile("img-to-delete");
+        // img-new-created was added and should be promoted
+        verify(fileService).moveToPermanent("img-new-created");
+        verify(fileService).moveToPermanent("img-retained");
+        // updated problem must contain active images
+        assertThat(updated.getImageFileIds()).containsExactlyInAnyOrder("img-retained", "img-new-created");
+    }
+
+    @Test
+    @DisplayName("update retains removed image when used by another problem")
+    void testUpdate_RetainsRemovedImage_WhenUsedByOtherProblem() {
+        CodingProblem current = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .title("Two Sum")
+                .imageFileIds(new java.util.ArrayList<>(List.of("img-shared")))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(current));
+        when(languageRegistry.isSupported("java-21")).thenReturn(true);
+        when(languageRegistry.isSupported("python-3.12")).thenReturn(true);
+        when(languageRegistry.get("java-21")).thenReturn(javaLanguage);
+        when(languageRegistry.get("python-3.12")).thenReturn(pythonLanguage);
+
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(javaLanguage), any(), any())).thenReturn(2000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(javaLanguage), any(), any())).thenReturn(262144L);
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(pythonLanguage), any(), any())).thenReturn(3000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(pythonLanguage), any(), any())).thenReturn(262144L);
+
+        TestCase sampleTc = new TestCase("s1", "4 9\n2 7 11 15", null, "0 1");
+        TestCase hiddenTc = new TestCase("h1", "3 6\n3 2 4", null, "1 2");
+        when(codingProblemJudgeService.initializeExpectedOutputs(any(JudgeInitializationRequest.class)))
+                .thenReturn(new InitializedTestcases(List.of(sampleTc), List.of(hiddenTc)));
+
+        when(codingProblemRepository.isImageUsedByOtherProblem("img-shared", "prob-1")).thenReturn(true);
+        when(codingProblemRepository.save(any(CodingProblem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var request = buildValidUpdateRequest();
+        request.setStatement("Statement with no images now.");
+
+        CodingProblem updated = codingProblemService.update("prob-1", request);
+
+        assertThat(updated).isNotNull();
+        // Since img-shared is used by another problem, it must NOT be deleted
+        verify(fileService, never()).deleteFile("img-shared");
+        // but current problem's imageFileIds should no longer have it
+        assertThat(updated.getImageFileIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("update does not fail when fileService.deleteFile throws exception")
+    void testUpdate_DoesNotFailWhenDeleteFileThrows() {
+        CodingProblem current = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .title("Two Sum")
+                .imageFileIds(new java.util.ArrayList<>(List.of("img-error")))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(current));
+        when(languageRegistry.isSupported("java-21")).thenReturn(true);
+        when(languageRegistry.isSupported("python-3.12")).thenReturn(true);
+        when(languageRegistry.get("java-21")).thenReturn(javaLanguage);
+        when(languageRegistry.get("python-3.12")).thenReturn(pythonLanguage);
+
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(javaLanguage), any(), any())).thenReturn(2000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(javaLanguage), any(), any())).thenReturn(262144L);
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(pythonLanguage), any(), any())).thenReturn(3000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(pythonLanguage), any(), any())).thenReturn(262144L);
+
+        TestCase sampleTc = new TestCase("s1", "4 9\n2 7 11 15", null, "0 1");
+        TestCase hiddenTc = new TestCase("h1", "3 6\n3 2 4", null, "1 2");
+        when(codingProblemJudgeService.initializeExpectedOutputs(any(JudgeInitializationRequest.class)))
+                .thenReturn(new InitializedTestcases(List.of(sampleTc), List.of(hiddenTc)));
+
+        when(codingProblemRepository.isImageUsedByOtherProblem("img-error", "prob-1")).thenReturn(false);
+        doThrow(new RuntimeException("Storage IO failure")).when(fileService).deleteFile("img-error");
+        when(codingProblemRepository.save(any(CodingProblem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var request = buildValidUpdateRequest();
+        request.setStatement("Statement without images.");
+
+        CodingProblem updated = codingProblemService.update("prob-1", request);
+
+        assertThat(updated).isNotNull();
+        verify(fileService).deleteFile("img-error");
+        assertThat(updated.getImageFileIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("runSampleTestcases runs against sample testcases and custom testcases")
+    void testRunSampleTestcases_Success() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .problemType(CodingProblemType.GENERIC)
+                .supportedLanguageIds(List.of("python-3.12"))
+                .referenceSolutionLanguage("python-3.12")
+                .referenceSolution("print('3')")
+                .executionConstraints(Map.of("python-3.12", new CodeExecutionConstraints(2000L, 262144L)))
+                .sampleTestCases(List.of(new TestCase("s1", "1 2", null, "3")))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+        when(languageRegistry.isSupported("python-3.12")).thenReturn(true);
+        when(languageRegistry.get("python-3.12")).thenReturn(pythonLanguage);
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(pythonLanguage), any(), any())).thenReturn(2000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(pythonLanguage), any(), any())).thenReturn(262144L);
+
+        CodingProblemExecutionResponse mockResponse = CodingProblemExecutionResponse.builder()
+                .overallStatus("ACCEPTED")
+                .totalTestcases(2)
+                .passedTestcases(2)
+                .failedTestcases(0)
+                .totalExecutionTimeMs(100L)
+                .results(List.of())
+                .build();
+
+        when(codingProblemJudgeService.executeCandidate(any(JudgeCandidateExecutionRequest.class)))
+                .thenReturn(mockResponse);
+
+        RunSampleTestcasesRequest req = RunSampleTestcasesRequest.builder()
+                .languageId("python-3.12")
+                .code("print(int(input())+int(input()))")
+                .customTestcases(List.of(new CustomTestcaseRequest("c1", "10 20", null)))
+                .build();
+
+        CodingProblemExecutionResponse response = codingProblemService.runSampleTestcases("prob-1", req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("ACCEPTED");
+
+        ArgumentCaptor<JudgeCandidateExecutionRequest> captor = ArgumentCaptor.forClass(JudgeCandidateExecutionRequest.class);
+        verify(codingProblemJudgeService).executeCandidate(captor.capture());
+        JudgeCandidateExecutionRequest captured = captor.getValue();
+        assertThat(captured.testcases()).hasSize(2);
+        assertThat(captured.testcases().get(0).isSample()).isTrue();
+        assertThat(captured.testcases().get(0).isCustom()).isFalse();
+        assertThat(captured.testcases().get(1).isSample()).isFalse();
+        assertThat(captured.testcases().get(1).isCustom()).isTrue();
+    }
+
+    @Test
+    @DisplayName("submitSolution runs against all sample and hidden testcases")
+    void testSubmitSolution_Success() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .problemType(CodingProblemType.GENERIC)
+                .supportedLanguageIds(List.of("python-3.12"))
+                .referenceSolutionLanguage("python-3.12")
+                .referenceSolution("print('3')")
+                .executionConstraints(Map.of("python-3.12", new CodeExecutionConstraints(2000L, 262144L)))
+                .sampleTestCases(List.of(new TestCase("s1", "1 2", null, "3")))
+                .hiddenTestCases(List.of(new TestCase("h1", "3 4", null, "7")))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+        when(languageRegistry.isSupported("python-3.12")).thenReturn(true);
+        when(languageRegistry.get("python-3.12")).thenReturn(pythonLanguage);
+        when(executionConstraintResolver.resolveTimeLimitMs(eq(pythonLanguage), any(), any())).thenReturn(2000L);
+        when(executionConstraintResolver.resolveMemoryLimitKb(eq(pythonLanguage), any(), any())).thenReturn(262144L);
+
+        CodingProblemExecutionResponse mockResponse = CodingProblemExecutionResponse.builder()
+                .overallStatus("ACCEPTED")
+                .totalTestcases(2)
+                .passedTestcases(2)
+                .failedTestcases(0)
+                .totalExecutionTimeMs(120L)
+                .results(List.of())
+                .build();
+
+        when(codingProblemJudgeService.executeCandidate(any(JudgeCandidateExecutionRequest.class)))
+                .thenReturn(mockResponse);
+
+        SubmitCodingProblemRequest req = SubmitCodingProblemRequest.builder()
+                .languageId("python-3.12")
+                .code("print(int(input())+int(input()))")
+                .build();
+
+        CodingProblemExecutionResponse response = codingProblemService.submitSolution("prob-1", req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOverallStatus()).isEqualTo("ACCEPTED");
+
+        ArgumentCaptor<JudgeCandidateExecutionRequest> captor = ArgumentCaptor.forClass(JudgeCandidateExecutionRequest.class);
+        verify(codingProblemJudgeService).executeCandidate(captor.capture());
+        JudgeCandidateExecutionRequest captured = captor.getValue();
+        assertThat(captured.testcases()).hasSize(2);
+        assertThat(captured.testcases().get(0).isSample()).isTrue();
+        assertThat(captured.testcases().get(1).isSample()).isFalse();
+    }
+
+    @Test
+    @DisplayName("runSampleTestcases throws BadRequestException if language is not supported by problem")
+    void testRunSampleTestcases_UnsupportedLanguage() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .supportedLanguageIds(List.of("java-21"))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+
+        RunSampleTestcasesRequest req = RunSampleTestcasesRequest.builder()
+                .languageId("python-3.12")
+                .code("print(1)")
+                .build();
+
+        assertThatThrownBy(() -> codingProblemService.runSampleTestcases("prob-1", req))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not supported by this problem");
+    }
+
+    @Test
+    @DisplayName("getProblemDetails returns problem by id or slug")
+    void testGetProblemDetails_Success() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .title("Two Sum")
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+
+        CodingProblem found = codingProblemService.getProblemDetails("prob-1");
+        assertThat(found).isNotNull();
+        assertThat(found.getTitle()).isEqualTo("Two Sum");
+    }
+
+    @Test
+    @DisplayName("delete removes problem without images")
+    void testDelete_Success_NoImages() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .imageFileIds(List.of())
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+
+        codingProblemService.delete("prob-1");
+
+        verify(codingProblemRepository).delete(problem);
+    }
+
+    @Test
+    @DisplayName("delete cleans up orphaned images and retains shared images")
+    void testDelete_Success_CleansOrphanedImages() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .imageFileIds(List.of("img-orphaned", "img-shared"))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+        when(codingProblemRepository.isImageUsedByOtherProblem("img-orphaned", "prob-1")).thenReturn(false);
+        when(codingProblemRepository.isImageUsedByOtherProblem("img-shared", "prob-1")).thenReturn(true);
+
+        codingProblemService.delete("prob-1");
+
+        verify(fileService).deleteFile("img-orphaned");
+        verify(fileService, org.mockito.Mockito.never()).deleteFile("img-shared");
+        verify(codingProblemRepository).delete(problem);
+    }
+
+    @Test
+    @DisplayName("delete handles file deletion exceptions gracefully")
+    void testDelete_FileExceptionHandledGracefully() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
+                .slug("two-sum")
+                .imageFileIds(List.of("img-err"))
+                .build();
+
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+        when(codingProblemRepository.isImageUsedByOtherProblem("img-err", "prob-1")).thenReturn(false);
+        org.mockito.Mockito.doThrow(new RuntimeException("IO error")).when(fileService).deleteFile("img-err");
+
+        codingProblemService.delete("prob-1");
+
+        verify(codingProblemRepository).delete(problem);
+    }
+
+    @Test
+    @DisplayName("delete throws ResourceNotFoundException when problem not found")
+    void testDelete_NotFound() {
+        when(codingProblemRepository.findById("prob-404")).thenReturn(Optional.empty());
+        when(codingProblemRepository.findBySlug("prob-404")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> codingProblemService.delete("prob-404"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

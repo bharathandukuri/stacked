@@ -257,6 +257,39 @@ class FileServiceTest {
     }
 
     @Test
+    @DisplayName("deleteFile(fileId) deletes physical file and database metadata for internal consumer")
+    void deleteFile_InternalConsumer_Success() throws IOException {
+        Path filePath = permDirPath.resolve("internal_delete.png");
+        Files.writeString(filePath, "test image");
+
+        FileMetadata metadata = FileMetadata.builder()
+                .id("file-500")
+                .originalFileName("internal_delete.png")
+                .storedFileName("internal_delete.png")
+                .contentType("image/png")
+                .storageType(FileStorageType.PERMANENT)
+                .storagePath(filePath.toString())
+                .ownerId("system")
+                .build();
+
+        when(fileMetadataRepository.findById("file-500")).thenReturn(Optional.of(metadata));
+
+        fileService.deleteFile("file-500");
+
+        assertFalse(Files.exists(filePath));
+        verify(fileMetadataRepository, times(1)).delete(metadata);
+    }
+
+    @Test
+    @DisplayName("deleteFile(fileId) does not throw when file metadata not found")
+    void deleteFile_InternalConsumer_NotFound_HandledGracefully() {
+        when(fileMetadataRepository.findById("non-existent")).thenReturn(Optional.empty());
+
+        assertDoesNotThrow(() -> fileService.deleteFile("non-existent"));
+        verify(fileMetadataRepository, never()).delete(any());
+    }
+
+    @Test
     @DisplayName("cleanupExpiredTemporaryFiles deletes physical files and database records")
     void cleanupExpiredTemporaryFiles_Success() throws IOException {
         Path expiredFile1 = tempDirPath.resolve("expired_1.png");
