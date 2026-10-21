@@ -36,6 +36,9 @@ import com.bharath.stacked.modules.file.service.FileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.bharath.stacked.common.api.PageResponse;
+import com.bharath.stacked.common.event.QuestionArchivedEvent;
+import com.bharath.stacked.common.event.QuestionDeletedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.bharath.stacked.modules.coding_problem.dto.request.CodingProblemFilterRequest;
 import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse;
 import org.springframework.data.domain.PageRequest;
@@ -61,19 +64,22 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     private final ExecutionConstraintResolver executionConstraintResolver;
     private final CodingProblemJudgeService codingProblemJudgeService;
     private final FileService fileService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CodingProblemServiceImpl(CodingProblemRepository codingProblemRepository,
                                   MongoTemplate mongoTemplate,
                                   LanguageRegistry languageRegistry,
                                   ExecutionConstraintResolver executionConstraintResolver,
                                   CodingProblemJudgeService codingProblemJudgeService,
-                                  FileService fileService) {
+                                  FileService fileService,
+                                  ApplicationEventPublisher eventPublisher) {
         this.codingProblemRepository = codingProblemRepository;
         this.mongoTemplate = mongoTemplate;
         this.languageRegistry = languageRegistry;
         this.executionConstraintResolver = executionConstraintResolver;
         this.codingProblemJudgeService = codingProblemJudgeService;
         this.fileService = fileService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -495,6 +501,7 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         CodingProblem existing = findByIdOrSlug(idOrSlug);
         cleanRemovedImages(existing.getImageFileIds(), Collections.emptySet(), existing.getId());
         codingProblemRepository.delete(existing);
+        eventPublisher.publishEvent(new QuestionDeletedEvent(existing.getId()));
         log.info("Deleted coding problem [{}] ({})", existing.getId(), existing.getSlug());
     }
 
@@ -889,7 +896,11 @@ public class CodingProblemServiceImpl implements CodingProblemService {
 
         codingProblem.setStatus(status);
         codingProblem.setUpdatedAt(Instant.now());
-        return codingProblemRepository.save(codingProblem);
+        CodingProblem saved = codingProblemRepository.save(codingProblem);
+        if (status == CodingProblemStatus.ARCHIVED) {
+            eventPublisher.publishEvent(new QuestionArchivedEvent(saved.getId()));
+        }
+        return saved;
     }
 
     @Transactional

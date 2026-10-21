@@ -36,4 +36,6 @@ public interface QuestionBankService {
     List<String> getDistinctCategories();
 
     QuestionBankStatsResponse getStats();
+
+    void removeQuestionFromAllBanks(String questionId);
 }

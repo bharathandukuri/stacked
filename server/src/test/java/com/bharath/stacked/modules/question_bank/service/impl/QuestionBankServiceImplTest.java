@@ -25,6 +25,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.mongodb.core.MongoTemplate;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -441,6 +443,57 @@ class QuestionBankServiceImplTest {
         // 4. Restore to DRAFT
         QuestionBankSummaryResponse restRes = questionBankService.updateStatus("qb-valid", QuestionBankStatus.DRAFT);
         assertThat(restRes.getStatus()).isEqualTo(QuestionBankStatus.DRAFT);
+    }
+
+    @Test
+    @DisplayName("removeQuestionFromAllBanks should remove archived question and recalculate metrics")
+    void shouldRemoveQuestionFromAllBanksAndRecalculateMetrics() {
+        QuestionBank bank = QuestionBank.builder()
+                .id("qb-multi")
+                .title("Multi-question bank")
+                .status(QuestionBankStatus.PUBLISHED)
+                .items(new ArrayList<>(List.of(
+                        QuestionBankItem.builder().questionType(BankQuestionType.CODING).questionId("cp-101").order(1).build(),
+                        QuestionBankItem.builder().questionType(BankQuestionType.MCQ).questionId("mcq-201").order(2).build()
+                )))
+                .build();
+
+        when(questionBankRepository.findAllByItemsQuestionId("cp-101")).thenReturn(List.of(bank));
+        when(mcqQuestionRepository.findAllById(anyList())).thenReturn(List.of(sampleMcqQuestion));
+        when(questionBankRepository.save(any(QuestionBank.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        questionBankService.removeQuestionFromAllBanks("cp-101");
+
+        assertThat(bank.getItems()).hasSize(1);
+        assertThat(bank.getItems().get(0).getQuestionId()).isEqualTo("mcq-201");
+        assertThat(bank.getCodingCount()).isEqualTo(0);
+        assertThat(bank.getMcqCount()).isEqualTo(1);
+        assertThat(bank.getStatus()).isEqualTo(QuestionBankStatus.PUBLISHED);
+        verify(questionBankRepository).save(bank);
+    }
+
+    @Test
+    @DisplayName("removeQuestionFromAllBanks should fallback to DRAFT when all questions removed from bank")
+    void shouldFallbackToDraftWhenBankBecomesEmpty() {
+        QuestionBank bank = QuestionBank.builder()
+                .id("qb-single")
+                .title("Single-question bank")
+                .status(QuestionBankStatus.PUBLISHED)
+                .items(new ArrayList<>(List.of(
+                        QuestionBankItem.builder().questionType(BankQuestionType.CODING).questionId("cp-101").order(1).build()
+                )))
+                .build();
+
+        when(questionBankRepository.findAllByItemsQuestionId("cp-101")).thenReturn(List.of(bank));
+        when(questionBankRepository.save(any(QuestionBank.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        questionBankService.removeQuestionFromAllBanks("cp-101");
+
+        assertThat(bank.getItems()).isEmpty();
+        assertThat(bank.getStatus()).isEqualTo(QuestionBankStatus.DRAFT);
+        assertThat(bank.getCodingCount()).isEqualTo(0);
+        assertThat(bank.getMcqCount()).isEqualTo(0);
+        verify(questionBankRepository).save(bank);
     }
 }
 

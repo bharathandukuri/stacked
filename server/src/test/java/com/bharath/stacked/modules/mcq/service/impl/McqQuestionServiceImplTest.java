@@ -59,6 +59,9 @@ class McqQuestionServiceImplTest {
     @Mock
     private MongoTemplate mongoTemplate;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private McqQuestionServiceImpl questionService;
 

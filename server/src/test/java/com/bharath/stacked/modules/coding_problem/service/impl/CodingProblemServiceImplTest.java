@@ -83,6 +83,9 @@ class CodingProblemServiceImplTest {
     @Mock
     private org.springframework.data.mongodb.core.MongoTemplate mongoTemplate;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private CodingProblemServiceImpl codingProblemService;
 

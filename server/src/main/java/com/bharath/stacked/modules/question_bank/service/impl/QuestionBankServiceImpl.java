@@ -25,6 +25,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
@@ -294,6 +295,105 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                 .totalCuratedQuestions(totalCuratedQuestions)
                 .totalCategories(totalCategories)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void removeQuestionFromAllBanks(String questionId) {
+        if (!StringUtils.hasText(questionId)) {
+            return;
+        }
+
+        List<QuestionBank> affectedBanks = questionBankRepository.findAllByItemsQuestionId(questionId);
+        if (affectedBanks.isEmpty()) {
+            return;
+        }
+
+        for (QuestionBank bank : affectedBanks) {
+            if (bank.getItems() == null || bank.getItems().isEmpty()) {
+                continue;
+            }
+
+            boolean removed = bank.getItems().removeIf(item -> questionId.equals(item.getQuestionId()));
+            if (!removed) {
+                continue;
+            }
+
+            recalculateBankMetrics(bank);
+
+            // If question bank has no questions left and was PUBLISHED, fall back to DRAFT
+            if (bank.getItems().isEmpty() && bank.getStatus() == QuestionBankStatus.PUBLISHED) {
+                bank.setStatus(QuestionBankStatus.DRAFT);
+                log.info("Question Bank [{}] has no questions left after archiving question [{}]; status changed to DRAFT",
+                        bank.getTitle(), questionId);
+            }
+
+            bank.setUpdatedAt(Instant.now());
+            questionBankRepository.save(bank);
+            log.info("Removed archived/deleted question [{}] from Question Bank [{}] (remaining items: {})",
+                    questionId, bank.getTitle(), bank.getItems().size());
+        }
+    }
+
+    private void recalculateBankMetrics(QuestionBank bank) {
+        if (bank.getItems() == null || bank.getItems().isEmpty()) {
+            bank.setItems(new ArrayList<>());
+            bank.setTotalQuestions(0);
+            bank.setMcqCount(0);
+            bank.setCodingCount(0);
+            bank.setTotalPoints(0.0);
+            return;
+        }
+
+        List<String> codingIds = bank.getItems().stream()
+                .filter(item -> item.getQuestionType() == BankQuestionType.CODING)
+                .map(QuestionBankItem::getQuestionId)
+                .toList();
+
+        List<String> mcqIds = bank.getItems().stream()
+                .filter(item -> item.getQuestionType() == BankQuestionType.MCQ)
+                .map(QuestionBankItem::getQuestionId)
+                .toList();
+
+        Map<String, CodingProblem> codingMap = codingIds.isEmpty() ? Collections.emptyMap() :
+                codingProblemRepository.findAllById(codingIds).stream()
+                        .collect(Collectors.toMap(CodingProblem::getId, Function.identity()));
+
+        Map<String, McqQuestion> mcqMap = mcqIds.isEmpty() ? Collections.emptyMap() :
+                mcqQuestionRepository.findAllById(mcqIds).stream()
+                        .collect(Collectors.toMap(McqQuestion::getId, Function.identity()));
+
+        int mcqCount = 0;
+        int codingCount = 0;
+        double totalPoints = 0.0;
+
+        for (int i = 0; i < bank.getItems().size(); i++) {
+            QuestionBankItem item = bank.getItems().get(i);
+            item.setOrder(i + 1);
+
+            if (item.getQuestionType() == BankQuestionType.CODING) {
+                codingCount++;
+                if (item.getCustomPoints() != null) {
+                    totalPoints += item.getCustomPoints();
+                } else {
+                    CodingProblem cp = codingMap.get(item.getQuestionId());
+                    totalPoints += (cp != null ? getDefaultCodingPoints(cp) : 10.0);
+                }
+            } else {
+                mcqCount++;
+                if (item.getCustomPoints() != null) {
+                    totalPoints += item.getCustomPoints();
+                } else {
+                    McqQuestion mcq = mcqMap.get(item.getQuestionId());
+                    totalPoints += (mcq != null ? mcq.getDefaultPoints() : 1.0);
+                }
+            }
+        }
+
+        bank.setTotalQuestions(mcqCount + codingCount);
+        bank.setMcqCount(mcqCount);
+        bank.setCodingCount(codingCount);
+        bank.setTotalPoints(totalPoints);
     }
 
     // ==========================================

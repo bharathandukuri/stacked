@@ -1,9 +1,12 @@
 package com.bharath.stacked.modules.mcq.service.impl;
 
 import com.bharath.stacked.common.api.PageResponse;
+import com.bharath.stacked.common.event.QuestionArchivedEvent;
+import com.bharath.stacked.common.event.QuestionDeletedEvent;
 import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
+import org.springframework.context.ApplicationEventPublisher;
 import com.bharath.stacked.modules.file.service.FileService;
 import com.bharath.stacked.modules.mcq.dto.request.CreateMcqRequest;
 import com.bharath.stacked.modules.mcq.dto.request.McqFilterRequest;
@@ -57,6 +60,7 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     private final McqTopicService topicService;
     private final FileService fileService;
     private final MongoTemplate mongoTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @NonNull
@@ -241,6 +245,7 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         }
 
         questionRepository.delete(question);
+        eventPublisher.publishEvent(new QuestionDeletedEvent(questionId));
         log.info("Deleted MCQ question: [{}] (id: {})", question.getTitle(), questionId);
     }
 
@@ -275,6 +280,9 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         question.setStatus(status);
         question.setUpdatedAt(Instant.now());
         McqQuestion saved = questionRepository.save(question);
+        if (status == McqStatus.ARCHIVED) {
+            eventPublisher.publishEvent(new QuestionArchivedEvent(question.getId()));
+        }
         log.info("Updated MCQ status: [{}] -> {} (id: {})", question.getTitle(), status, question.getId());
         return McqQuestionDetailResponse.fromModel(saved);
     }
