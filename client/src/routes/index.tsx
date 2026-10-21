@@ -1,14 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
-import { CheckCircle2, Edit3, Shield } from "lucide-react"
+import { useEffect } from "react"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { useIsAuthenticated, useIsInitialized } from "@/stores/auth-store"
+import { initializeAuthSession } from "@/hooks/use-auth"
 import { Logo } from "@/components/logo"
 
 export const Route = createFileRoute("/")({
@@ -16,53 +9,27 @@ export const Route = createFileRoute("/")({
 })
 
 function HomeComponent() {
+  const navigate = useNavigate()
+  const isAuthenticated = useIsAuthenticated()
+  const isInitialized = useIsInitialized()
+
+  useEffect(() => {
+    if (!isInitialized) {
+      initializeAuthSession()
+    } else if (isAuthenticated) {
+      navigate({ to: "/dashboard", replace: true })
+    } else {
+      navigate({ to: "/login", replace: true })
+    }
+  }, [isInitialized, isAuthenticated, navigate])
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background p-6 text-foreground">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Logo size={40} />
-              <CardTitle className="text-2xl font-bold tracking-tight">
-                Stacked
-              </CardTitle>
-            </div>
-            <Badge
-              variant="outline"
-              className="gap-1 border-emerald-500 text-emerald-500"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Ready
-            </Badge>
-          </div>
-          <CardDescription>
-            Spring Boot 4, Redis, MongoDB, TanStack Router, TanStack Query, and
-            shadcn UI.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Backend infrastructure, File Module, Monaco Markdown Editor, and
-            Assessment Platform frontend initialized.
-          </p>
-          <div className="flex flex-col gap-2 pt-2">
-            <Link
-              to="/admin/coding-problem/studio/new"
-              className={buttonVariants({ className: "w-full gap-2" })}
-            >
-              <Edit3 className="h-4 w-4" /> Coding Problem Studio
-            </Link>
-            <Link
-              to="/admin/login"
-              className={buttonVariants({
-                variant: "outline",
-                className: "w-full gap-2",
-              })}
-            >
-              <Shield className="h-4 w-4" /> Admin Portal
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+    <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <Logo size={48} />
+        <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-xs text-muted-foreground font-medium">Entering Stacked...</p>
+      </div>
     </main>
   )
 }

@@ -552,6 +552,9 @@ class CodingProblemServiceImplTest {
         CodingProblem existing = CodingProblem.builder()
                 .id("prob-123")
                 .slug("two-sum")
+                .title("Two Sum")
+                .statement("Two sum statement")
+                .sampleTestCases(List.of(new TestCase("s1", "1 2", null, "3")))
                 .status(CodingProblemStatus.UNPUBLISHED)
                 .build();
 
@@ -570,6 +573,9 @@ class CodingProblemServiceImplTest {
         CodingProblem existing = CodingProblem.builder()
                 .id("prob-123")
                 .slug("two-sum")
+                .title("Two Sum")
+                .statement("Two sum statement")
+                .sampleTestCases(List.of(new TestCase("s1", "1 2", null, "3")))
                 .status(CodingProblemStatus.UNPUBLISHED)
                 .build();
 
@@ -581,6 +587,63 @@ class CodingProblemServiceImplTest {
 
         assertThat(published.getStatus()).isEqualTo(CodingProblemStatus.PUBLISHED);
         verify(codingProblemRepository).save(existing);
+    }
+
+    @Test
+    @DisplayName("archive should set status to ARCHIVED and save")
+    void shouldArchiveProblemSuccessfully() {
+        CodingProblem existing = CodingProblem.builder()
+                .id("prob-123")
+                .slug("two-sum")
+                .status(CodingProblemStatus.PUBLISHED)
+                .build();
+
+        when(codingProblemRepository.findById("prob-123")).thenReturn(Optional.of(existing));
+        when(codingProblemRepository.save(any(CodingProblem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CodingProblem archived = codingProblemService.archive("prob-123");
+
+        assertThat(archived.getStatus()).isEqualTo(CodingProblemStatus.ARCHIVED);
+        verify(codingProblemRepository).save(existing);
+    }
+
+    @Test
+    @DisplayName("updateStatus should reject transition from ARCHIVED to PUBLISHED")
+    void shouldRejectArchivedToPublishedDirectly() {
+        CodingProblem existing = CodingProblem.builder()
+                .id("prob-123")
+                .slug("two-sum")
+                .title("Two Sum")
+                .statement("Statement")
+                .sampleTestCases(List.of(new TestCase("s1", "1 2", null, "3")))
+                .status(CodingProblemStatus.ARCHIVED)
+                .build();
+
+        when(codingProblemRepository.findById("prob-123")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> codingProblemService.updateStatus("prob-123", CodingProblemStatus.PUBLISHED))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Cannot transition directly from ARCHIVED to PUBLISHED");
+    }
+
+    @Test
+    @DisplayName("updateStatus should reject publishing problem without testcases")
+    void shouldRejectPublishingWithoutTestcases() {
+        CodingProblem existing = CodingProblem.builder()
+                .id("prob-123")
+                .slug("two-sum")
+                .title("Two Sum")
+                .statement("Statement")
+                .sampleTestCases(List.of())
+                .hiddenTestCases(List.of())
+                .status(CodingProblemStatus.UNPUBLISHED)
+                .build();
+
+        when(codingProblemRepository.findById("prob-123")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> codingProblemService.updateStatus("prob-123", CodingProblemStatus.PUBLISHED))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Cannot publish coding problem without at least one testcase");
     }
 
     @Test

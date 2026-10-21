@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import axios from "axios"
 import {
   codingProblemService,
   type CodingProblem,
@@ -41,7 +42,7 @@ export function useCodingProblem(idOrSlug?: string) {
 }
 
 /**
- * Hook to update a problem's status (PUBLISHED or UNPUBLISHED).
+ * Hook to update a problem's status (PUBLISHED, UNPUBLISHED, DRAFT, or ARCHIVED).
  */
 export function useUpdateProblemStatus() {
   const queryClient = useQueryClient()
@@ -52,7 +53,7 @@ export function useUpdateProblemStatus() {
       status,
     }: {
       idOrSlug: string
-      status: "PUBLISHED" | "UNPUBLISHED"
+      status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT" | "ARCHIVED"
     }) => codingProblemService.updateStatus(idOrSlug, status),
     onSuccess: (updated) => {
       toast.add({
@@ -68,13 +69,122 @@ export function useUpdateProblemStatus() {
         queryKey: codingProblemKeys.detail(updated.slug),
       })
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      let message = "Could not update status."
+      if (axios.isAxiosError(error)) {
+        const data = error.response?.data as { message?: string } | undefined
+        if (data?.message) message = data.message
+      } else if (error instanceof Error) {
+        message = error.message
+      }
       toast.add({
         title: "Failed to Update Status",
-        description:
-          error?.response?.data?.message ||
-          error?.message ||
-          "Could not update status.",
+        description: message,
+        type: "error",
+      })
+    },
+  })
+}
+
+/**
+ * Hook to publish a coding problem.
+ */
+export function usePublishCodingProblem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (idOrSlug: string) => codingProblemService.publishProblem(idOrSlug),
+    onSuccess: (updated) => {
+      toast.add({
+        title: "Problem Published",
+        description: `Problem "${updated.title}" is now published.`,
+        type: "success",
+      })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.id) })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.slug) })
+    },
+    onError: (error: unknown) => {
+      let message = "Could not publish problem."
+      if (axios.isAxiosError(error)) {
+        const data = error.response?.data as { message?: string } | undefined
+        if (data?.message) message = data.message
+      } else if (error instanceof Error) {
+        message = error.message
+      }
+      toast.add({
+        title: "Publish Failed",
+        description: message,
+        type: "error",
+      })
+    },
+  })
+}
+
+/**
+ * Hook to unpublish a coding problem.
+ */
+export function useUnpublishCodingProblem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (idOrSlug: string) => codingProblemService.unpublishProblem(idOrSlug),
+    onSuccess: (updated) => {
+      toast.add({
+        title: "Problem Unpublished",
+        description: `Problem "${updated.title}" is now unpublished.`,
+        type: "success",
+      })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.id) })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.slug) })
+    },
+    onError: (error: unknown) => {
+      let message = "Could not unpublish problem."
+      if (axios.isAxiosError(error)) {
+        const data = error.response?.data as { message?: string } | undefined
+        if (data?.message) message = data.message
+      } else if (error instanceof Error) {
+        message = error.message
+      }
+      toast.add({
+        title: "Unpublish Failed",
+        description: message,
+        type: "error",
+      })
+    },
+  })
+}
+
+/**
+ * Hook to archive a coding problem.
+ */
+export function useArchiveCodingProblem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (idOrSlug: string) => codingProblemService.archiveProblem(idOrSlug),
+    onSuccess: (updated) => {
+      toast.add({
+        title: "Problem Archived",
+        description: `Problem "${updated.title}" has been archived.`,
+        type: "success",
+      })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.id) })
+      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.slug) })
+    },
+    onError: (error: unknown) => {
+      let message = "Could not archive problem."
+      if (axios.isAxiosError(error)) {
+        const data = error.response?.data as { message?: string } | undefined
+        if (data?.message) message = data.message
+      } else if (error instanceof Error) {
+        message = error.message
+      }
+      toast.add({
+        title: "Archive Failed",
+        description: message,
         type: "error",
       })
     },

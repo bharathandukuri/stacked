@@ -10,15 +10,29 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as AdminCodingProblemIndexRouteImport } from './routes/admin/coding-problem/index'
+import { Route as AdminMcqIndexRouteImport } from './routes/admin/mcq/index'
+import { Route as AdminQuestionsIndexRouteImport } from './routes/admin/questions/index'
+import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
 import { Route as AdminCodingProblemStudioProblemIdRouteImport } from './routes/admin/coding-problem/studio/$problemId'
 import { Route as AdminCodingProblemStudioNewRouteImport } from './routes/admin/coding-problem/studio/new'
+import { Route as AdminMcqStudioQuestionIdRouteImport } from './routes/admin/mcq/studio/$questionId'
+import { Route as AdminMcqStudioNewRouteImport } from './routes/admin/mcq/studio/new'
+import { Route as AdminQuestionsStudioBankIdRouteImport } from './routes/admin/questions/studio/$bankId'
+import { Route as AdminQuestionsStudioNewRouteImport } from './routes/admin/questions/studio/new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -31,9 +45,29 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
   path: '/admin/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/dashboard/',
+  path: '/dashboard/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminCodingProblemIndexRoute = AdminCodingProblemIndexRouteImport.update({
   id: '/admin/coding-problem/',
   path: '/admin/coding-problem/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMcqIndexRoute = AdminMcqIndexRouteImport.update({
+  id: '/admin/mcq/',
+  path: '/admin/mcq/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminQuestionsIndexRoute = AdminQuestionsIndexRouteImport.update({
+  id: '/admin/questions/',
+  path: '/admin/questions/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
+  id: '/admin/users/',
+  path: '/admin/users/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminCodingProblemStudioProblemIdRoute =
@@ -48,66 +82,151 @@ const AdminCodingProblemStudioNewRoute =
     path: '/admin/coding-problem/studio/new',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdminMcqStudioQuestionIdRoute =
+  AdminMcqStudioQuestionIdRouteImport.update({
+    id: '/admin/mcq/studio/$questionId',
+    path: '/admin/mcq/studio/$questionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdminMcqStudioNewRoute = AdminMcqStudioNewRouteImport.update({
+  id: '/admin/mcq/studio/new',
+  path: '/admin/mcq/studio/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminQuestionsStudioBankIdRoute =
+  AdminQuestionsStudioBankIdRouteImport.update({
+    id: '/admin/questions/studio/$bankId',
+    path: '/admin/questions/studio/$bankId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdminQuestionsStudioNewRoute = AdminQuestionsStudioNewRouteImport.update({
+  id: '/admin/questions/studio/new',
+  path: '/admin/questions/studio/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
+  '/dashboard/': typeof DashboardIndexRoute
   '/admin/coding-problem/': typeof AdminCodingProblemIndexRoute
+  '/admin/mcq/': typeof AdminMcqIndexRoute
+  '/admin/questions/': typeof AdminQuestionsIndexRoute
+  '/admin/users/': typeof AdminUsersIndexRoute
   '/admin/coding-problem/studio/$problemId': typeof AdminCodingProblemStudioProblemIdRoute
   '/admin/coding-problem/studio/new': typeof AdminCodingProblemStudioNewRoute
+  '/admin/mcq/studio/$questionId': typeof AdminMcqStudioQuestionIdRoute
+  '/admin/mcq/studio/new': typeof AdminMcqStudioNewRoute
+  '/admin/questions/studio/$bankId': typeof AdminQuestionsStudioBankIdRoute
+  '/admin/questions/studio/new': typeof AdminQuestionsStudioNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin': typeof AdminIndexRoute
+  '/dashboard': typeof DashboardIndexRoute
   '/admin/coding-problem': typeof AdminCodingProblemIndexRoute
+  '/admin/mcq': typeof AdminMcqIndexRoute
+  '/admin/questions': typeof AdminQuestionsIndexRoute
+  '/admin/users': typeof AdminUsersIndexRoute
   '/admin/coding-problem/studio/$problemId': typeof AdminCodingProblemStudioProblemIdRoute
   '/admin/coding-problem/studio/new': typeof AdminCodingProblemStudioNewRoute
+  '/admin/mcq/studio/$questionId': typeof AdminMcqStudioQuestionIdRoute
+  '/admin/mcq/studio/new': typeof AdminMcqStudioNewRoute
+  '/admin/questions/studio/$bankId': typeof AdminQuestionsStudioBankIdRoute
+  '/admin/questions/studio/new': typeof AdminQuestionsStudioNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
+  '/dashboard/': typeof DashboardIndexRoute
   '/admin/coding-problem/': typeof AdminCodingProblemIndexRoute
+  '/admin/mcq/': typeof AdminMcqIndexRoute
+  '/admin/questions/': typeof AdminQuestionsIndexRoute
+  '/admin/users/': typeof AdminUsersIndexRoute
   '/admin/coding-problem/studio/$problemId': typeof AdminCodingProblemStudioProblemIdRoute
   '/admin/coding-problem/studio/new': typeof AdminCodingProblemStudioNewRoute
+  '/admin/mcq/studio/$questionId': typeof AdminMcqStudioQuestionIdRoute
+  '/admin/mcq/studio/new': typeof AdminMcqStudioNewRoute
+  '/admin/questions/studio/$bankId': typeof AdminQuestionsStudioBankIdRoute
+  '/admin/questions/studio/new': typeof AdminQuestionsStudioNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/admin/login'
     | '/admin/'
+    | '/dashboard/'
     | '/admin/coding-problem/'
+    | '/admin/mcq/'
+    | '/admin/questions/'
+    | '/admin/users/'
     | '/admin/coding-problem/studio/$problemId'
     | '/admin/coding-problem/studio/new'
+    | '/admin/mcq/studio/$questionId'
+    | '/admin/mcq/studio/new'
+    | '/admin/questions/studio/$bankId'
+    | '/admin/questions/studio/new'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/admin/login'
     | '/admin'
+    | '/dashboard'
     | '/admin/coding-problem'
+    | '/admin/mcq'
+    | '/admin/questions'
+    | '/admin/users'
     | '/admin/coding-problem/studio/$problemId'
     | '/admin/coding-problem/studio/new'
+    | '/admin/mcq/studio/$questionId'
+    | '/admin/mcq/studio/new'
+    | '/admin/questions/studio/$bankId'
+    | '/admin/questions/studio/new'
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/admin/login'
     | '/admin/'
+    | '/dashboard/'
     | '/admin/coding-problem/'
+    | '/admin/mcq/'
+    | '/admin/questions/'
+    | '/admin/users/'
     | '/admin/coding-problem/studio/$problemId'
     | '/admin/coding-problem/studio/new'
+    | '/admin/mcq/studio/$questionId'
+    | '/admin/mcq/studio/new'
+    | '/admin/questions/studio/$bankId'
+    | '/admin/questions/studio/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  DashboardIndexRoute: typeof DashboardIndexRoute
   AdminCodingProblemIndexRoute: typeof AdminCodingProblemIndexRoute
+  AdminMcqIndexRoute: typeof AdminMcqIndexRoute
+  AdminQuestionsIndexRoute: typeof AdminQuestionsIndexRoute
+  AdminUsersIndexRoute: typeof AdminUsersIndexRoute
   AdminCodingProblemStudioProblemIdRoute: typeof AdminCodingProblemStudioProblemIdRoute
   AdminCodingProblemStudioNewRoute: typeof AdminCodingProblemStudioNewRoute
+  AdminMcqStudioQuestionIdRoute: typeof AdminMcqStudioQuestionIdRoute
+  AdminMcqStudioNewRoute: typeof AdminMcqStudioNewRoute
+  AdminQuestionsStudioBankIdRoute: typeof AdminQuestionsStudioBankIdRoute
+  AdminQuestionsStudioNewRoute: typeof AdminQuestionsStudioNewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -117,6 +236,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -133,11 +259,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/dashboard'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/coding-problem/': {
       id: '/admin/coding-problem/'
       path: '/admin/coding-problem'
       fullPath: '/admin/coding-problem/'
       preLoaderRoute: typeof AdminCodingProblemIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/mcq/': {
+      id: '/admin/mcq/'
+      path: '/admin/mcq'
+      fullPath: '/admin/mcq/'
+      preLoaderRoute: typeof AdminMcqIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/questions/': {
+      id: '/admin/questions/'
+      path: '/admin/questions'
+      fullPath: '/admin/questions/'
+      preLoaderRoute: typeof AdminQuestionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/users/': {
+      id: '/admin/users/'
+      path: '/admin/users'
+      fullPath: '/admin/users/'
+      preLoaderRoute: typeof AdminUsersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/coding-problem/studio/$problemId': {
@@ -154,17 +308,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCodingProblemStudioNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/mcq/studio/$questionId': {
+      id: '/admin/mcq/studio/$questionId'
+      path: '/admin/mcq/studio/$questionId'
+      fullPath: '/admin/mcq/studio/$questionId'
+      preLoaderRoute: typeof AdminMcqStudioQuestionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/mcq/studio/new': {
+      id: '/admin/mcq/studio/new'
+      path: '/admin/mcq/studio/new'
+      fullPath: '/admin/mcq/studio/new'
+      preLoaderRoute: typeof AdminMcqStudioNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/questions/studio/$bankId': {
+      id: '/admin/questions/studio/$bankId'
+      path: '/admin/questions/studio/$bankId'
+      fullPath: '/admin/questions/studio/$bankId'
+      preLoaderRoute: typeof AdminQuestionsStudioBankIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/questions/studio/new': {
+      id: '/admin/questions/studio/new'
+      path: '/admin/questions/studio/new'
+      fullPath: '/admin/questions/studio/new'
+      preLoaderRoute: typeof AdminQuestionsStudioNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminIndexRoute: AdminIndexRoute,
+  DashboardIndexRoute: DashboardIndexRoute,
   AdminCodingProblemIndexRoute: AdminCodingProblemIndexRoute,
+  AdminMcqIndexRoute: AdminMcqIndexRoute,
+  AdminQuestionsIndexRoute: AdminQuestionsIndexRoute,
+  AdminUsersIndexRoute: AdminUsersIndexRoute,
   AdminCodingProblemStudioProblemIdRoute:
     AdminCodingProblemStudioProblemIdRoute,
   AdminCodingProblemStudioNewRoute: AdminCodingProblemStudioNewRoute,
+  AdminMcqStudioQuestionIdRoute: AdminMcqStudioQuestionIdRoute,
+  AdminMcqStudioNewRoute: AdminMcqStudioNewRoute,
+  AdminQuestionsStudioBankIdRoute: AdminQuestionsStudioBankIdRoute,
+  AdminQuestionsStudioNewRoute: AdminQuestionsStudioNewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

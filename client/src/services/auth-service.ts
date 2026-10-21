@@ -2,12 +2,27 @@ import API from "@/lib/api-client"
 import type { ApiResponse } from "@/types/api"
 import type {
   AdminLoginCredentials,
-  AdminUser,
   AuthResponseData,
+  AuthUser,
   RefreshResponseData,
+  UserLoginCredentials,
 } from "@/types/auth"
 
 export const authService = {
+  /**
+   * Log in any user (ADMIN or USER) with email and password.
+   * On success, the backend sets the HTTP-only refresh token cookie and returns the access token.
+   */
+  async login(
+    credentials: UserLoginCredentials
+  ): Promise<AuthResponseData> {
+    const response = await API.post<ApiResponse<AuthResponseData>>(
+      "/auth/login",
+      credentials
+    )
+    return response.data.data
+  },
+
   /**
    * Log in an administrator with email and password.
    * On success, the backend sets the HTTP-only refresh token cookie and returns the access token.
@@ -40,10 +55,10 @@ export const authService = {
   },
 
   /**
-   * Fetch the currently authenticated admin profile.
+   * Fetch the currently authenticated user profile.
    */
-  async getMe(): Promise<AdminUser> {
-    const response = await API.get<ApiResponse<AdminUser>>("/auth/me")
+  async getMe(): Promise<AuthUser> {
+    const response = await API.get<ApiResponse<AuthUser>>("/auth/me")
     return response.data.data
   },
 }

@@ -3,6 +3,7 @@ package com.bharath.stacked.modules.security.service;
 import com.bharath.stacked.modules.security.dto.AdminLoginRequest;
 import com.bharath.stacked.modules.security.dto.AdminResponse;
 import com.bharath.stacked.modules.security.dto.AuthResponse;
+import com.bharath.stacked.modules.security.dto.LoginRequest;
 import com.bharath.stacked.modules.security.dto.RefreshResponse;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -16,6 +17,9 @@ public interface AuthService {
     }
 
     @NonNull
+    AuthResult login(@NonNull LoginRequest request);
+
+    @NonNull
     AuthResult loginAdmin(@NonNull AdminLoginRequest request);
 
     @NonNull
@@ -25,4 +29,7 @@ public interface AuthService {
 
     @NonNull
     AdminResponse getAdminProfile(@Nullable String userId);
+
+    @NonNull
+    AdminResponse getUserProfile(@Nullable String userId);
 }

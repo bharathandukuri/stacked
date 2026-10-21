@@ -63,6 +63,41 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/auth/login returns 200, JWT in body, and Set-Cookie header for any user")
+    void login_Success() throws Exception {
+        AdminResponse userResponse = new AdminResponse(
+                "user-123", "Standard User", "user@stacked.com", Role.USER, Instant.now(), Instant.now());
+        AuthResponse authResponse = AuthResponse.of("access-token-user", 900L, userResponse);
+        AuthService.AuthResult authResult = new AuthService.AuthResult(authResponse, "refresh-token-user");
+
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", "refresh-token-user")
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(Duration.ofDays(7))
+                .build();
+
+        when(authService.login(any(com.bharath.stacked.modules.security.dto.LoginRequest.class))).thenReturn(authResult);
+        when(jwtTokenProvider.getRefreshTokenExpirationSeconds()).thenReturn(604800L);
+        when(cookieUtil.createRefreshTokenCookie(eq("refresh-token-user"), any(Duration.class))).thenReturn(cookie);
+
+        mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                            "email": "user@stacked.com",
+                            "password": "User@123456"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE,
+                        org.hamcrest.Matchers.containsString("refreshToken=refresh-token-user")))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").value("access-token-user"))
+                .andExpect(jsonPath("$.data.admin.role").value("USER"));
+    }
+
+    @Test
     @DisplayName("POST /api/auth/admin/login returns 200, JWT in body, and Set-Cookie header")
     void loginAdmin_Success() throws Exception {
         AdminResponse adminResponse = new AdminResponse(
@@ -188,7 +223,7 @@ class AuthControllerTest {
     void getMe_Authenticated_ReturnsAdmin() throws Exception {
         AdminResponse adminResponse = new AdminResponse(
                 "admin-123", "Admin User", "admin@stacked.com", Role.ADMIN, Instant.now(), Instant.now());
-        when(authService.getAdminProfile("admin-123")).thenReturn(adminResponse);
+        when(authService.getUserProfile("admin-123")).thenReturn(adminResponse);
 
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 "admin-123", null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));

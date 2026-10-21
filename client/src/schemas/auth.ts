@@ -15,4 +15,7 @@ export const adminLoginSchema = z.object({
   password: passwordSchema,
 })
 
+export const loginSchema = adminLoginSchema
+
 export type AdminLoginFormValues = z.infer<typeof adminLoginSchema>
+export type LoginFormValues = AdminLoginFormValues

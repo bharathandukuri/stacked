@@ -5,6 +5,7 @@ import com.bharath.stacked.exception.UnauthorizedException;
 import com.bharath.stacked.modules.security.dto.AdminLoginRequest;
 import com.bharath.stacked.modules.security.dto.AdminResponse;
 import com.bharath.stacked.modules.security.dto.AuthResponse;
+import com.bharath.stacked.modules.security.dto.LoginRequest;
 import com.bharath.stacked.modules.security.dto.RefreshResponse;
 import com.bharath.stacked.modules.security.service.AuthService;
 import com.bharath.stacked.modules.security.util.CookieUtil;
@@ -37,6 +38,20 @@ public class AuthController {
     private final AuthService authService;
     private final CookieUtil cookieUtil;
     private final JwtTokenProvider jwtTokenProvider;
+
+    @PostMapping("/login")
+    @NonNull
+    public ResponseEntity<ApiResponse<AuthResponse>> login(
+            @Valid @RequestBody @NonNull LoginRequest request) {
+        AuthService.AuthResult result = authService.login(request);
+
+        Duration refreshDuration = Duration.ofSeconds(jwtTokenProvider.getRefreshTokenExpirationSeconds());
+        ResponseCookie refreshCookie = cookieUtil.createRefreshTokenCookie(result.refreshToken(), refreshDuration);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                .body(ApiResponse.success(result.authResponse(), "Login successful").getBody());
+    }
 
     @PostMapping("/admin/login")
     @NonNull
@@ -94,10 +109,10 @@ public class AuthController {
     @NonNull
     public ResponseEntity<ApiResponse<AdminResponse>> getMe(@Nullable Authentication authentication) {
         if (authentication == null || authentication.getName() == null || !authentication.isAuthenticated()) {
-            throw new UnauthorizedException("Authentication is required to access admin profile.");
+            throw new UnauthorizedException("Authentication is required to access profile.");
         }
 
-        AdminResponse adminResponse = authService.getAdminProfile(authentication.getName());
-        return ApiResponse.success(adminResponse, "Admin profile retrieved successfully");
+        AdminResponse userResponse = authService.getUserProfile(authentication.getName());
+        return ApiResponse.success(userResponse, "Profile retrieved successfully");
     }
 }

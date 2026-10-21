@@ -1,0 +1,33 @@
+package com.bharath.stacked.modules.security.dto;
+
+import com.bharath.stacked.modules.security.model.Role;
+import com.bharath.stacked.modules.security.model.User;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import java.time.Instant;
+
+public record UserResponse(
+        @Nullable String id,
+        @NonNull String name,
+        @NonNull String email,
+        @NonNull Role role,
+        @Nullable Instant createdAt,
+        @Nullable Instant updatedAt
+) {
+    @Nullable
+    public static UserResponse fromUser(@Nullable User user) {
+        if (user == null) {
+            return null;
+        }
+        return new UserResponse(
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getRole(),
+                user.getCreatedAt(),
+                user.getUpdatedAt()
+        );
+    }
+}
+

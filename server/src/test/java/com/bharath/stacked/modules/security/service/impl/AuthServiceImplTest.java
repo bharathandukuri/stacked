@@ -233,4 +233,64 @@ class AuthServiceImplTest {
 
         assertThrows(ResourceNotFoundException.class, () -> authService.getAdminProfile("unknown"));
     }
+
+    @Test
+    @DisplayName("login successfully authenticates valid standard USER credentials")
+    void login_Success_StandardUser() {
+        User standardUser = User.builder()
+                .id("user-456")
+                .name("Standard Candidate")
+                .email("user@stacked.com")
+                .password("$2a$10$hashedpassword")
+                .role(Role.USER)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .build();
+
+        com.bharath.stacked.modules.security.dto.LoginRequest request =
+                new com.bharath.stacked.modules.security.dto.LoginRequest("user@stacked.com", "User@123456");
+
+        when(userRepository.findByEmail("user@stacked.com")).thenReturn(Optional.of(standardUser));
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(authentication);
+        when(authentication.isAuthenticated()).thenReturn(true);
+
+        when(jwtTokenProvider.generateAccessToken(eq("user-456"), eq("user@stacked.com"), eq(Role.USER)))
+                .thenReturn("access-token-user");
+        when(jwtTokenProvider.generateRefreshToken(eq("user-456"), any()))
+                .thenReturn("refresh-token-user");
+        when(jwtTokenProvider.getAccessTokenExpirationSeconds()).thenReturn(900L);
+        when(jwtTokenProvider.getRefreshTokenExpirationSeconds()).thenReturn(604800L);
+
+        AuthService.AuthResult result = authService.login(request);
+
+        assertNotNull(result);
+        assertEquals("access-token-user", result.authResponse().accessToken());
+        assertEquals("user@stacked.com", result.authResponse().admin().email());
+        assertEquals(Role.USER, result.authResponse().admin().role());
+        assertEquals("refresh-token-user", result.refreshToken());
+    }
+
+    @Test
+    @DisplayName("getUserProfile returns user details for standard USER")
+    void getUserProfile_Success_StandardUser() {
+        User standardUser = User.builder()
+                .id("user-456")
+                .name("Standard Candidate")
+                .email("user@stacked.com")
+                .password("$2a$10$hashedpassword")
+                .role(Role.USER)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .build();
+
+        when(userRepository.findById("user-456")).thenReturn(Optional.of(standardUser));
+
+        AdminResponse profile = authService.getUserProfile("user-456");
+
+        assertNotNull(profile);
+        assertEquals("user-456", profile.id());
+        assertEquals("user@stacked.com", profile.email());
+        assertEquals(Role.USER, profile.role());
+    }
 }

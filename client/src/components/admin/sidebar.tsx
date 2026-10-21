@@ -4,16 +4,19 @@ import {
   FileQuestion,
   GraduationCap,
   Users,
+  UserCheck,
   BarChart3,
   Settings,
   LogOut,
   ShieldCheck,
   Code2,
+  Award,
+  CheckSquare,
 } from "lucide-react"
 
 import { Logo } from "@/components/logo"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { useAdmin } from "@/stores/auth-store"
 import { useLogout } from "@/hooks/use-auth"
@@ -40,6 +43,18 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
       active: currentPath.startsWith("/admin/coding-problem"),
     },
     {
+      title: "MCQs",
+      icon: CheckSquare,
+      to: "/admin/mcq",
+      active: currentPath.startsWith("/admin/mcq"),
+    },
+    {
+      title: "Users",
+      icon: Users,
+      to: "/admin/users",
+      active: currentPath.startsWith("/admin/users"),
+    },
+    {
       title: "Assessments",
       icon: GraduationCap,
       to: "/admin/assessments",
@@ -50,12 +65,11 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
       title: "Question Bank",
       icon: FileQuestion,
       to: "/admin/questions",
-      badge: "Soon",
-      active: currentPath === "/admin/questions",
+      active: currentPath.startsWith("/admin/questions"),
     },
     {
       title: "Candidates",
-      icon: Users,
+      icon: UserCheck,
       to: "/admin/candidates",
       badge: "Soon",
       active: currentPath === "/admin/candidates",
@@ -154,6 +168,18 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
             ADMIN
           </Badge>
         </div>
+
+        <Link
+          to="/dashboard"
+          className={buttonVariants({
+            variant: "outline",
+            size: "sm",
+            className: "w-full mb-2 gap-2 text-xs border-border text-muted-foreground hover:text-foreground",
+          })}
+        >
+          <Award className="size-3.5 text-primary" />
+          <span>User Dashboard</span>
+        </Link>
 
         <Button
           variant="outline"

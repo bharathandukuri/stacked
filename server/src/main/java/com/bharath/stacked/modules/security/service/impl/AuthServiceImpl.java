@@ -6,6 +6,7 @@ import com.bharath.stacked.exception.UnauthorizedException;
 import com.bharath.stacked.modules.security.dto.AdminLoginRequest;
 import com.bharath.stacked.modules.security.dto.AdminResponse;
 import com.bharath.stacked.modules.security.dto.AuthResponse;
+import com.bharath.stacked.modules.security.dto.LoginRequest;
 import com.bharath.stacked.modules.security.dto.RefreshResponse;
 import com.bharath.stacked.modules.security.model.Role;
 import com.bharath.stacked.modules.security.model.User;
@@ -48,20 +49,30 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @NonNull
+    public AuthResult login(@NonNull LoginRequest request) {
+        return authenticateUser(request.email(), request.password(), null);
+    }
+
+    @Override
+    @NonNull
     public AuthResult loginAdmin(@NonNull AdminLoginRequest request) {
-        String normalizedEmail = request.email().trim().toLowerCase();
-        log.info("Attempting admin authentication for email: {}", normalizedEmail);
+        return authenticateUser(request.email(), request.password(), Role.ADMIN);
+    }
+
+    private AuthResult authenticateUser(String email, String password, @Nullable Role requiredRole) {
+        String normalizedEmail = email.trim().toLowerCase();
+        log.info("Attempting authentication for email: {} (requiredRole: {})", normalizedEmail, requiredRole);
 
         User user = userRepository.findByEmail(normalizedEmail).orElse(null);
         if (user == null) {
-            passwordEncoder.matches(request.password(), DUMMY_BCRYPT_HASH);
+            passwordEncoder.matches(password, DUMMY_BCRYPT_HASH);
             log.warn("Login failed: email [{}] not found", normalizedEmail);
             throw new UnauthorizedException("Invalid email or password.");
         }
 
         try {
             Authentication authResult = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(normalizedEmail, request.password()));
+                    new UsernamePasswordAuthenticationToken(normalizedEmail, password));
 
             if (!authResult.isAuthenticated()) {
                 throw new UnauthorizedException("Invalid email or password.");
@@ -71,9 +82,9 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Invalid email or password.");
         }
 
-        if (user.getRole() != Role.ADMIN) {
-            log.warn("Login rejected: user [{}] lacks ADMIN role", normalizedEmail);
-            throw new ForbiddenException("Access denied: ADMIN role required.");
+        if (requiredRole != null && user.getRole() != requiredRole) {
+            log.warn("Login rejected: user [{}] lacks {} role", normalizedEmail, requiredRole);
+            throw new ForbiddenException("Access denied: " + requiredRole + " role required.");
         }
 
         String userId = Objects.requireNonNull(user.getId(), "User ID must not be null");
@@ -120,10 +131,6 @@ public class AuthServiceImpl implements AuthService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("User associated with session was not found."));
-
-        if (user.getRole() != Role.ADMIN) {
-            throw new ForbiddenException("Access denied: ADMIN role required.");
-        }
 
         redisService.delete(oldSessionKey);
         try {
@@ -192,6 +199,19 @@ public class AuthServiceImpl implements AuthService {
         if (user.getRole() != Role.ADMIN) {
             throw new ForbiddenException("Access denied: ADMIN role required.");
         }
+
+        return AdminResponse.fromUser(user);
+    }
+
+    @Override
+    @NonNull
+    public AdminResponse getUserProfile(@Nullable String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new UnauthorizedException("User ID is required to fetch user profile.");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
         return AdminResponse.fromUser(user);
     }

@@ -30,7 +30,8 @@ class SecurityModelsAndDtoTest {
     @DisplayName("Role enum values")
     void roleEnum() {
         assertThat(Role.valueOf("ADMIN")).isEqualTo(Role.ADMIN);
-        assertThat(Role.values()).containsExactly(Role.ADMIN);
+        assertThat(Role.valueOf("USER")).isEqualTo(Role.USER);
+        assertThat(Role.values()).containsExactlyInAnyOrder(Role.ADMIN, Role.USER);
     }
 
     @Test

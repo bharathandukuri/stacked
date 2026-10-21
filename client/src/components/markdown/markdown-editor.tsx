@@ -184,6 +184,34 @@ export function MarkdownEditor({
     setIsImageUploadDialogOpen(true)
   }, [])
 
+  const lastExecutedActionRef = useRef<{ id: string; time: number }>({ id: "", time: 0 })
+  const executeActionSafe = useCallback(
+    (action: ToolbarActionDef) => {
+      const now = Date.now()
+      if (lastExecutedActionRef.current.id === action.id && now - lastExecutedActionRef.current.time < 50) {
+        return
+      }
+      lastExecutedActionRef.current = { id: action.id, time: now }
+      handleExecuteAction(action)
+    },
+    [handleExecuteAction]
+  )
+
+  const lastExecutedDialogRef = useRef<{ id: string; time: number }>({ id: "", time: 0 })
+  const openLinkDialogSafe = useCallback(() => {
+    const now = Date.now()
+    if (lastExecutedDialogRef.current.id === "link" && now - lastExecutedDialogRef.current.time < 50) return
+    lastExecutedDialogRef.current = { id: "link", time: now }
+    handleOpenLinkDialog()
+  }, [handleOpenLinkDialog])
+
+  const openImageDialogSafe = useCallback(() => {
+    const now = Date.now()
+    if (lastExecutedDialogRef.current.id === "image" && now - lastExecutedDialogRef.current.time < 50) return
+    lastExecutedDialogRef.current = { id: "image", time: now }
+    handleOpenImageDialog()
+  }, [handleOpenImageDialog])
+
   const handleEditorMount = useCallback(
     (
       editor: monaco.editor.IStandaloneCodeEditor,
@@ -197,7 +225,7 @@ export function MarkdownEditor({
           )
           if (monacoKey !== null) {
             editor.addCommand(monacoKey, () => {
-              handleExecuteAction(action)
+              executeActionSafe(action)
             })
           }
         }
@@ -205,12 +233,12 @@ export function MarkdownEditor({
 
       const linkKey = parseTanstackHotkeyToMonaco(monacoInstance, "Mod+K")
       if (linkKey !== null) {
-        editor.addCommand(linkKey, handleOpenLinkDialog)
+        editor.addCommand(linkKey, openLinkDialogSafe)
       }
 
       const imageKey = parseTanstackHotkeyToMonaco(monacoInstance, "Mod+Alt+I")
       if (imageKey !== null) {
-        editor.addCommand(imageKey, handleOpenImageDialog)
+        editor.addCommand(imageKey, openImageDialogSafe)
       }
 
       if (onSave) {
@@ -222,7 +250,7 @@ export function MarkdownEditor({
         }
       }
     },
-    [handleExecuteAction, handleOpenLinkDialog, handleOpenImageDialog, onSave]
+    [executeActionSafe, openLinkDialogSafe, openImageDialogSafe, onSave]
   )
 
   const handleEditorKeyDown = useCallback(
@@ -269,22 +297,25 @@ export function MarkdownEditor({
         hotkey:
           action.shortcut as import("@tanstack/hotkeys").RegisterableHotkey,
         callback: (e: KeyboardEvent) => {
+          if (!monacoRef.current?.hasTextFocus()) return
           e.preventDefault()
-          handleExecuteAction(action)
+          executeActionSafe(action)
         },
       })),
       {
         hotkey: "Mod+K" as import("@tanstack/hotkeys").RegisterableHotkey,
         callback: (e: KeyboardEvent) => {
+          if (!monacoRef.current?.hasTextFocus()) return
           e.preventDefault()
-          handleOpenLinkDialog()
+          openLinkDialogSafe()
         },
       },
       {
         hotkey: "Mod+Alt+I" as import("@tanstack/hotkeys").RegisterableHotkey,
         callback: (e: KeyboardEvent) => {
+          if (!monacoRef.current?.hasTextFocus()) return
           e.preventDefault()
-          handleOpenImageDialog()
+          openImageDialogSafe()
         },
       },
       ...(onSave
@@ -292,6 +323,7 @@ export function MarkdownEditor({
             {
               hotkey: "Mod+S" as import("@tanstack/hotkeys").RegisterableHotkey,
               callback: (e: KeyboardEvent) => {
+                if (!monacoRef.current?.hasTextFocus()) return
                 e.preventDefault()
                 onSave(latestStateRef.current)
               },
@@ -299,7 +331,7 @@ export function MarkdownEditor({
           ]
         : []),
     ],
-    { ignoreInputs: false }
+    { target: containerRef, ignoreInputs: false }
   )
 
   const handleInsertText = useCallback(

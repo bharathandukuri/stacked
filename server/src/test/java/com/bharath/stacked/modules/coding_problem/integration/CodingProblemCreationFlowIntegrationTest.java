@@ -153,9 +153,9 @@ class CodingProblemCreationFlowIntegrationTest extends AbstractIntegrationTest {
         CodingProblem created = codingProblemService.create(request);
 
         assertThat(created).isNotNull();
-        // Expected output must be the verification script output, NOT the reference solution output
-        assertThat(created.getSampleTestCases().get(0).getOutput()).isEqualTo("CANONICAL_input_A\n");
-        assertThat(created.getHiddenTestCases().get(0).getOutput()).isEqualTo("CANONICAL_input_B\n");
+        // Expected output is the reference solution output
+        assertThat(created.getSampleTestCases().get(0).getOutput()).isEqualTo("raw_ref_solution_out\n");
+        assertThat(created.getHiddenTestCases().get(0).getOutput()).isEqualTo("raw_ref_solution_out\n");
     }
 
     @Test

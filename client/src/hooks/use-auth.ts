@@ -4,29 +4,29 @@ import { authService } from "@/services/auth-service"
 import { setAccessToken, useAuthStore } from "@/stores/auth-store"
 import type { ApiResponse } from "@/types/api"
 import type {
-  AdminLoginCredentials,
-  AdminUser,
   AuthResponseData,
+  AuthUser,
+  UserLoginCredentials,
 } from "@/types/auth"
 
 /**
- * Hook to retrieve currently authenticated admin profile
+ * Hook to retrieve currently authenticated user profile
  */
 export function useMe() {
   const { setAuth, setInitialized } = useAuthStore()
 
-  return useQuery<ApiResponse<AdminUser>, AxiosError<ApiResponse<AdminUser>>>({
+  return useQuery<ApiResponse<AuthUser>, AxiosError<ApiResponse<AuthUser>>>({
     queryKey: ["auth", "me"],
     queryFn: async () => {
       try {
-        const admin = await authService.getMe()
+        const user = await authService.getMe()
         const currentToken = useAuthStore.getState().accessToken
-        setAuth(currentToken, admin)
+        setAuth(currentToken, user)
         return {
           success: true,
           statusCode: 200,
           message: "Success",
-          data: admin,
+          data: user,
           timestamp: new Date().toISOString(),
         }
       } catch (err) {
@@ -40,7 +40,7 @@ export function useMe() {
 }
 
 /**
- * Hook to execute admin login mutation
+ * Hook to execute user login mutation (ADMIN or USER)
  */
 export function useLogin() {
   const queryClient = useQueryClient()
@@ -49,9 +49,9 @@ export function useLogin() {
   return useMutation<
     AuthResponseData,
     AxiosError<ApiResponse<unknown>>,
-    AdminLoginCredentials
+    UserLoginCredentials
   >({
-    mutationFn: (credentials) => authService.loginAdmin(credentials),
+    mutationFn: (credentials) => authService.login(credentials),
     onSuccess: (data) => {
       if (data) {
         setAccessToken(data.accessToken)

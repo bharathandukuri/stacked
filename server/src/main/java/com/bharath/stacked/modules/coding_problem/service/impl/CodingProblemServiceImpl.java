@@ -46,6 +46,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -864,7 +865,30 @@ public class CodingProblemServiceImpl implements CodingProblemService {
                 .or(() -> codingProblemRepository.findBySlug(idOrSlug))
                 .orElseThrow(() -> new ResourceNotFoundException("CodingProblem", "id or slug", idOrSlug));
 
+        CodingProblemStatus currentStatus = codingProblem.getStatus();
+        if (currentStatus == status) {
+            return codingProblem;
+        }
+
+        if (status == CodingProblemStatus.PUBLISHED) {
+            if (currentStatus == CodingProblemStatus.ARCHIVED) {
+                throw new BadRequestException("Cannot transition directly from ARCHIVED to PUBLISHED. Restore to DRAFT first.");
+            }
+            if (codingProblem.getTitle() == null || codingProblem.getTitle().isBlank()) {
+                throw new BadRequestException("Cannot publish coding problem without a title.");
+            }
+            if (codingProblem.getStatement() == null || codingProblem.getStatement().isBlank()) {
+                throw new BadRequestException("Cannot publish coding problem without a problem statement.");
+            }
+            boolean hasSample = codingProblem.getSampleTestCases() != null && !codingProblem.getSampleTestCases().isEmpty();
+            boolean hasHidden = codingProblem.getHiddenTestCases() != null && !codingProblem.getHiddenTestCases().isEmpty();
+            if (!hasSample && !hasHidden) {
+                throw new BadRequestException("Cannot publish coding problem without at least one testcase.");
+            }
+        }
+
         codingProblem.setStatus(status);
+        codingProblem.setUpdatedAt(Instant.now());
         return codingProblemRepository.save(codingProblem);
     }
 
@@ -878,6 +902,12 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     @Override
     public CodingProblem unpublish(String idOrSlug) {
         return updateStatus(idOrSlug, CodingProblemStatus.UNPUBLISHED);
+    }
+
+    @Transactional
+    @Override
+    public CodingProblem archive(String idOrSlug) {
+        return updateStatus(idOrSlug, CodingProblemStatus.ARCHIVED);
     }
 
     @Override

@@ -12,6 +12,7 @@ export interface MonacoEditorRef {
   getValue: () => string
   setValue: (value: string) => void
   focus: () => void
+  hasTextFocus: () => boolean
   getSelection: () => monaco.Selection | null
   getSelectedText: () => string
   setSelection: (selection: monaco.IRange) => void
@@ -114,6 +115,7 @@ export const MonacoEditor = React.forwardRef<
       focus: () => {
         editorRef.current?.focus()
       },
+      hasTextFocus: () => editorRef.current?.hasTextFocus() ?? false,
       getSelection: () => editorRef.current?.getSelection() ?? null,
       getSelectedText: () => {
         const editor = editorRef.current

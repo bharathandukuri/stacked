@@ -1,7 +1,8 @@
 import { create } from "zustand"
-import type { AdminUser } from "@/types/auth"
+import type { AdminUser, AuthUser } from "@/types/auth"
 
 interface AuthState {
+  user: AuthUser | null
   admin: AdminUser | null
   accessToken: string | null
   isAuthenticated: boolean
@@ -10,7 +11,7 @@ interface AuthState {
 }
 
 interface AuthActions {
-  setAuth: (accessToken: string | null, admin: AdminUser | null) => void
+  setAuth: (accessToken: string | null, user: AuthUser | null) => void
   setAccessToken: (accessToken: string | null) => void
   setLoading: (isLoading: boolean) => void
   setInitialized: (isInitialized: boolean) => void
@@ -25,11 +26,12 @@ export type AuthStore = AuthState &
 
 export const useAuthStore = create<AuthStore>((set) => {
   const actions: AuthActions = {
-    setAuth: (accessToken, admin) =>
+    setAuth: (accessToken, user) =>
       set({
-        admin,
+        user,
+        admin: user,
         accessToken,
-        isAuthenticated: Boolean(accessToken && admin),
+        isAuthenticated: Boolean(accessToken && user),
         isLoading: false,
         isInitialized: true,
       }),
@@ -53,6 +55,7 @@ export const useAuthStore = create<AuthStore>((set) => {
 
     logout: () =>
       set({
+        user: null,
         admin: null,
         accessToken: null,
         isAuthenticated: false,
@@ -62,6 +65,7 @@ export const useAuthStore = create<AuthStore>((set) => {
 
     clearAuth: () =>
       set({
+        user: null,
         admin: null,
         accessToken: null,
         isAuthenticated: false,
@@ -71,6 +75,7 @@ export const useAuthStore = create<AuthStore>((set) => {
   }
 
   return {
+    user: null,
     admin: null,
     accessToken: null,
     isAuthenticated: false,
@@ -87,7 +92,13 @@ export const setAccessToken = (token: string | null) => {
 }
 
 // Atomic selectors for optimal re-render performance
+export const useUser = () => useAuthStore((state) => state.user || state.admin)
 export const useAdmin = () => useAuthStore((state) => state.admin)
+export const useIsAdmin = () =>
+  useAuthStore(
+    (state) =>
+      state.user?.role === "ADMIN" || state.admin?.role === "ADMIN"
+  )
 export const useAccessToken = () => useAuthStore((state) => state.accessToken)
 export const useIsAuthenticated = () =>
   useAuthStore((state) => state.isAuthenticated)

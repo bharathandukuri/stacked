@@ -5,9 +5,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
 import { Kbd } from "@/components/ui/kbd"
-import { Image as ImageIcon, Link as LinkIcon, Images } from "lucide-react"
+import { Image as ImageIcon, Link as LinkIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatForDisplay } from "@tanstack/react-hotkeys"
 import { TOOLBAR_ACTIONS, type ToolbarActionDef } from "./markdown-config"
@@ -44,9 +43,6 @@ export function MarkdownToolbar({
   onExecuteAction,
   onOpenLinkDialog,
   onOpenImageDialog,
-  onOpenSessionImagesDialog,
-  sessionImageCount = 0,
-  showSessionImages: showSessionImagesProp = true,
   canUndo = true,
   canRedo = true,
   disabled = false,
@@ -121,8 +117,6 @@ export function MarkdownToolbar({
 
   const showLink = isEnabled("link", "link")
   const showImage = isEnabled("image", "image")
-  const showSessionImages =
-    showSessionImagesProp && isEnabled("session-images", "session-images")
 
   if (toolbar === false) {
     return null
@@ -283,34 +277,6 @@ export function MarkdownToolbar({
               {formatForDisplay("Mod+Alt+I")}
             </Kbd>
           </div>
-        </TooltipContent>
-      </Tooltip>
-    )
-  }
-
-  if (showSessionImages) {
-    sections.push(
-      <Tooltip key="session-images">
-        <TooltipTrigger
-          type="button"
-          disabled={disabled}
-          onClick={onOpenSessionImagesDialog}
-          className="relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:outline-none"
-          aria-label="Manage Uploaded Images"
-        >
-          <Images className="h-3.5 w-3.5" />
-          <span className="hidden text-[11px] sm:inline">Images</span>
-          {sessionImageCount > 0 && (
-            <Badge
-              variant="secondary"
-              className="h-4 min-w-4 border-primary/20 bg-primary/10 px-1 text-[10px] font-bold text-primary"
-            >
-              {sessionImageCount}
-            </Badge>
-          )}
-        </TooltipTrigger>
-        <TooltipContent side="top" className="rounded-md text-xs">
-          <span>Manage Tracked Images ({sessionImageCount})</span>
         </TooltipContent>
       </Tooltip>
     )
