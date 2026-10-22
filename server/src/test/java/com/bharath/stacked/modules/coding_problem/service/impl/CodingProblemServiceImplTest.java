@@ -31,6 +31,11 @@ import com.bharath.stacked.modules.language.Language;
 import com.bharath.stacked.modules.language.LanguageType;
 import com.bharath.stacked.modules.file.service.FileService;
 import com.bharath.stacked.modules.language.registry.LanguageRegistry;
+import com.bharath.stacked.exception.ConflictException;
+import com.bharath.stacked.modules.assessment.model.Assessment;
+import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
+import com.bharath.stacked.modules.question_bank.model.QuestionBank;
+import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -85,6 +90,12 @@ class CodingProblemServiceImplTest {
 
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private QuestionBankRepository questionBankRepository;
+
+    @Mock
+    private AssessmentRepository assessmentRepository;
 
     @InjectMocks
     private CodingProblemServiceImpl codingProblemService;
@@ -593,40 +604,29 @@ class CodingProblemServiceImplTest {
     }
 
     @Test
-    @DisplayName("archive should set status to ARCHIVED and save")
-    void shouldArchiveProblemSuccessfully() {
-        CodingProblem existing = CodingProblem.builder()
-                .id("prob-123")
-                .slug("two-sum")
-                .status(CodingProblemStatus.PUBLISHED)
-                .build();
-
-        when(codingProblemRepository.findById("prob-123")).thenReturn(Optional.of(existing));
-        when(codingProblemRepository.save(any(CodingProblem.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        CodingProblem archived = codingProblemService.archive("prob-123");
-
-        assertThat(archived.getStatus()).isEqualTo(CodingProblemStatus.ARCHIVED);
-        verify(codingProblemRepository).save(existing);
-    }
-
-    @Test
-    @DisplayName("updateStatus should reject transition from ARCHIVED to PUBLISHED")
-    void shouldRejectArchivedToPublishedDirectly() {
-        CodingProblem existing = CodingProblem.builder()
-                .id("prob-123")
+    @DisplayName("delete throws ConflictException when coding problem is in use by question bank or assessment")
+    void testDelete_ThrowsConflictException_WhenInUse() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-1")
                 .slug("two-sum")
                 .title("Two Sum")
-                .statement("Statement")
-                .sampleTestCases(List.of(new TestCase("s1", "1 2", null, "3")))
-                .status(CodingProblemStatus.ARCHIVED)
                 .build();
 
-        when(codingProblemRepository.findById("prob-123")).thenReturn(Optional.of(existing));
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+        when(questionBankRepository.findAllByItemsQuestionId("prob-1")).thenReturn(List.of(
+                QuestionBank.builder().id("bank-1").title("Algorithms 101").build()
+        ));
+        when(assessmentRepository.findAllByItemsQuestionId("prob-1")).thenReturn(List.of(
+                Assessment.builder().id("asm-1").title("Frontend Assessment").build()
+        ));
 
-        assertThatThrownBy(() -> codingProblemService.updateStatus("prob-123", CodingProblemStatus.PUBLISHED))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Cannot transition directly from ARCHIVED to PUBLISHED");
+        assertThatThrownBy(() -> codingProblemService.delete("prob-1"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot delete coding problem 'Two Sum'")
+                .hasMessageContaining("Algorithms 101")
+                .hasMessageContaining("Frontend Assessment");
+
+        verify(codingProblemRepository, never()).delete(any());
     }
 
     @Test

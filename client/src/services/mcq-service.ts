@@ -119,16 +119,6 @@ export const mcqService = {
   },
 
   /**
-   * Archive a question
-   */
-  async archiveQuestion(idOrSlug: string): Promise<McqQuestionDetail> {
-    const response = await API.patch<ApiResponse<McqQuestionDetail>>(
-      `/admin/mcq/questions/${encodeURIComponent(idOrSlug)}/archive`
-    )
-    return response.data.data
-  },
-
-  /**
    * Check if a slug is available
    */
   async checkSlug(slug: string, excludeId?: string): Promise<boolean> {

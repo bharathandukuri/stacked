@@ -665,7 +665,6 @@ function QuestionBankStudioForm({
                 >
                   <NativeSelectOption value="DRAFT">Draft</NativeSelectOption>
                   <NativeSelectOption value="PUBLISHED">Published</NativeSelectOption>
-                  <NativeSelectOption value="ARCHIVED">Archived</NativeSelectOption>
                 </NativeSelect>
               </div>
 

@@ -338,6 +338,7 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
         hints: storeValues.hints ?? [],
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingProblemId]);
 
   // Watch slug reactively via store and trigger debounced query to set uniqueSlug

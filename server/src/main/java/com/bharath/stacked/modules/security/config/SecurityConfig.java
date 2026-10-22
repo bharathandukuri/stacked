@@ -66,7 +66,8 @@ public class SecurityConfig {
                                 "/api/coding-problem/run-preview",
                                 "/api/coding-problem/test-run",
                                 "/api/coding-problem/run-generator",
-                                "/api/coding-problem/generate-testcases")
+                                "/api/coding-problem/generate-testcases",
+                                "/ws/**")
                         .permitAll()
                         .requestMatchers("/api/auth/me").authenticated()
                         .requestMatchers("/api/judge/**").authenticated()

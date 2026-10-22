@@ -42,7 +42,7 @@ export function useCodingProblem(idOrSlug?: string) {
 }
 
 /**
- * Hook to update a problem's status (PUBLISHED, UNPUBLISHED, DRAFT, or ARCHIVED).
+ * Hook to update a problem's status (PUBLISHED, UNPUBLISHED, or DRAFT).
  */
 export function useUpdateProblemStatus() {
   const queryClient = useQueryClient()
@@ -53,7 +53,7 @@ export function useUpdateProblemStatus() {
       status,
     }: {
       idOrSlug: string
-      status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT" | "ARCHIVED"
+      status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT"
     }) => codingProblemService.updateStatus(idOrSlug, status),
     onSuccess: (updated) => {
       toast.add({
@@ -149,41 +149,6 @@ export function useUnpublishCodingProblem() {
       }
       toast.add({
         title: "Unpublish Failed",
-        description: message,
-        type: "error",
-      })
-    },
-  })
-}
-
-/**
- * Hook to archive a coding problem.
- */
-export function useArchiveCodingProblem() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (idOrSlug: string) => codingProblemService.archiveProblem(idOrSlug),
-    onSuccess: (updated) => {
-      toast.add({
-        title: "Problem Archived",
-        description: `Problem "${updated.title}" has been archived.`,
-        type: "success",
-      })
-      queryClient.invalidateQueries({ queryKey: codingProblemKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.id) })
-      queryClient.invalidateQueries({ queryKey: codingProblemKeys.detail(updated.slug) })
-    },
-    onError: (error: unknown) => {
-      let message = "Could not archive problem."
-      if (axios.isAxiosError(error)) {
-        const data = error.response?.data as { message?: string } | undefined
-        if (data?.message) message = data.message
-      } else if (error instanceof Error) {
-        message = error.message
-      }
-      toast.add({
-        title: "Archive Failed",
         description: message,
         type: "error",
       })

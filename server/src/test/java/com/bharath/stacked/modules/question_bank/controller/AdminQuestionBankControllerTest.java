@@ -275,21 +275,4 @@ class AdminQuestionBankControllerTest {
 
         verify(questionBankService).unpublish("qb-101");
     }
-
-    @Test
-    @DisplayName("PATCH /api/admin/question-banks/{idOrSlug}/archive archives bank and returns 200")
-    void archiveQuestionBank_Success() throws Exception {
-        QuestionBankSummaryResponse archivedSummary = QuestionBankSummaryResponse.builder()
-                .id("qb-101")
-                .status(QuestionBankStatus.ARCHIVED)
-                .build();
-        when(questionBankService.archive("qb-101")).thenReturn(archivedSummary);
-
-        mockMvc.perform(patch("/api/admin/question-banks/qb-101/archive"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
-
-        verify(questionBankService).archive("qb-101");
-    }
 }

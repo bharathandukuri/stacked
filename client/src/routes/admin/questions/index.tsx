@@ -18,7 +18,6 @@ import {
   FolderOpen,
   CheckCircle2,
   AlertCircle,
-  Archive,
 } from "lucide-react"
 
 import { AdminSidebar } from "@/components/admin/sidebar"
@@ -63,10 +62,8 @@ import {
   useQuestionBankCategories,
   useDeleteQuestionBank,
   useDuplicateQuestionBank,
-  useUpdateQuestionBankStatus,
   usePublishQuestionBank,
   useUnpublishQuestionBank,
-  useArchiveQuestionBank,
 } from "@/hooks/use-question-banks"
 import type {
   QuestionBankStatus,
@@ -178,10 +175,8 @@ export function AdminQuestionsPage() {
     }
   }
 
-  const updateStatusMutation = useUpdateQuestionBankStatus()
   const publishMutation = usePublishQuestionBank()
   const unpublishMutation = useUnpublishQuestionBank()
-  const archiveMutation = useArchiveQuestionBank()
   const [mutatingId, setMutatingId] = useState<string | null>(null)
 
   const handlePublish = async (bank: QuestionBankSummary) => {
@@ -205,27 +200,6 @@ export function AdminQuestionsPage() {
     setMutatingId(bank.id)
     try {
       await unpublishMutation.mutateAsync(bank.id)
-    } finally {
-      setMutatingId(null)
-    }
-  }
-
-  const handleArchive = async (bank: QuestionBankSummary) => {
-    setMutatingId(bank.id)
-    try {
-      await archiveMutation.mutateAsync(bank.id)
-    } finally {
-      setMutatingId(null)
-    }
-  }
-
-  const handleRestore = async (bank: QuestionBankSummary) => {
-    setMutatingId(bank.id)
-    try {
-      await updateStatusMutation.mutateAsync({
-        idOrSlug: bank.id,
-        status: "DRAFT",
-      })
     } finally {
       setMutatingId(null)
     }
@@ -406,9 +380,6 @@ export function AdminQuestionsPage() {
                     Published
                   </NativeSelectOption>
                   <NativeSelectOption value="DRAFT">Draft</NativeSelectOption>
-                  <NativeSelectOption value="ARCHIVED">
-                    Archived
-                  </NativeSelectOption>
                 </NativeSelect>
               </div>
 
@@ -628,14 +599,6 @@ export function AdminQuestionsPage() {
                               Draft
                             </Badge>
                           )}
-                          {bank.status === "ARCHIVED" && (
-                            <Badge
-                              variant="outline"
-                              className="border-muted bg-muted/30 text-muted-foreground text-[10px] uppercase font-bold"
-                            >
-                              Archived
-                            </Badge>
-                          )}
                         </TableCell>
 
                         {/* Actions */}
@@ -663,57 +626,27 @@ export function AdminQuestionsPage() {
                               </DropdownMenuItem>
 
                               {bank.status === "PUBLISHED" && (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handleUnpublish(bank)}
-                                    disabled={mutatingId === bank.id}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <CheckCircle2 className="size-3.5" />
-                                    <span>Unpublish to Draft</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleArchive(bank)}
-                                    disabled={mutatingId === bank.id}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <Archive className="size-3.5" />
-                                    <span>Archive Bank</span>
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {bank.status === "DRAFT" && (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handlePublish(bank)}
-                                    disabled={mutatingId === bank.id || bank.totalQuestions === 0}
-                                    className="gap-2 cursor-pointer"
-                                    title={bank.totalQuestions === 0 ? "Curate at least 1 question to publish" : undefined}
-                                  >
-                                    <CheckCircle2 className="size-3.5" />
-                                    <span>
-                                      Publish Bank
-                                      {bank.totalQuestions === 0 && " (Empty)"}
-                                    </span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleArchive(bank)}
-                                    disabled={mutatingId === bank.id}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <Archive className="size-3.5" />
-                                    <span>Archive Bank</span>
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {bank.status === "ARCHIVED" && (
                                 <DropdownMenuItem
-                                  onClick={() => handleRestore(bank)}
+                                  onClick={() => handleUnpublish(bank)}
                                   disabled={mutatingId === bank.id}
                                   className="gap-2 cursor-pointer"
                                 >
                                   <CheckCircle2 className="size-3.5" />
-                                  <span>Restore to Draft</span>
+                                  <span>Unpublish to Draft</span>
+                                </DropdownMenuItem>
+                              )}
+                              {bank.status === "DRAFT" && (
+                                <DropdownMenuItem
+                                  onClick={() => handlePublish(bank)}
+                                  disabled={mutatingId === bank.id || bank.totalQuestions === 0}
+                                  className="gap-2 cursor-pointer"
+                                  title={bank.totalQuestions === 0 ? "Curate at least 1 question to publish" : undefined}
+                                >
+                                  <CheckCircle2 className="size-3.5" />
+                                  <span>
+                                    Publish Bank
+                                    {bank.totalQuestions === 0 && " (Empty)"}
+                                  </span>
                                 </DropdownMenuItem>
                               )}
 

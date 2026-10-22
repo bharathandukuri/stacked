@@ -1,8 +1,11 @@
 package com.bharath.stacked.modules.question_bank.service.impl;
 
 import com.bharath.stacked.exception.BadRequestException;
+import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
 import com.bharath.stacked.common.api.PageResponse;
+import com.bharath.stacked.modules.assessment.model.Assessment;
+import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
 import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
 import com.bharath.stacked.modules.coding_problem.repository.CodingProblemRepository;
@@ -41,6 +44,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     private final QuestionBankRepository questionBankRepository;
     private final CodingProblemRepository codingProblemRepository;
     private final McqQuestionRepository mcqQuestionRepository;
+    private final AssessmentRepository assessmentRepository;
     private final MongoTemplate mongoTemplate;
 
     @Override
@@ -146,9 +150,6 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         QuestionBank existing = findByIdOrSlug(idOrSlug);
 
         QuestionBankStatus targetStatus = request.getStatus() != null ? request.getStatus() : existing.getStatus();
-        if (targetStatus == QuestionBankStatus.PUBLISHED && existing.getStatus() == QuestionBankStatus.ARCHIVED) {
-            throw new BadRequestException("Cannot transition directly from ARCHIVED to PUBLISHED. Restore to DRAFT first.");
-        }
 
         if (!existing.getTitle().equalsIgnoreCase(request.getTitle().trim())) {
             existing.setSlug(generateUniqueSlug(request.getTitle(), existing.getId()));
@@ -192,9 +193,6 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         }
 
         if (status == QuestionBankStatus.PUBLISHED) {
-            if (currentStatus == QuestionBankStatus.ARCHIVED) {
-                throw new BadRequestException("Cannot transition directly from ARCHIVED to PUBLISHED. Restore to DRAFT first.");
-            }
             if (bank.getItems() == null || bank.getItems().isEmpty()) {
                 throw new BadRequestException("Cannot publish an empty Question Bank. Curate at least one question first.");
             }
@@ -219,13 +217,17 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     }
 
     @Override
-    public QuestionBankSummaryResponse archive(String idOrSlug) {
-        return updateStatus(idOrSlug, QuestionBankStatus.ARCHIVED);
-    }
-
-    @Override
     public void deleteQuestionBank(String idOrSlug) {
         QuestionBank bank = findByIdOrSlug(idOrSlug);
+
+        List<Assessment> assessments = assessmentRepository.findAllByQuestionBankId(bank.getId());
+        if (!assessments.isEmpty()) {
+            String assessmentTitles = assessments.stream()
+                    .map(Assessment::getTitle)
+                    .collect(Collectors.joining(", "));
+            throw new ConflictException("Cannot delete question bank '" + bank.getTitle() + "' because it is currently in use by " + assessments.size() + " assessment(s) [" + assessmentTitles + "].");
+        }
+
         questionBankRepository.delete(bank);
         log.info("Deleted Question Bank: [{}] (id: {})", bank.getTitle(), bank.getId());
     }
@@ -330,7 +332,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
             bank.setUpdatedAt(Instant.now());
             questionBankRepository.save(bank);
-            log.info("Removed archived/deleted question [{}] from Question Bank [{}] (remaining items: {})",
+            log.info("Removed deleted question [{}] from Question Bank [{}] (remaining items: {})",
                     questionId, bank.getTitle(), bank.getItems().size());
         }
     }

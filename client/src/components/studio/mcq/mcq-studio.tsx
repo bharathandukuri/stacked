@@ -693,9 +693,6 @@ function McqStudioForm({
                 <NativeSelectOption value="PUBLISHED">
                   Published (Available for assessments)
                 </NativeSelectOption>
-                <NativeSelectOption value="ARCHIVED">
-                  Archived (Hidden from catalog)
-                </NativeSelectOption>
               </NativeSelect>
             </div>
 

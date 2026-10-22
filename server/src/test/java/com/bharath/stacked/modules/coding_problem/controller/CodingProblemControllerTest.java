@@ -131,27 +131,6 @@ class CodingProblemControllerTest {
     }
 
     @Test
-    @DisplayName("PATCH /api/coding-problem/{id}/archive archives problem successfully")
-    void archiveProblem_Success() throws Exception {
-        CodingProblem problem = CodingProblem.builder()
-                .id("prob-123")
-                .slug("two-sum")
-                .status(CodingProblemStatus.ARCHIVED)
-                .build();
-
-        when(codingProblemService.archive("prob-123")).thenReturn(problem);
-
-        mockMvc.perform(patch("/api/coding-problem/prob-123/archive"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Coding problem archived successfully"))
-                .andExpect(jsonPath("$.data.id").value("prob-123"))
-                .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
-
-        verify(codingProblemService).archive("prob-123");
-    }
-
-    @Test
     @DisplayName("PATCH /api/coding-problem/{id}/status updates problem status successfully")
     void updateProblemStatus_Success() throws Exception {
         CodingProblem problem = CodingProblem.builder()

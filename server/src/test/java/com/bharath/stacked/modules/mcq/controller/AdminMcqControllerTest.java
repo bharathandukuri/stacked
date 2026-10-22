@@ -299,23 +299,4 @@ class AdminMcqControllerTest {
 
         verify(questionService).unpublish("q-1");
     }
-
-    @Test
-    @DisplayName("PATCH /api/admin/mcq/questions/{idOrSlug}/archive archives question and returns 200")
-    void archiveQuestion_Success() throws Exception {
-        McqQuestionDetailResponse detail = new McqQuestionDetailResponse(
-                "q-1", "Java Concurrency", "java-concurrency", "Content",
-                McqType.SINGLE_CHOICE, McqDifficulty.MEDIUM, McqStatus.ARCHIVED,
-                List.of("Java"), List.of(), List.of(), List.of(), "Exp", 1.0, 0.0, true, List.of(),
-                "admin-1", Instant.now(), Instant.now()
-        );
-        when(questionService.archive("q-1")).thenReturn(detail);
-
-        mockMvc.perform(patch("/api/admin/mcq/questions/q-1/archive"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
-
-        verify(questionService).archive("q-1");
-    }
 }

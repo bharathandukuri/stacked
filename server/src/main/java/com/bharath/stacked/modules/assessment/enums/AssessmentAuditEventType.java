@@ -1,0 +1,19 @@
+package com.bharath.stacked.modules.assessment.enums;
+
+public enum AssessmentAuditEventType {
+    SESSION_STARTED,
+    NAVIGATE_QUESTION,
+    MCQ_ANSWER_CHANGED,
+    CODE_SAVED,
+    CODE_RUN_SAMPLE,
+    CODE_RUN_CUSTOM,
+    CODE_SUBMITTED,
+    MARK_REVIEW_TOGGLED,
+    WINDOW_BLUR,
+    WINDOW_FOCUS,
+    CONNECTION_INTERRUPTED,
+    CONNECTION_RESTORED,
+    STALE_SESSION_REPLACED,
+    FINAL_SUBMISSION
+}
+

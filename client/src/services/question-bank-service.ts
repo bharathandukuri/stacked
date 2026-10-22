@@ -112,16 +112,6 @@ export const questionBankService = {
   },
 
   /**
-   * Archive a question bank
-   */
-  async archive(idOrSlug: string): Promise<QuestionBankSummary> {
-    const response = await API.patch<ApiResponse<QuestionBankSummary>>(
-      `/admin/question-banks/${encodeURIComponent(idOrSlug)}/archive`
-    )
-    return response.data.data
-  },
-
-  /**
    * Duplicate a Question Bank
    */
   async duplicateQuestionBank(idOrSlug: string): Promise<QuestionBankSummary> {

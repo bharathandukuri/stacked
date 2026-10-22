@@ -1,7 +1,10 @@
 package com.bharath.stacked.modules.question_bank.service.impl;
 
 import com.bharath.stacked.exception.BadRequestException;
+import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
+import com.bharath.stacked.modules.assessment.model.Assessment;
+import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
 import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
@@ -46,6 +49,9 @@ class QuestionBankServiceImplTest {
 
     @Mock
     private McqQuestionRepository mcqQuestionRepository;
+
+    @Mock
+    private AssessmentRepository assessmentRepository;
 
     @Mock
     private MongoTemplate mongoTemplate;
@@ -262,6 +268,22 @@ class QuestionBankServiceImplTest {
     }
 
     @Test
+    @DisplayName("deleteQuestionBank should throw ConflictException when bank is in use by assessment")
+    void deleteQuestionBank_ThrowsConflictException_WhenInUse() {
+        when(questionBankRepository.findById("qb-301")).thenReturn(Optional.of(sampleQuestionBank));
+        when(assessmentRepository.findAllByQuestionBankId("qb-301")).thenReturn(List.of(
+                Assessment.builder().id("asm-1").title("Fullstack Developer Assessment").build()
+        ));
+
+        assertThatThrownBy(() -> questionBankService.deleteQuestionBank("qb-301"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot delete question bank 'Backend Java Assessment Bank'")
+                .hasMessageContaining("Fullstack Developer Assessment");
+
+        verify(questionBankRepository, never()).delete(sampleQuestionBank);
+    }
+
+    @Test
     @DisplayName("getStats should aggregate total banks, status counts, and categories")
     void getStats_Success() {
         when(questionBankRepository.count()).thenReturn(10L);
@@ -345,23 +367,6 @@ class QuestionBankServiceImplTest {
     }
 
     @Test
-    @DisplayName("updateStatus should throw BadRequestException when transitioning directly from ARCHIVED to PUBLISHED")
-    void updateStatus_WhenArchivedToPublished_ThrowsBadRequest() {
-        QuestionBank archivedBank = QuestionBank.builder()
-                .id("qb-archived")
-                .title("Archived Bank")
-                .status(QuestionBankStatus.ARCHIVED)
-                .items(sampleQuestionBank.getItems())
-                .build();
-
-        when(questionBankRepository.findById("qb-archived")).thenReturn(Optional.of(archivedBank));
-
-        assertThatThrownBy(() -> questionBankService.updateStatus("qb-archived", QuestionBankStatus.PUBLISHED))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Cannot transition directly from ARCHIVED to PUBLISHED. Restore to DRAFT first.");
-    }
-
-    @Test
     @DisplayName("updateStatus should throw BadRequestException when publishing an empty bank")
     void updateStatus_WhenPublishingEmptyBank_ThrowsBadRequest() {
         QuestionBank emptyBank = QuestionBank.builder()
@@ -409,7 +414,7 @@ class QuestionBankServiceImplTest {
     }
 
     @Test
-    @DisplayName("updateStatus, publish, unpublish, archive should execute valid lifecycle transitions")
+    @DisplayName("updateStatus, publish, unpublish should execute valid lifecycle transitions")
     void updateStatus_ValidTransitions_Success() {
         QuestionBank draftBank = QuestionBank.builder()
                 .id("qb-valid")
@@ -435,18 +440,10 @@ class QuestionBankServiceImplTest {
         // 2. Unpublish back to DRAFT
         QuestionBankSummaryResponse unpubRes = questionBankService.unpublish("qb-valid");
         assertThat(unpubRes.getStatus()).isEqualTo(QuestionBankStatus.DRAFT);
-
-        // 3. Archive
-        QuestionBankSummaryResponse archRes = questionBankService.archive("qb-valid");
-        assertThat(archRes.getStatus()).isEqualTo(QuestionBankStatus.ARCHIVED);
-
-        // 4. Restore to DRAFT
-        QuestionBankSummaryResponse restRes = questionBankService.updateStatus("qb-valid", QuestionBankStatus.DRAFT);
-        assertThat(restRes.getStatus()).isEqualTo(QuestionBankStatus.DRAFT);
     }
 
     @Test
-    @DisplayName("removeQuestionFromAllBanks should remove archived question and recalculate metrics")
+    @DisplayName("removeQuestionFromAllBanks should remove deleted question and recalculate metrics")
     void shouldRemoveQuestionFromAllBanksAndRecalculateMetrics() {
         QuestionBank bank = QuestionBank.builder()
                 .id("qb-multi")

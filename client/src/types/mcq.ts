@@ -1,6 +1,6 @@
 export type McqType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "BOOLEAN"
 export type McqDifficulty = "EASY" | "MEDIUM" | "HARD"
-export type McqStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED"
+export type McqStatus = "DRAFT" | "PUBLISHED"
 
 export interface McqOption {
   id: string

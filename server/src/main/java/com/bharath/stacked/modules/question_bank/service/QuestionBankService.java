@@ -29,8 +29,6 @@ public interface QuestionBankService {
 
     QuestionBankSummaryResponse unpublish(String idOrSlug);
 
-    QuestionBankSummaryResponse archive(String idOrSlug);
-
     QuestionBankSummaryResponse duplicateQuestionBank(String idOrSlug, String authorId);
 
     List<String> getDistinctCategories();

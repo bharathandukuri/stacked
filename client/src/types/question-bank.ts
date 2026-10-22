@@ -1,5 +1,5 @@
 export type BankQuestionType = "CODING" | "MCQ"
-export type QuestionBankStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED"
+export type QuestionBankStatus = "DRAFT" | "PUBLISHED"
 
 export interface QuestionBankItemPayload {
   questionType: BankQuestionType

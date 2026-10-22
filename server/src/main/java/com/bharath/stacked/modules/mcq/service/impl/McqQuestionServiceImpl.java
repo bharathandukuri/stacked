@@ -1,12 +1,12 @@
 package com.bharath.stacked.modules.mcq.service.impl;
 
 import com.bharath.stacked.common.api.PageResponse;
-import com.bharath.stacked.common.event.QuestionArchivedEvent;
 import com.bharath.stacked.common.event.QuestionDeletedEvent;
 import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
-import org.springframework.context.ApplicationEventPublisher;
+import com.bharath.stacked.modules.assessment.model.Assessment;
+import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import com.bharath.stacked.modules.file.service.FileService;
 import com.bharath.stacked.modules.mcq.dto.request.CreateMcqRequest;
 import com.bharath.stacked.modules.mcq.dto.request.McqFilterRequest;
@@ -25,10 +25,13 @@ import com.bharath.stacked.modules.mcq.repository.McqQuestionRepository;
 import com.bharath.stacked.modules.mcq.repository.McqTopicRepository;
 import com.bharath.stacked.modules.mcq.service.McqQuestionService;
 import com.bharath.stacked.modules.mcq.service.McqTopicService;
+import com.bharath.stacked.modules.question_bank.model.QuestionBank;
+import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -46,6 +49,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -61,6 +65,8 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     private final FileService fileService;
     private final MongoTemplate mongoTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final QuestionBankRepository questionBankRepository;
+    private final AssessmentRepository assessmentRepository;
 
     @Override
     @NonNull
@@ -236,6 +242,19 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         McqQuestion question = findEntityByIdOrSlug(idOrSlug);
         String questionId = Objects.requireNonNull(question.getId());
 
+        List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(questionId);
+        List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(questionId);
+        if (!banks.isEmpty() || !assessments.isEmpty()) {
+            List<String> usages = new ArrayList<>();
+            if (!banks.isEmpty()) {
+                usages.add(banks.size() + " question bank(s) [" + banks.stream().map(QuestionBank::getTitle).collect(Collectors.joining(", ")) + "]");
+            }
+            if (!assessments.isEmpty()) {
+                usages.add(assessments.size() + " assessment(s) [" + assessments.stream().map(Assessment::getTitle).collect(Collectors.joining(", ")) + "]");
+            }
+            throw new ConflictException("Cannot delete MCQ question '" + question.getTitle() + "' because it is currently in use by: " + String.join("; ", usages) + ".");
+        }
+
         if (question.getImageFileIds() != null && !question.getImageFileIds().isEmpty()) {
             cleanRemovedImages(new HashSet<>(question.getImageFileIds()), Set.of(), questionId);
         }
@@ -260,9 +279,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         }
 
         if (status == McqStatus.PUBLISHED) {
-            if (currentStatus == McqStatus.ARCHIVED) {
-                throw new BadRequestException("Cannot transition directly from ARCHIVED to PUBLISHED. Restore to DRAFT first.");
-            }
             if (question.getTitle() == null || question.getTitle().isBlank()) {
                 throw new BadRequestException("Cannot publish MCQ question without a title.");
             }
@@ -280,9 +296,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         question.setStatus(status);
         question.setUpdatedAt(Instant.now());
         McqQuestion saved = questionRepository.save(question);
-        if (status == McqStatus.ARCHIVED) {
-            eventPublisher.publishEvent(new QuestionArchivedEvent(question.getId()));
-        }
         log.info("Updated MCQ status: [{}] -> {} (id: {})", question.getTitle(), status, question.getId());
         return McqQuestionDetailResponse.fromModel(saved);
     }
@@ -297,12 +310,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     @NonNull
     public McqQuestionDetailResponse unpublish(@NonNull String idOrSlug) {
         return updateStatus(idOrSlug, McqStatus.DRAFT);
-    }
-
-    @Override
-    @NonNull
-    public McqQuestionDetailResponse archive(@NonNull String idOrSlug) {
-        return updateStatus(idOrSlug, McqStatus.ARCHIVED);
     }
 
     @Override

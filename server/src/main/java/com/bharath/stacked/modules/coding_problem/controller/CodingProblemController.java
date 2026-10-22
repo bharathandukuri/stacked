@@ -113,13 +113,6 @@ public class CodingProblemController {
         return ApiResponse.success(codingProblem, "Coding problem unpublished successfully");
     }
 
-    @PatchMapping("/{id}/archive")
-    public ResponseEntity<ApiResponse<CodingProblem>> archiveProblem(
-            @PathVariable("id") String id) {
-        CodingProblem codingProblem = codingProblemService.archive(id);
-        return ApiResponse.success(codingProblem, "Coding problem archived successfully");
-    }
-
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<CodingProblem>> updateProblemStatus(
             @PathVariable("id") String id,

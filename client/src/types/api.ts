@@ -11,6 +11,20 @@ export interface ApiResponse<T = unknown> {
 }
 
 /**
+ * Standard pagination response wrapper matching Spring Data Page
+ */
+export interface PageResponse<T = unknown> {
+  items: T[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  first?: boolean
+  last?: boolean
+  empty?: boolean
+}
+
+/**
  * Structured API Error payload returned from backend GlobalExceptionHandler
  */
 export interface ApiError {

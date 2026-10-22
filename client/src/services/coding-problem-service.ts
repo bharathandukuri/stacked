@@ -27,7 +27,7 @@ export interface CodingProblem {
   id: string;
   title: string;
   slug: string;
-  status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT" | "ARCHIVED";
+  status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT";
   problemType: "GENERIC" | "DATABASE";
   difficulty: "EASY" | "MEDIUM" | "HARD";
   supportedLanguageIds: string[];
@@ -66,7 +66,7 @@ export interface CodingProblemSummary {
   id: string;
   title: string;
   slug: string;
-  status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT" | "ARCHIVED";
+  status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT";
   problemType: "GENERIC" | "DATABASE";
   difficulty: "EASY" | "MEDIUM" | "HARD";
   supportedLanguageIds: string[];
@@ -79,7 +79,7 @@ export interface CodingProblemSummary {
 
 export interface CodingProblemFilterParams {
   search?: string;
-  status?: "PUBLISHED" | "UNPUBLISHED" | "DRAFT" | "ARCHIVED" | "ALL";
+  status?: "PUBLISHED" | "UNPUBLISHED" | "DRAFT" | "ALL";
   problemType?: "GENERIC" | "DATABASE" | "ALL";
   difficulty?: "EASY" | "MEDIUM" | "HARD" | "ALL";
   page?: number;
@@ -313,11 +313,11 @@ export const codingProblemService = {
   },
 
   /**
-   * Update coding problem status (PUBLISHED, UNPUBLISHED, DRAFT, or ARCHIVED).
+   * Update coding problem status (PUBLISHED, UNPUBLISHED, or DRAFT).
    */
   async updateStatus(
     idOrSlug: string,
-    status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT" | "ARCHIVED"
+    status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT"
   ): Promise<CodingProblemSummary> {
     const res = await API.patch<ApiResponse<CodingProblemSummary>>(
       `/coding-problem/${encodeURIComponent(idOrSlug)}/status`,
@@ -342,16 +342,6 @@ export const codingProblemService = {
   async unpublishProblem(idOrSlug: string): Promise<CodingProblemSummary> {
     const res = await API.patch<ApiResponse<CodingProblemSummary>>(
       `/coding-problem/${encodeURIComponent(idOrSlug)}/unpublish`
-    );
-    return res.data.data;
-  },
-
-  /**
-   * Archive a problem.
-   */
-  async archiveProblem(idOrSlug: string): Promise<CodingProblemSummary> {
-    const res = await API.patch<ApiResponse<CodingProblemSummary>>(
-      `/coding-problem/${encodeURIComponent(idOrSlug)}/archive`
     );
     return res.data.data;
   },

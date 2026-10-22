@@ -97,14 +97,6 @@ public class AdminQuestionBankController {
         return ApiResponse.success(response, "Question bank unpublished successfully");
     }
 
-    @PatchMapping("/{idOrSlug}/archive")
-    @NonNull
-    public ResponseEntity<ApiResponse<QuestionBankSummaryResponse>> archiveQuestionBank(
-            @PathVariable @NonNull String idOrSlug) {
-        QuestionBankSummaryResponse response = questionBankService.archive(idOrSlug);
-        return ApiResponse.success(response, "Question bank archived successfully");
-    }
-
     @PostMapping("/{idOrSlug}/duplicate")
     @NonNull
     public ResponseEntity<ApiResponse<QuestionBankSummaryResponse>> duplicateQuestionBank(

@@ -152,7 +152,7 @@ export function useDeleteMcqQuestion() {
 }
 
 /**
- * Hook to update MCQ question status (DRAFT, PUBLISHED, ARCHIVED)
+ * Hook to update MCQ question status (DRAFT, PUBLISHED)
  */
 export function useUpdateMcqStatus() {
   const queryClient = useQueryClient()
@@ -238,35 +238,6 @@ export function useUnpublishMcq() {
       toast.add({
         title: "Unpublish Failed",
         description: extractErrorMessage(error, "Could not unpublish MCQ question."),
-        type: "error",
-      })
-    },
-  })
-}
-
-/**
- * Hook to archive an MCQ question
- */
-export function useArchiveMcq() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (idOrSlug: string) => mcqService.archiveQuestion(idOrSlug),
-    onSuccess: (updated) => {
-      toast.add({
-        title: "MCQ Archived",
-        description: `Question "${updated.title}" has been archived.`,
-        type: "success",
-      })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.questions() })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.id) })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.slug) })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.stats() })
-    },
-    onError: (error: unknown) => {
-      toast.add({
-        title: "Archive Failed",
-        description: extractErrorMessage(error, "Could not archive MCQ question."),
         type: "error",
       })
     },

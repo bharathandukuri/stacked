@@ -206,7 +206,7 @@ export function useDeleteQuestionBank() {
 }
 
 /**
- * Hook to update Question Bank status (DRAFT, PUBLISHED, ARCHIVED)
+ * Hook to update Question Bank status (DRAFT, PUBLISHED)
  */
 export function useUpdateQuestionBankStatus() {
   const queryClient = useQueryClient()
@@ -304,39 +304,6 @@ export function useUnpublishQuestionBank() {
       toast.add({
         title: "Unpublish Failed",
         description: extractErrorMessage(error, "Could not unpublish Question Bank."),
-        type: "error",
-      })
-    },
-  })
-}
-
-/**
- * Hook to archive a Question Bank
- */
-export function useArchiveQuestionBank() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (idOrSlug: string) => questionBankService.archive(idOrSlug),
-    onSuccess: (updated) => {
-      toast.add({
-        title: "Question Bank Archived",
-        description: `Question Bank "${updated.title}" has been archived.`,
-        type: "success",
-      })
-      queryClient.invalidateQueries({ queryKey: questionBankKeys.banks() })
-      queryClient.invalidateQueries({
-        queryKey: questionBankKeys.bankDetail(updated.id),
-      })
-      queryClient.invalidateQueries({
-        queryKey: questionBankKeys.bankDetail(updated.slug),
-      })
-      queryClient.invalidateQueries({ queryKey: questionBankKeys.stats() })
-    },
-    onError: (error: unknown) => {
-      toast.add({
-        title: "Archive Failed",
-        description: extractErrorMessage(error, "Could not archive Question Bank."),
         type: "error",
       })
     },

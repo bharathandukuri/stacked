@@ -15,7 +15,6 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Archive,
 } from "lucide-react"
 
 import { AdminSidebar } from "@/components/admin/sidebar"
@@ -58,7 +57,6 @@ import { initializeAuthSession } from "@/hooks/use-auth"
 import {
   useCodingProblems,
   useUpdateProblemStatus,
-  useArchiveCodingProblem,
   useDeleteCodingProblem,
 } from "@/hooks/use-coding-problems"
 import { getLanguageById } from "@/config/languages"
@@ -78,7 +76,7 @@ export function AdminCodingProblemsPage() {
   const deferredSearch = useDeferredValue(searchInput)
 
   const [statusFilter, setStatusFilter] = useState<
-    "ALL" | "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED"
+    "ALL" | "PUBLISHED" | "UNPUBLISHED"
   >("ALL")
   const [typeFilter, setTypeFilter] = useState<"ALL" | "GENERIC" | "DATABASE">(
     "ALL"
@@ -123,7 +121,7 @@ export function AdminCodingProblemsPage() {
     setPage(0)
   }
 
-  const handleStatusChange = (val: "ALL" | "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED") => {
+  const handleStatusChange = (val: "ALL" | "PUBLISHED" | "UNPUBLISHED") => {
     setStatusFilter(val)
     setPage(0)
   }
@@ -148,29 +146,7 @@ export function AdminCodingProblemsPage() {
 
   // Status Mutation
   const updateStatusMutation = useUpdateProblemStatus()
-  const archiveMutation = useArchiveCodingProblem()
   const [mutatingId, setMutatingId] = useState<string | null>(null)
-
-  const handleArchive = async (problem: CodingProblemSummary) => {
-    setMutatingId(problem.id)
-    try {
-      await archiveMutation.mutateAsync(problem.id)
-    } finally {
-      setMutatingId(null)
-    }
-  }
-
-  const handleRestore = async (problem: CodingProblemSummary) => {
-    setMutatingId(problem.id)
-    try {
-      await updateStatusMutation.mutateAsync({
-        idOrSlug: problem.id,
-        status: "UNPUBLISHED",
-      })
-    } finally {
-      setMutatingId(null)
-    }
-  }
 
   // Delete Mutation & State
   const deleteMutation = useDeleteCodingProblem()
@@ -328,7 +304,7 @@ export function AdminCodingProblemsPage() {
                   value={statusFilter}
                   onChange={(e) =>
                     handleStatusChange(
-                      e.target.value as "ALL" | "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED"
+                      e.target.value as "ALL" | "PUBLISHED" | "UNPUBLISHED"
                     )
                   }
                 >
@@ -338,9 +314,6 @@ export function AdminCodingProblemsPage() {
                   </NativeSelectOption>
                   <NativeSelectOption value="UNPUBLISHED">
                     Draft / Unpublished
-                  </NativeSelectOption>
-                  <NativeSelectOption value="ARCHIVED">
-                    Archived
                   </NativeSelectOption>
                 </NativeSelect>
               </div>
@@ -598,52 +571,32 @@ export function AdminCodingProblemsPage() {
 
                           {/* Live Status Toggle */}
                           <TableCell>
-                            {problem.status === "ARCHIVED" ? (
-                              <div className="flex items-center gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className="border-muted bg-muted/40 text-muted-foreground text-[10px] uppercase font-bold"
-                                >
-                                  Archived
-                                </Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  disabled={isMutating}
-                                  onClick={() => handleRestore(problem)}
-                                  className="h-6 px-1.5 text-[11px] text-primary hover:underline"
-                                >
-                                  Restore
-                                </Button>
+                            <div className="flex items-center gap-2.5">
+                              <Switch
+                                size="sm"
+                                checked={isPublished}
+                                disabled={isMutating}
+                                onCheckedChange={() =>
+                                  handleToggleStatus(problem)
+                                }
+                                aria-label={`Toggle publication status for ${problem.title}`}
+                              />
+                              <div className="flex items-center gap-1">
+                                {isMutating ? (
+                                  <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                                ) : (
+                                  <span
+                                    className={`text-xs font-medium ${
+                                      isPublished
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {isPublished ? "Published" : "Draft"}
+                                  </span>
+                                )}
                               </div>
-                            ) : (
-                              <div className="flex items-center gap-2.5">
-                                <Switch
-                                  size="sm"
-                                  checked={isPublished}
-                                  disabled={isMutating}
-                                  onCheckedChange={() =>
-                                    handleToggleStatus(problem)
-                                  }
-                                  aria-label={`Toggle publication status for ${problem.title}`}
-                                />
-                                <div className="flex items-center gap-1">
-                                  {isMutating ? (
-                                    <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                                  ) : (
-                                    <span
-                                      className={`text-xs font-medium ${
-                                        isPublished
-                                          ? "text-emerald-600 dark:text-emerald-400"
-                                          : "text-muted-foreground"
-                                      }`}
-                                    >
-                                      {isPublished ? "Published" : "Draft"}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
+                            </div>
                           </TableCell>
 
                           {/* Actions */}
@@ -669,34 +622,15 @@ export function AdminCodingProblemsPage() {
                                   <Copy className="size-3.5" />
                                   <span>Copy Slug</span>
                                 </DropdownMenuItem>
-                                {problem.status === "ARCHIVED" ? (
-                                  <DropdownMenuItem
-                                    onClick={() => handleRestore(problem)}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <CheckCircle2 className="size-3.5" />
-                                    <span>Restore to Draft</span>
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <>
-                                    <DropdownMenuItem
-                                      onClick={() => handleToggleStatus(problem)}
-                                      className="gap-2 cursor-pointer"
-                                    >
-                                      <CheckCircle2 className="size-3.5" />
-                                      <span>
-                                        {isPublished ? "Unpublish" : "Publish"}
-                                      </span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => handleArchive(problem)}
-                                      className="gap-2 cursor-pointer"
-                                    >
-                                      <Archive className="size-3.5" />
-                                      <span>Archive Problem</span>
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
+                                <DropdownMenuItem
+                                  onClick={() => handleToggleStatus(problem)}
+                                  className="gap-2 cursor-pointer"
+                                >
+                                  <CheckCircle2 className="size-3.5" />
+                                  <span>
+                                    {isPublished ? "Unpublish" : "Publish"}
+                                  </span>
+                                </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() =>

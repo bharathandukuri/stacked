@@ -41,9 +41,6 @@ public interface McqQuestionService {
     McqQuestionDetailResponse unpublish(@NonNull String idOrSlug);
 
     @NonNull
-    McqQuestionDetailResponse archive(@NonNull String idOrSlug);
-
-    @NonNull
     McqStatsResponse getStats();
 
     boolean isSlugAvailable(@NonNull String slug, @Nullable String excludeId);

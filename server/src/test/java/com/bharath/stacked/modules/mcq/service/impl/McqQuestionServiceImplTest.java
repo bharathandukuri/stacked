@@ -2,8 +2,13 @@ package com.bharath.stacked.modules.mcq.service.impl;
 
 import com.bharath.stacked.common.api.PageResponse;
 import com.bharath.stacked.exception.BadRequestException;
+import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
+import com.bharath.stacked.modules.assessment.model.Assessment;
+import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import com.bharath.stacked.modules.file.service.FileService;
+import com.bharath.stacked.modules.question_bank.model.QuestionBank;
+import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
 import com.bharath.stacked.modules.mcq.dto.request.CreateMcqRequest;
 import com.bharath.stacked.modules.mcq.dto.request.McqFilterRequest;
 import com.bharath.stacked.modules.mcq.dto.request.McqOptionRequest;
@@ -61,6 +66,12 @@ class McqQuestionServiceImplTest {
 
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private QuestionBankRepository questionBankRepository;
+
+    @Mock
+    private AssessmentRepository assessmentRepository;
 
     @InjectMocks
     private McqQuestionServiceImpl questionService;
@@ -304,6 +315,26 @@ class McqQuestionServiceImplTest {
     }
 
     @Test
+    @DisplayName("deleteQuestion should throw ConflictException when MCQ question is in use")
+    void deleteQuestion_ThrowsConflictException_WhenInUse() {
+        when(questionRepository.findById("mcq-101")).thenReturn(Optional.of(sampleQuestion));
+        when(questionBankRepository.findAllByItemsQuestionId("mcq-101")).thenReturn(List.of(
+                QuestionBank.builder().id("bank-1").title("Java Core Bank").build()
+        ));
+        when(assessmentRepository.findAllByItemsQuestionId("mcq-101")).thenReturn(List.of(
+                Assessment.builder().id("asm-1").title("Senior Java Interview").build()
+        ));
+
+        assertThatThrownBy(() -> questionService.deleteQuestion("mcq-101"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot delete MCQ question 'Java Volatile Visibility'")
+                .hasMessageContaining("Java Core Bank")
+                .hasMessageContaining("Senior Java Interview");
+
+        verify(questionRepository, org.mockito.Mockito.never()).delete(sampleQuestion);
+    }
+
+    @Test
     @DisplayName("getStats calculates aggregation counts properly")
     void getStats_Success() {
         when(questionRepository.count()).thenReturn(10L);
@@ -329,25 +360,6 @@ class McqQuestionServiceImplTest {
     }
 
     @Test
-    @DisplayName("updateStatus should reject transition directly from ARCHIVED to PUBLISHED")
-    void updateStatus_WhenArchivedToPublished_ThrowsBadRequest() {
-        McqQuestion archived = McqQuestion.builder()
-                .id("mcq-arch")
-                .title("Archived MCQ")
-                .status(McqStatus.ARCHIVED)
-                .content("Question text")
-                .options(sampleQuestion.getOptions())
-                .correctOptionIds(sampleQuestion.getCorrectOptionIds())
-                .build();
-
-        when(questionRepository.findById("mcq-arch")).thenReturn(Optional.of(archived));
-
-        assertThatThrownBy(() -> questionService.updateStatus("mcq-arch", McqStatus.PUBLISHED))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Cannot transition directly from ARCHIVED to PUBLISHED. Restore to DRAFT first.");
-    }
-
-    @Test
     @DisplayName("updateStatus should reject publishing when question has no content")
     void updateStatus_WhenNoContent_ThrowsBadRequest() {
         McqQuestion emptyContent = McqQuestion.builder()
@@ -367,7 +379,7 @@ class McqQuestionServiceImplTest {
     }
 
     @Test
-    @DisplayName("updateStatus, publish, unpublish, archive should execute valid status transitions")
+    @DisplayName("updateStatus, publish, unpublish should execute valid status transitions")
     void updateStatus_ValidTransitions_Success() {
         McqQuestion draft = McqQuestion.builder()
                 .id("mcq-valid")
@@ -389,13 +401,5 @@ class McqQuestionServiceImplTest {
         // 2. Unpublish
         McqQuestionDetailResponse unpub = questionService.unpublish("mcq-valid");
         assertThat(unpub.status()).isEqualTo(McqStatus.DRAFT);
-
-        // 3. Archive
-        McqQuestionDetailResponse arch = questionService.archive("mcq-valid");
-        assertThat(arch.status()).isEqualTo(McqStatus.ARCHIVED);
-
-        // 4. Restore to Draft
-        McqQuestionDetailResponse rest = questionService.updateStatus("mcq-valid", McqStatus.DRAFT);
-        assertThat(rest.status()).isEqualTo(McqStatus.DRAFT);
     }
 }

@@ -4,9 +4,6 @@ import {
   FileQuestion,
   GraduationCap,
   Users,
-  UserCheck,
-  BarChart3,
-  Settings,
   LogOut,
   ShieldCheck,
   Code2,
@@ -25,11 +22,19 @@ interface SidebarProps {
   currentPath?: string
 }
 
+interface NavItem {
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+  to: string
+  active: boolean
+  badge?: string
+}
+
 export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
   const admin = useAdmin()
   const logoutMutation = useLogout()
 
-  const navItems = [
+  const navItems: NavItem[] = [
     {
       title: "Dashboard",
       icon: LayoutDashboard,
@@ -58,35 +63,13 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
       title: "Assessments",
       icon: GraduationCap,
       to: "/admin/assessments",
-      badge: "Soon",
-      active: currentPath === "/admin/assessments",
+      active: currentPath.startsWith("/admin/assessments"),
     },
     {
       title: "Question Bank",
       icon: FileQuestion,
       to: "/admin/questions",
       active: currentPath.startsWith("/admin/questions"),
-    },
-    {
-      title: "Candidates",
-      icon: UserCheck,
-      to: "/admin/candidates",
-      badge: "Soon",
-      active: currentPath === "/admin/candidates",
-    },
-    {
-      title: "Analytics",
-      icon: BarChart3,
-      to: "/admin/analytics",
-      badge: "Soon",
-      active: currentPath === "/admin/analytics",
-    },
-    {
-      title: "Settings",
-      icon: Settings,
-      to: "/admin/settings",
-      badge: "Soon",
-      active: currentPath === "/admin/settings",
     },
   ]
 

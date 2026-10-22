@@ -121,14 +121,6 @@ public class AdminMcqController {
         return ApiResponse.success(response, "MCQ question unpublished successfully");
     }
 
-    @PatchMapping("/questions/{idOrSlug}/archive")
-    @NonNull
-    public ResponseEntity<ApiResponse<McqQuestionDetailResponse>> archiveQuestion(
-            @PathVariable @NonNull String idOrSlug) {
-        McqQuestionDetailResponse response = questionService.archive(idOrSlug);
-        return ApiResponse.success(response, "MCQ question archived successfully");
-    }
-
     @GetMapping("/questions/check-slug")
     @NonNull
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkSlug(

@@ -16,7 +16,6 @@ import {
   Eye,
   Tag,
   FolderOpen,
-  Archive,
 } from "lucide-react"
 
 import { AdminSidebar } from "@/components/admin/sidebar"
@@ -60,10 +59,8 @@ import {
   useMcqStats,
   useMcqTopics,
   useDeleteMcqQuestion,
-  useUpdateMcqStatus,
   usePublishMcq,
   useUnpublishMcq,
-  useArchiveMcq,
 } from "@/hooks/use-mcq"
 import { mcqService } from "@/services/mcq-service"
 import { TopicManagerDialog } from "@/components/studio/mcq/topic-manager-dialog"
@@ -172,10 +169,8 @@ export function AdminMcqPage() {
     setQuestionToDelete(null)
   }
 
-  const updateStatusMutation = useUpdateMcqStatus()
   const publishMutation = usePublishMcq()
   const unpublishMutation = useUnpublishMcq()
-  const archiveMutation = useArchiveMcq()
   const [mutatingId, setMutatingId] = useState<string | null>(null)
 
   const handlePublish = async (question: McqQuestionItem) => {
@@ -191,27 +186,6 @@ export function AdminMcqPage() {
     setMutatingId(question.id)
     try {
       await unpublishMutation.mutateAsync(question.id)
-    } finally {
-      setMutatingId(null)
-    }
-  }
-
-  const handleArchive = async (question: McqQuestionItem) => {
-    setMutatingId(question.id)
-    try {
-      await archiveMutation.mutateAsync(question.id)
-    } finally {
-      setMutatingId(null)
-    }
-  }
-
-  const handleRestore = async (question: McqQuestionItem) => {
-    setMutatingId(question.id)
-    try {
-      await updateStatusMutation.mutateAsync({
-        idOrSlug: question.id,
-        status: "DRAFT",
-      })
     } finally {
       setMutatingId(null)
     }
@@ -409,7 +383,6 @@ export function AdminMcqPage() {
                   <NativeSelectOption value="ALL">All Statuses</NativeSelectOption>
                   <NativeSelectOption value="PUBLISHED">Published</NativeSelectOption>
                   <NativeSelectOption value="DRAFT">Draft</NativeSelectOption>
-                  <NativeSelectOption value="ARCHIVED">Archived</NativeSelectOption>
                 </NativeSelect>
               </div>
 
@@ -632,53 +605,23 @@ export function AdminMcqPage() {
                               </DropdownMenuItem>
 
                               {item.status === "PUBLISHED" && (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handleUnpublish(item)}
-                                    disabled={mutatingId === item.id}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <CheckCircle2 className="size-3.5" />
-                                    <span>Unpublish to Draft</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleArchive(item)}
-                                    disabled={mutatingId === item.id}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <Archive className="size-3.5" />
-                                    <span>Archive Question</span>
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {item.status === "DRAFT" && (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handlePublish(item)}
-                                    disabled={mutatingId === item.id}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <CheckCircle2 className="size-3.5" />
-                                    <span>Publish Question</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleArchive(item)}
-                                    disabled={mutatingId === item.id}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <Archive className="size-3.5" />
-                                    <span>Archive Question</span>
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {item.status === "ARCHIVED" && (
                                 <DropdownMenuItem
-                                  onClick={() => handleRestore(item)}
+                                  onClick={() => handleUnpublish(item)}
                                   disabled={mutatingId === item.id}
                                   className="gap-2 cursor-pointer"
                                 >
                                   <CheckCircle2 className="size-3.5" />
-                                  <span>Restore to Draft</span>
+                                  <span>Unpublish to Draft</span>
+                                </DropdownMenuItem>
+                              )}
+                              {item.status === "DRAFT" && (
+                                <DropdownMenuItem
+                                  onClick={() => handlePublish(item)}
+                                  disabled={mutatingId === item.id}
+                                  className="gap-2 cursor-pointer"
+                                >
+                                  <CheckCircle2 className="size-3.5" />
+                                  <span>Publish Question</span>
                                 </DropdownMenuItem>
                               )}
 

@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -106,6 +107,20 @@ public class GlobalExceptionHandler {
 
         ApiError apiError = ApiError.validation(request.getRequestURI(), fieldErrors);
         return ApiResponse.error(apiError, HttpStatus.UNPROCESSABLE_CONTENT);
+    }
+
+    /**
+     * Handles duplicate key / uniqueness constraint violations.
+     */
+    @ExceptionHandler(DuplicateKeyException.class)
+    @NonNull
+    public ResponseEntity<ApiResponse<Void>> handleDuplicateKey(
+            @NonNull DuplicateKeyException ex, @NonNull HttpServletRequest request) {
+        String message = "A resource with this identifier or unique attribute already exists. Duplicate creation prevented.";
+        log.warn("Duplicate key conflict at [{} {}]: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+
+        ApiError apiError = ApiError.of(ErrorCode.CONFLICT.name(), message, request.getRequestURI());
+        return ApiResponse.error(apiError, HttpStatus.CONFLICT);
     }
 
     /**

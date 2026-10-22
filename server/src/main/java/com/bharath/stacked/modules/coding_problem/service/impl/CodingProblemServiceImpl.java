@@ -27,20 +27,32 @@ import com.bharath.stacked.modules.coding_problem.model.TestCase;
 import com.bharath.stacked.modules.coding_problem.repository.CodingProblemRepository;
 import com.bharath.stacked.modules.coding_problem.service.CodingProblemService;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
-import com.bharath.stacked.modules.execution.resolver.ExecutionConstraintResolver;
-import com.bharath.stacked.modules.language.Language;
-import com.bharath.stacked.modules.language.LanguageType;
-import com.bharath.stacked.modules.coding_problem.dto.response.SupportedLanguageResponse;
-import com.bharath.stacked.modules.language.registry.LanguageRegistry;
-import com.bharath.stacked.modules.file.service.FileService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import com.bharath.stacked.common.api.PageResponse;
-import com.bharath.stacked.common.event.QuestionArchivedEvent;
 import com.bharath.stacked.common.event.QuestionDeletedEvent;
-import org.springframework.context.ApplicationEventPublisher;
+import com.bharath.stacked.exception.BadRequestException;
+import com.bharath.stacked.exception.ConflictException;
+import com.bharath.stacked.exception.ResourceNotFoundException;
+import com.bharath.stacked.modules.assessment.model.Assessment;
+import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import com.bharath.stacked.modules.coding_problem.dto.request.CodingProblemFilterRequest;
 import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse;
+import com.bharath.stacked.modules.coding_problem.dto.response.SupportedLanguageResponse;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
+import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
+import com.bharath.stacked.modules.coding_problem.model.CodingProblem;
+import com.bharath.stacked.modules.coding_problem.repository.CodingProblemRepository;
+import com.bharath.stacked.modules.coding_problem.judge.CodingProblemJudgeService;
+import com.bharath.stacked.modules.coding_problem.service.CodingProblemService;
+import com.bharath.stacked.modules.execution.resolver.ExecutionConstraintResolver;
+import com.bharath.stacked.modules.file.service.FileService;
+import com.bharath.stacked.modules.language.Language;
+import com.bharath.stacked.modules.language.LanguageType;
+import com.bharath.stacked.modules.language.registry.LanguageRegistry;
+import com.bharath.stacked.modules.question_bank.model.QuestionBank;
+import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -53,6 +65,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -65,6 +78,8 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     private final CodingProblemJudgeService codingProblemJudgeService;
     private final FileService fileService;
     private final ApplicationEventPublisher eventPublisher;
+    private final QuestionBankRepository questionBankRepository;
+    private final AssessmentRepository assessmentRepository;
 
     public CodingProblemServiceImpl(CodingProblemRepository codingProblemRepository,
                                   MongoTemplate mongoTemplate,
@@ -72,7 +87,9 @@ public class CodingProblemServiceImpl implements CodingProblemService {
                                   ExecutionConstraintResolver executionConstraintResolver,
                                   CodingProblemJudgeService codingProblemJudgeService,
                                   FileService fileService,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  QuestionBankRepository questionBankRepository,
+                                  AssessmentRepository assessmentRepository) {
         this.codingProblemRepository = codingProblemRepository;
         this.mongoTemplate = mongoTemplate;
         this.languageRegistry = languageRegistry;
@@ -80,6 +97,8 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         this.codingProblemJudgeService = codingProblemJudgeService;
         this.fileService = fileService;
         this.eventPublisher = eventPublisher;
+        this.questionBankRepository = questionBankRepository;
+        this.assessmentRepository = assessmentRepository;
     }
 
     @Override
@@ -499,6 +518,20 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     @Override
     public void delete(String idOrSlug) {
         CodingProblem existing = findByIdOrSlug(idOrSlug);
+
+        List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(existing.getId());
+        List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(existing.getId());
+        if (!banks.isEmpty() || !assessments.isEmpty()) {
+            List<String> usages = new ArrayList<>();
+            if (!banks.isEmpty()) {
+                usages.add(banks.size() + " question bank(s) [" + banks.stream().map(QuestionBank::getTitle).collect(Collectors.joining(", ")) + "]");
+            }
+            if (!assessments.isEmpty()) {
+                usages.add(assessments.size() + " assessment(s) [" + assessments.stream().map(Assessment::getTitle).collect(Collectors.joining(", ")) + "]");
+            }
+            throw new ConflictException("Cannot delete coding problem '" + existing.getTitle() + "' because it is currently in use by: " + String.join("; ", usages) + ".");
+        }
+
         cleanRemovedImages(existing.getImageFileIds(), Collections.emptySet(), existing.getId());
         codingProblemRepository.delete(existing);
         eventPublisher.publishEvent(new QuestionDeletedEvent(existing.getId()));
@@ -878,9 +911,6 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         }
 
         if (status == CodingProblemStatus.PUBLISHED) {
-            if (currentStatus == CodingProblemStatus.ARCHIVED) {
-                throw new BadRequestException("Cannot transition directly from ARCHIVED to PUBLISHED. Restore to DRAFT first.");
-            }
             if (codingProblem.getTitle() == null || codingProblem.getTitle().isBlank()) {
                 throw new BadRequestException("Cannot publish coding problem without a title.");
             }
@@ -896,11 +926,7 @@ public class CodingProblemServiceImpl implements CodingProblemService {
 
         codingProblem.setStatus(status);
         codingProblem.setUpdatedAt(Instant.now());
-        CodingProblem saved = codingProblemRepository.save(codingProblem);
-        if (status == CodingProblemStatus.ARCHIVED) {
-            eventPublisher.publishEvent(new QuestionArchivedEvent(saved.getId()));
-        }
-        return saved;
+        return codingProblemRepository.save(codingProblem);
     }
 
     @Transactional
@@ -913,12 +939,6 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     @Override
     public CodingProblem unpublish(String idOrSlug) {
         return updateStatus(idOrSlug, CodingProblemStatus.UNPUBLISHED);
-    }
-
-    @Transactional
-    @Override
-    public CodingProblem archive(String idOrSlug) {
-        return updateStatus(idOrSlug, CodingProblemStatus.ARCHIVED);
     }
 
     @Override
