@@ -11,6 +11,7 @@ import com.bharath.stacked.modules.security.dto.UserResponse;
 import com.bharath.stacked.modules.security.model.Role;
 import com.bharath.stacked.modules.security.model.User;
 import com.bharath.stacked.modules.security.repository.UserRepository;
+import com.bharath.stacked.modules.security.service.TokenRevocationService;
 import com.bharath.stacked.modules.security.service.UserService;
 import com.bharath.stacked.service.RedisService;
 import lombok.RequiredArgsConstructor;
@@ -36,14 +37,15 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    private static final String SESSION_KEY_PREFIX = "stacked:auth:session:";
-    private static final String USER_SESSIONS_PREFIX = "stacked:auth:user_sessions:";
+    private static final String SESSION_KEY_PREFIX = "auth:session:";
+    private static final String USER_SESSIONS_PREFIX = "auth:user_sessions:";
 
     private final UserRepository userRepository;
     private final MongoTemplate mongoTemplate;
     private final PasswordEncoder passwordEncoder;
     private final RedisService redisService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final TokenRevocationService tokenRevocationService;
 
     @Override
     @NonNull
@@ -155,8 +157,12 @@ public class UserServiceImpl implements UserService {
             user.setEmail(normalizedEmail);
         }
 
+        Role oldRole = user.getRole();
         user.setName(request.name().trim());
         user.setRole(request.role());
+
+        boolean roleChanged = oldRole != request.role();
+        boolean passwordChanged = false;
 
         if (request.password() != null && !request.password().isBlank()) {
             String newPassword = request.password().trim();
@@ -164,11 +170,17 @@ public class UserServiceImpl implements UserService {
                 throw new BadRequestException("Password must be 6-128 characters long and contain no whitespace.");
             }
             user.setPassword(passwordEncoder.encode(newPassword));
+            passwordChanged = true;
+        }
+
+        if (roleChanged || passwordChanged) {
+            tokenRevocationService.revokeAllUserTokens(user.getId());
             invalidateUserSessions(user.getId());
         }
 
         User savedUser = userRepository.save(user);
-        log.info("Updated user [{}] (role: {})", savedUser.getEmail(), savedUser.getRole());
+        log.info("Updated user [{}] (role: {}, roleChanged: {}, passwordChanged: {})",
+                savedUser.getEmail(), savedUser.getRole(), roleChanged, passwordChanged);
         return UserResponse.fromUser(savedUser);
     }
 
@@ -192,6 +204,7 @@ public class UserServiceImpl implements UserService {
         }
 
         userRepository.delete(user);
+        tokenRevocationService.revokeAllUserTokens(user.getId());
         invalidateUserSessions(user.getId());
         log.info("Admin [{}] deleted user [{}] ({})", currentUserId, user.getId(), user.getEmail());
     }

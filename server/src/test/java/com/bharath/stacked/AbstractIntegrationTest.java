@@ -52,5 +52,6 @@ public abstract class AbstractIntegrationTest {
         registry.add("REDIS_PORT", () -> redisPort);
         registry.add("REDIS_PASSWORD", () -> "");
         registry.add("stacked.execution.docker.enabled", () -> false);
+        registry.add("jwt.secret", () -> "c3VwZXItc2VjcmV0LWtleS1mb3ItdGVzdGluZy1wdXJwb3Nlcy1vbmx5LTI1NmJpdHMh");
     }
 }

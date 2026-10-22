@@ -215,7 +215,30 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Logged out successfully"));
 
-        verify(authService).logout(eq("token-to-logout"), any());
+        verify(authService).logout(eq("token-to-logout"), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/logout with Bearer token passes accessToken to authService.logout")
+    void logout_WithBearerToken_PassesAccessToken() throws Exception {
+        Cookie refreshCookie = new Cookie("refreshToken", "token-to-logout");
+        when(cookieUtil.extractRefreshToken(any())).thenReturn(Optional.of("token-to-logout"));
+
+        ResponseCookie deleteCookie = ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(0)
+                .build();
+        when(cookieUtil.deleteRefreshTokenCookie()).thenReturn(deleteCookie);
+
+        mockMvc.perform(post("/api/auth/logout")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-access-token")
+                .cookie(refreshCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(authService).logout(eq("token-to-logout"), any(), eq("test-access-token"));
     }
 
     @Test

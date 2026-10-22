@@ -9,6 +9,7 @@ import com.bharath.stacked.modules.security.model.Role;
 import com.bharath.stacked.modules.security.model.User;
 import com.bharath.stacked.modules.security.repository.UserRepository;
 import com.bharath.stacked.modules.security.service.AuthService;
+import com.bharath.stacked.modules.security.service.TokenRevocationService;
 import com.bharath.stacked.modules.security.util.JwtTokenProvider;
 import com.bharath.stacked.service.RedisService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Date;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -59,6 +61,9 @@ class AuthServiceImplTest {
     private SetOperations<String, Object> setOperations;
 
     @Mock
+    private TokenRevocationService tokenRevocationService;
+
+    @Mock
     private Authentication authentication;
 
     private AuthServiceImpl authService;
@@ -75,7 +80,8 @@ class AuthServiceImplTest {
                 authenticationManager,
                 jwtTokenProvider,
                 redisService,
-                redisTemplate);
+                redisTemplate,
+                tokenRevocationService);
 
         sampleAdmin = User.builder()
                 .id("admin-123")
@@ -211,6 +217,26 @@ class AuthServiceImplTest {
 
         verify(redisService).delete("auth:session:admin-123:token-id-456");
         verify(setOperations).remove("auth:user_sessions:admin-123", "token-id-456");
+    }
+
+    @Test
+    @DisplayName("logout with access token blacklists the access token")
+    void logout_WithAccessToken_RevokesAccessToken() {
+        String refreshToken = "valid-refresh-token";
+        String accessToken = "valid-access-token";
+
+        when(jwtTokenProvider.validateToken(accessToken)).thenReturn(true);
+        when(jwtTokenProvider.getTokenIdFromToken(accessToken)).thenReturn("access-token-jti");
+        when(jwtTokenProvider.getExpirationFromToken(accessToken)).thenReturn(new Date(System.currentTimeMillis() + 60000));
+
+        when(jwtTokenProvider.validateToken(refreshToken)).thenReturn(true);
+        when(jwtTokenProvider.getUserIdFromToken(refreshToken)).thenReturn("admin-123");
+        when(jwtTokenProvider.getTokenIdFromRefreshToken(refreshToken)).thenReturn("token-id-456");
+
+        authService.logout(refreshToken, "admin-123", accessToken);
+
+        verify(tokenRevocationService).revokeToken(eq("access-token-jti"), any(Duration.class));
+        verify(redisService).delete("auth:session:admin-123:token-id-456");
     }
 
     @Test

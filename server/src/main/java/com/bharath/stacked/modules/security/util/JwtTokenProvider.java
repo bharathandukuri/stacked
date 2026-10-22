@@ -25,14 +25,18 @@ public class JwtTokenProvider {
 
     public JwtTokenProvider(@NonNull JwtProperties jwtProperties) {
         this.jwtProperties = jwtProperties;
-        byte[] keyBytes = jwtProperties.secret().getBytes(StandardCharsets.UTF_8);
-        if (keyBytes.length < 32) {
-            byte[] padded = new byte[32];
-            System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
-            this.key = Keys.hmacShaKeyFor(padded);
-        } else {
-            this.key = Keys.hmacShaKeyFor(keyBytes);
+        String secret = jwtProperties.secret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException(
+                    "JWT signing secret key must be configured and not blank. Set the JWT_SECRET environment variable.");
         }
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalArgumentException(
+                    "JWT signing secret key must be at least 256 bits (32 bytes) long. Provided length: "
+                            + keyBytes.length + " bytes.");
+        }
+        this.key = Keys.hmacShaKeyFor(keyBytes);
     }
 
     @NonNull
@@ -41,6 +45,7 @@ public class JwtTokenProvider {
         Date expiryDate = new Date(now.getTime() + jwtProperties.accessTokenExpirationMs());
 
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(userId)
                 .claim("email", email)
                 .claim("role", role.name())
@@ -106,8 +111,23 @@ public class JwtTokenProvider {
     }
 
     @Nullable
-    public String getTokenIdFromRefreshToken(@NonNull String token) {
+    public String getTokenIdFromToken(@NonNull String token) {
         return getClaims(token).getId();
+    }
+
+    @Nullable
+    public Date getIssuedAtFromToken(@NonNull String token) {
+        return getClaims(token).getIssuedAt();
+    }
+
+    @Nullable
+    public Date getExpirationFromToken(@NonNull String token) {
+        return getClaims(token).getExpiration();
+    }
+
+    @Nullable
+    public String getTokenIdFromRefreshToken(@NonNull String token) {
+        return getTokenIdFromToken(token);
     }
 
     public long getAccessTokenExpirationSeconds() {

@@ -39,6 +39,7 @@ class AdminUserInitializerTest {
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(initializer, "enabled", true);
         ReflectionTestUtils.setField(initializer, "defaultEmail", "  Admin@Stacked.com ");
         ReflectionTestUtils.setField(initializer, "defaultPassword", "AdminSecret123");
         ReflectionTestUtils.setField(initializer, "defaultName", "Super Admin");
@@ -47,6 +48,7 @@ class AdminUserInitializerTest {
     @Test
     @DisplayName("Seeds default admin user when none exists")
     void seedsAdminWhenNoneExists() {
+        when(userRepository.countByRole(Role.ADMIN)).thenReturn(0L);
         when(userRepository.findByEmail("admin@stacked.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("AdminSecret123")).thenReturn("encodedPassword");
 
@@ -63,10 +65,63 @@ class AdminUserInitializerTest {
     }
 
     @Test
-    @DisplayName("Skips seeding when admin user already exists")
-    void skipsSeedingWhenAdminExists() {
-        User existingUser = User.builder().email("admin@stacked.com").build();
+    @DisplayName("Skips seeding when an administrator already exists in the system")
+    void skipsSeedingWhenAdminRoleAlreadyExists() {
+        when(userRepository.countByRole(Role.ADMIN)).thenReturn(1L);
+
+        initializer.run(args);
+
+        verify(userRepository, never()).save(any(User.class));
+        verify(userRepository, never()).findByEmail(anyString());
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    @DisplayName("Skips seeding when email already belongs to an existing user")
+    void skipsSeedingWhenEmailExists() {
+        when(userRepository.countByRole(Role.ADMIN)).thenReturn(0L);
+        User existingUser = User.builder().email("admin@stacked.com").role(Role.USER).build();
         when(userRepository.findByEmail("admin@stacked.com")).thenReturn(Optional.of(existingUser));
+
+        initializer.run(args);
+
+        verify(userRepository, never()).save(any(User.class));
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    @DisplayName("Skips seeding when admin provisioning is disabled")
+    void skipsSeedingWhenDisabled() {
+        ReflectionTestUtils.setField(initializer, "enabled", false);
+
+        initializer.run(args);
+
+        verifyNoInteractions(userRepository, passwordEncoder);
+    }
+
+    @Test
+    @DisplayName("Skips seeding when default credentials are blank or null")
+    void skipsSeedingWhenCredentialsBlank() {
+        ReflectionTestUtils.setField(initializer, "defaultEmail", "   ");
+
+        initializer.run(args);
+
+        verifyNoInteractions(userRepository, passwordEncoder);
+
+        ReflectionTestUtils.setField(initializer, "defaultEmail", "admin@stacked.com");
+        ReflectionTestUtils.setField(initializer, "defaultPassword", "");
+
+        initializer.run(args);
+
+        verifyNoInteractions(userRepository, passwordEncoder);
+    }
+
+    @Test
+    @DisplayName("Skips seeding when password is shorter than 8 characters")
+    void skipsSeedingWhenPasswordTooShort() {
+        ReflectionTestUtils.setField(initializer, "defaultPassword", "short");
+        when(userRepository.countByRole(Role.ADMIN)).thenReturn(0L);
+        when(userRepository.findByEmail("admin@stacked.com")).thenReturn(Optional.empty());
 
         initializer.run(args);
 

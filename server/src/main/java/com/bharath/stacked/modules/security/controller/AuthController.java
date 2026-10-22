@@ -91,11 +91,12 @@ public class AuthController {
             @NonNull HttpServletRequest request,
             @Nullable Authentication authentication) {
         String refreshToken = cookieUtil.extractRefreshToken(request).orElse(null);
+        String accessToken = extractBearerToken(request);
         String currentUserId = (authentication != null && authentication.isAuthenticated())
                 ? authentication.getName()
                 : null;
 
-        authService.logout(refreshToken, currentUserId);
+        authService.logout(refreshToken, currentUserId, accessToken);
         SecurityContextHolder.clearContext();
 
         ResponseCookie deleteCookie = cookieUtil.deleteRefreshTokenCookie();
@@ -103,6 +104,14 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, deleteCookie.toString())
                 .body(ApiResponse.<Void>success(null, "Logged out successfully").getBody());
+    }
+
+    private String extractBearerToken(HttpServletRequest request) {
+        String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (header != null && header.startsWith("Bearer ")) {
+            return header.substring(7).trim();
+        }
+        return null;
     }
 
     @GetMapping("/me")

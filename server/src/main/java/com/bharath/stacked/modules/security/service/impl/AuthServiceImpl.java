@@ -12,6 +12,7 @@ import com.bharath.stacked.modules.security.model.Role;
 import com.bharath.stacked.modules.security.model.User;
 import com.bharath.stacked.modules.security.repository.UserRepository;
 import com.bharath.stacked.modules.security.service.AuthService;
+import com.bharath.stacked.modules.security.service.TokenRevocationService;
 import com.bharath.stacked.modules.security.util.JwtTokenProvider;
 import com.bharath.stacked.service.RedisService;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Date;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -46,6 +49,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RedisService redisService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final TokenRevocationService tokenRevocationService;
 
     @Override
     @NonNull
@@ -153,6 +157,28 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void logout(@Nullable String refreshToken, @Nullable String currentUserId) {
+        logout(refreshToken, currentUserId, null);
+    }
+
+    @Override
+    public void logout(@Nullable String refreshToken, @Nullable String currentUserId, @Nullable String accessToken) {
+        if (accessToken != null && !accessToken.isBlank()) {
+            try {
+                if (jwtTokenProvider.validateToken(accessToken)) {
+                    String tokenId = jwtTokenProvider.getTokenIdFromToken(accessToken);
+                    Date expiry = jwtTokenProvider.getExpirationFromToken(accessToken);
+                    if (tokenId != null && expiry != null) {
+                        Duration remaining = Duration.between(Instant.now(), expiry.toInstant());
+                        if (!remaining.isNegative() && !remaining.isZero()) {
+                            tokenRevocationService.revokeToken(tokenId, remaining);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to revoke access token during logout: {}", e.getMessage());
+            }
+        }
+
         if (refreshToken == null || refreshToken.isBlank()) {
             log.debug("Logout called with null or empty refresh token; skipping session invalidation.");
             return;

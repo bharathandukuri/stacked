@@ -68,4 +68,40 @@ class JwtTokenProviderTest {
 
         assertFalse(tokenProvider.validateToken(token));
     }
+
+    @Test
+    @DisplayName("Constructor throws IllegalArgumentException when secret is null or blank")
+    void constructor_BlankSecret_ThrowsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new JwtProperties("", 900000L, 604800000L));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new JwtProperties("   ", 900000L, 604800000L));
+    }
+
+    @Test
+    @DisplayName("Constructor throws IllegalArgumentException when secret is shorter than 32 bytes (256 bits)")
+    void constructor_ShortSecret_ThrowsIllegalArgumentException() {
+        // 16 bytes secret - unsafe, must NOT be zero-padded
+        String shortSecret = "short-secret-16b";
+        assertEquals(16, shortSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                new JwtProperties(shortSecret, 900000L, 604800000L));
+
+        assertTrue(ex.getMessage().contains("at least 256 bits (32 bytes)"));
+    }
+
+    @Test
+    @DisplayName("Constructor succeeds when secret is exactly 32 bytes (256 bits)")
+    void constructor_Exact32ByteSecret_Succeeds() {
+        String exact32ByteSecret = "12345678901234567890123456789012";
+        assertEquals(32, exact32ByteSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+
+        JwtProperties props = new JwtProperties(exact32ByteSecret, 900000L, 604800000L);
+        JwtTokenProvider provider = new JwtTokenProvider(props);
+
+        String token = provider.generateAccessToken("user-1", "user@stacked.com", Role.ADMIN);
+        assertTrue(provider.validateToken(token));
+    }
 }

@@ -27,6 +27,8 @@ public interface AuthService {
 
     void logout(@Nullable String refreshToken, @Nullable String currentUserId);
 
+    void logout(@Nullable String refreshToken, @Nullable String currentUserId, @Nullable String accessToken);
+
     @NonNull
     AdminResponse getAdminProfile(@Nullable String userId);
 

@@ -8,7 +8,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(properties = {
         "spring.data.mongodb.auto-index-creation=false",
-        "stacked.execution.docker.enabled=false"
+        "stacked.execution.docker.enabled=false",
+        "jwt.secret=c3VwZXItc2VjcmV0LWtleS1mb3ItdGVzdGluZy1wdXJwb3Nlcy1vbmx5LTI1NmJpdHMh"
 })
 class StackedApplicationTests {
 

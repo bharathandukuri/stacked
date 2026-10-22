@@ -1,5 +1,6 @@
 package com.bharath.stacked.modules.security.filter;
 
+import com.bharath.stacked.modules.security.service.TokenRevocationService;
 import com.bharath.stacked.modules.security.util.JwtTokenProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -17,6 +18,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.IOException;
+import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -27,6 +29,9 @@ class JwtAuthenticationFilterTest {
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+
+    @Mock
+    private TokenRevocationService tokenRevocationService;
 
     @Mock
     private FilterChain filterChain;
@@ -131,6 +136,26 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer " + token);
 
         when(jwtTokenProvider.validateToken(token)).thenThrow(new RuntimeException("Parsing failure"));
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("Filter does not authenticate user when token is revoked")
+    void revokedTokenDoesNotAuthenticate() throws ServletException, IOException {
+        String token = "revoked-jwt-token";
+        request.addHeader("Authorization", "Bearer " + token);
+
+        when(jwtTokenProvider.validateToken(token)).thenReturn(true);
+        when(jwtTokenProvider.getUserIdFromToken(token)).thenReturn("user-42");
+        when(jwtTokenProvider.getRoleFromToken(token)).thenReturn("ADMIN");
+        when(jwtTokenProvider.getTokenIdFromToken(token)).thenReturn("token-id-123");
+        Date now = new Date();
+        when(jwtTokenProvider.getIssuedAtFromToken(token)).thenReturn(now);
+        when(tokenRevocationService.isRevoked("token-id-123", "user-42", now)).thenReturn(true);
 
         filter.doFilter(request, response, filterChain);
 

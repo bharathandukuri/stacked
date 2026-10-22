@@ -60,18 +60,14 @@ public class SecurityConfig {
                                 "/api/auth/logout",
                                 "/actuator/health",
                                 "/api/files/*/content",
-                                "/api/coding-problem/check-slug",
                                 "/api/coding-problem/supported-languages",
                                 "/api/coding-problem/languages",
-                                "/api/coding-problem/run-preview",
-                                "/api/coding-problem/test-run",
-                                "/api/coding-problem/run-generator",
-                                "/api/coding-problem/generate-testcases",
                                 "/ws/**")
                         .permitAll()
                         .requestMatchers("/api/auth/me").authenticated()
                         .requestMatchers("/api/judge/**").authenticated()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/coding-problem/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

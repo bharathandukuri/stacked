@@ -11,6 +11,7 @@ import com.bharath.stacked.modules.security.dto.UserResponse;
 import com.bharath.stacked.modules.security.model.Role;
 import com.bharath.stacked.modules.security.model.User;
 import com.bharath.stacked.modules.security.repository.UserRepository;
+import com.bharath.stacked.modules.security.service.TokenRevocationService;
 import com.bharath.stacked.service.RedisService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,6 +56,9 @@ class UserServiceImplTest {
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Mock
+    private TokenRevocationService tokenRevocationService;
 
     @Mock
     private SetOperations<String, Object> setOperations;
@@ -189,6 +193,7 @@ class UserServiceImplTest {
         assertThat(res.name()).isEqualTo("Johnathan Doe");
         assertThat(res.email()).isEqualTo("john.new@example.com");
         assertThat(res.role()).isEqualTo(Role.ADMIN);
+        verify(tokenRevocationService).revokeAllUserTokens("user-1");
     }
 
     @Test
@@ -199,15 +204,16 @@ class UserServiceImplTest {
         when(userRepository.findById("user-1")).thenReturn(Optional.of(sampleUser));
         when(passwordEncoder.encode("NewSecurePassword123!")).thenReturn("new_bcrypt");
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
-        when(setOperations.members("stacked:auth:user_sessions:user-1")).thenReturn(Set.of("tok-1"));
+        when(setOperations.members("auth:user_sessions:user-1")).thenReturn(Set.of("tok-1"));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         UserResponse res = userService.updateUser("user-1", req, "admin-1");
 
         assertThat(res).isNotNull();
         verify(passwordEncoder).encode("NewSecurePassword123!");
-        verify(redisService).delete("stacked:auth:session:user-1:tok-1");
-        verify(redisService).delete("stacked:auth:user_sessions:user-1");
+        verify(tokenRevocationService).revokeAllUserTokens("user-1");
+        verify(redisService).delete("auth:session:user-1:tok-1");
+        verify(redisService).delete("auth:user_sessions:user-1");
     }
 
     @Test
@@ -245,13 +251,14 @@ class UserServiceImplTest {
     void deleteUser_Success() {
         when(userRepository.findById("user-1")).thenReturn(Optional.of(sampleUser));
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
-        when(setOperations.members("stacked:auth:user_sessions:user-1")).thenReturn(Set.of("token-abc"));
+        when(setOperations.members("auth:user_sessions:user-1")).thenReturn(Set.of("token-abc"));
 
         userService.deleteUser("user-1", "admin-1");
 
         verify(userRepository).delete(sampleUser);
-        verify(redisService).delete("stacked:auth:session:user-1:token-abc");
-        verify(redisService).delete("stacked:auth:user_sessions:user-1");
+        verify(tokenRevocationService).revokeAllUserTokens("user-1");
+        verify(redisService).delete("auth:session:user-1:token-abc");
+        verify(redisService).delete("auth:user_sessions:user-1");
     }
 
     @Test
