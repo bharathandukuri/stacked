@@ -13,7 +13,6 @@ import java.util.List;
 public record McqQuestionSummaryResponse(
         @NonNull String id,
         @NonNull String title,
-        @NonNull String slug,
         @NonNull String contentSnippet,
         @NonNull McqType type,
         @NonNull McqDifficulty difficulty,
@@ -22,8 +21,6 @@ public record McqQuestionSummaryResponse(
         @NonNull List<String> tags,
         int optionsCount,
         int correctOptionsCount,
-        double defaultPoints,
-        double negativePoints,
         @Nullable Instant createdAt,
         @Nullable Instant updatedAt) {
 
@@ -36,7 +33,6 @@ public record McqQuestionSummaryResponse(
         return new McqQuestionSummaryResponse(
                 question.getId(),
                 question.getTitle(),
-                question.getSlug(),
                 snippet,
                 question.getType(),
                 question.getDifficulty(),
@@ -45,8 +41,6 @@ public record McqQuestionSummaryResponse(
                 question.getTags() != null ? question.getTags() : List.of(),
                 question.getOptions() != null ? question.getOptions().size() : 0,
                 question.getCorrectOptionIds() != null ? question.getCorrectOptionIds().size() : 0,
-                question.getDefaultPoints(),
-                question.getNegativePoints(),
                 question.getCreatedAt(),
                 question.getUpdatedAt());
     }

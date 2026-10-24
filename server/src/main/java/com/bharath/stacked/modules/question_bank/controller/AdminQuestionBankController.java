@@ -34,11 +34,11 @@ public class AdminQuestionBankController {
         return ApiResponse.success(response, "Question banks retrieved successfully");
     }
 
-    @GetMapping("/{idOrSlug}")
+    @GetMapping("/{id}")
     @NonNull
     public ResponseEntity<ApiResponse<QuestionBankDetailResponse>> getQuestionBank(
-            @PathVariable @NonNull String idOrSlug) {
-        QuestionBankDetailResponse response = questionBankService.getQuestionBank(idOrSlug);
+            @PathVariable @NonNull String id) {
+        QuestionBankDetailResponse response = questionBankService.getQuestionBank(id);
         return ApiResponse.success(response, "Question bank details retrieved successfully");
     }
 
@@ -55,57 +55,65 @@ public class AdminQuestionBankController {
                 .body(ApiResponse.success(response, "Question bank created successfully").getBody());
     }
 
-    @PutMapping("/{idOrSlug}")
+    @PutMapping("/{id}")
     @NonNull
     public ResponseEntity<ApiResponse<QuestionBankSummaryResponse>> updateQuestionBank(
-            @PathVariable @NonNull String idOrSlug,
+            @PathVariable @NonNull String id,
             @Valid @RequestBody @NonNull UpdateQuestionBankRequest request) {
-        QuestionBankSummaryResponse response = questionBankService.updateQuestionBank(idOrSlug, request);
+        QuestionBankSummaryResponse response = questionBankService.updateQuestionBank(id, request);
         return ApiResponse.success(response, "Question bank updated successfully");
     }
 
-    @DeleteMapping("/{idOrSlug}")
+    @DeleteMapping("/{id}")
     @NonNull
     public ResponseEntity<ApiResponse<Void>> deleteQuestionBank(
-            @PathVariable @NonNull String idOrSlug) {
-        questionBankService.deleteQuestionBank(idOrSlug);
+            @PathVariable @NonNull String id) {
+        questionBankService.deleteQuestionBank(id);
         return ApiResponse.success(null, "Question bank deleted successfully");
     }
 
-    @PatchMapping("/{idOrSlug}/status")
+    @GetMapping("/{id}/in-use")
+    @NonNull
+    public ResponseEntity<ApiResponse<java.util.Map<String, Boolean>>> checkInUse(
+            @PathVariable @NonNull String id) {
+        boolean inUse = questionBankService.isInUse(id);
+        return ApiResponse.success(java.util.Map.of("inUse", inUse), "Usage status retrieved successfully");
+    }
+
+    @PatchMapping("/{id}/status")
     @NonNull
     public ResponseEntity<ApiResponse<QuestionBankSummaryResponse>> updateQuestionBankStatus(
-            @PathVariable @NonNull String idOrSlug,
+            @PathVariable @NonNull String id,
             @Valid @RequestBody @NonNull UpdateQuestionBankStatusRequest request) {
-        QuestionBankSummaryResponse response = questionBankService.updateStatus(idOrSlug, request.getStatus());
+        QuestionBankSummaryResponse response = questionBankService.updateStatus(id, request.getStatus());
         return ApiResponse.success(response, "Question bank status updated successfully");
     }
 
-    @PatchMapping("/{idOrSlug}/publish")
+    @PatchMapping("/{id}/publish")
     @NonNull
     public ResponseEntity<ApiResponse<QuestionBankSummaryResponse>> publishQuestionBank(
-            @PathVariable @NonNull String idOrSlug) {
-        QuestionBankSummaryResponse response = questionBankService.publish(idOrSlug);
+            @PathVariable @NonNull String id) {
+        QuestionBankSummaryResponse response = questionBankService.publish(id);
         return ApiResponse.success(response, "Question bank published successfully");
     }
 
-    @PatchMapping("/{idOrSlug}/unpublish")
+    @PatchMapping("/{id}/unpublish")
     @NonNull
     public ResponseEntity<ApiResponse<QuestionBankSummaryResponse>> unpublishQuestionBank(
-            @PathVariable @NonNull String idOrSlug) {
-        QuestionBankSummaryResponse response = questionBankService.unpublish(idOrSlug);
+            @PathVariable @NonNull String id) {
+        QuestionBankSummaryResponse response = questionBankService.unpublish(id);
         return ApiResponse.success(response, "Question bank unpublished successfully");
     }
 
-    @PostMapping("/{idOrSlug}/duplicate")
+    @PostMapping("/{id}/duplicate")
     @NonNull
     public ResponseEntity<ApiResponse<QuestionBankSummaryResponse>> duplicateQuestionBank(
-            @PathVariable @NonNull String idOrSlug,
+            @PathVariable @NonNull String id,
             @Nullable Authentication authentication) {
         String authorId = (authentication != null && authentication.isAuthenticated())
                 ? authentication.getName()
                 : null;
-        QuestionBankSummaryResponse response = questionBankService.duplicateQuestionBank(idOrSlug, authorId);
+        QuestionBankSummaryResponse response = questionBankService.duplicateQuestionBank(id, authorId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response, "Question bank duplicated successfully").getBody());
     }

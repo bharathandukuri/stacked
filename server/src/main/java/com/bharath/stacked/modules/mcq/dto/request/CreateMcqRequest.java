@@ -28,8 +28,6 @@ public record CreateMcqRequest(
         @NotEmpty(message = "At least one correct option must be specified.")
         List<String> correctOptionIds,
         @Nullable String explanation,
-        @Nullable @PositiveOrZero(message = "Default points must be zero or positive.") Double defaultPoints,
-        @Nullable @PositiveOrZero(message = "Negative points must be zero or positive.") Double negativePoints,
         @Nullable Boolean shuffleOptions,
         @Nullable List<String> imageFileIds) {
 }

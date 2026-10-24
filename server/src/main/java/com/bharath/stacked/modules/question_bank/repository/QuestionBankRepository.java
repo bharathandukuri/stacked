@@ -11,12 +11,10 @@ import java.util.Optional;
 @Repository
 public interface QuestionBankRepository extends MongoRepository<QuestionBank, String> {
 
-    Optional<QuestionBank> findBySlug(String slug);
-
-    boolean existsBySlug(String slug);
-
     long countByStatus(QuestionBankStatus status);
 
     List<QuestionBank> findAllByItemsQuestionId(String questionId);
+
+    boolean existsByItemsQuestionId(String questionId);
 }
 

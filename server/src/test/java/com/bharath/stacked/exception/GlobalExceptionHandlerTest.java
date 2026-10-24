@@ -2,6 +2,8 @@ package com.bharath.stacked.exception;
 
 import com.bharath.stacked.common.api.ApiResponse;
 import com.bharath.stacked.common.api.ErrorCode;
+import com.bharath.stacked.modules.execution.exception.ExecutionQueueFullException;
+import com.bharath.stacked.modules.execution.exception.ExecutionQueueTimeoutException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
@@ -9,12 +11,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
@@ -222,5 +227,56 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getError().getErrorCode()).isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR.name());
         assertThat(response.getBody().getMessage()).contains("An unexpected internal error occurred");
+    }
+
+    @Test
+    @DisplayName("handleAccessDenied handles 403 Forbidden")
+    void handleAccessDenied() {
+        AccessDeniedException ex = new AccessDeniedException("Access is denied");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleAccessDenied(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError().getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN.name());
+        assertThat(response.getBody().getMessage()).contains("Access denied");
+    }
+
+    @Test
+    @DisplayName("handleAuthenticationException handles 401 Unauthorized")
+    void handleAuthenticationException() {
+        BadCredentialsException ex = new BadCredentialsException("Bad credentials");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleAuthenticationException(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError().getErrorCode()).isEqualTo(ErrorCode.UNAUTHORIZED.name());
+        assertThat(response.getBody().getMessage()).contains("Authentication credentials");
+    }
+
+    @Test
+    @DisplayName("handleExecutionQueueFull handles 429 Too Many Requests with Retry-After header")
+    void handleExecutionQueueFull() {
+        ExecutionQueueFullException ex = new ExecutionQueueFullException("Execution queue is at maximum capacity");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleExecutionQueueFull(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("5");
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError().getErrorCode()).isEqualTo(ErrorCode.RATE_LIMIT_EXCEEDED.name());
+    }
+
+    @Test
+    @DisplayName("handleExecutionQueueTimeout handles 504 Gateway Timeout")
+    void handleExecutionQueueTimeout() {
+        ExecutionQueueTimeoutException ex = new ExecutionQueueTimeoutException("Execution request waited 1000ms");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleExecutionQueueTimeout(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError().getErrorCode()).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE.name());
     }
 }

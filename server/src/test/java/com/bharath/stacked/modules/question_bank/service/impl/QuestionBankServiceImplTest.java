@@ -78,20 +78,17 @@ class QuestionBankServiceImplTest {
         sampleMcqQuestion = McqQuestion.builder()
                 .id("mcq-201")
                 .title("Java Volatile Visibility")
-                .slug("java-volatile-visibility")
                 .status(McqStatus.PUBLISHED)
                 .content("What does volatile keyword guarantee?")
-                .defaultPoints(2.0)
                 .topics(List.of("Java", "Concurrency"))
                 .build();
 
         sampleQuestionBank = QuestionBank.builder()
                 .id("qb-301")
                 .title("Backend Java Assessment Bank")
-                .slug("backend-java-assessment-bank")
                 .description("Curated questions for Java assessments")
                 .category("Backend Engineering")
-                .status(QuestionBankStatus.PUBLISHED)
+                .status(QuestionBankStatus.DRAFT)
                 .tags(List.of("java", "concurrency", "algorithms"))
                 .items(List.of(
                         QuestionBankItem.builder()
@@ -104,7 +101,7 @@ class QuestionBankServiceImplTest {
                                 .questionType(BankQuestionType.MCQ)
                                 .questionId("mcq-201")
                                 .order(2)
-                                .customPoints(null)
+                                .customPoints(2.0)
                                 .build()
                 ))
                 .totalQuestions(2)
@@ -136,12 +133,11 @@ class QuestionBankServiceImplTest {
                                 .questionType(BankQuestionType.MCQ)
                                 .questionId("mcq-201")
                                 .order(2)
-                                .customPoints(null)
+                                .customPoints(2.0)
                                 .build()
                 ))
                 .build();
 
-        when(questionBankRepository.findBySlug("backend-java-assessment-bank")).thenReturn(Optional.empty());
         when(codingProblemRepository.findAllById(List.of("cp-101"))).thenReturn(List.of(sampleCodingProblem));
         when(mcqQuestionRepository.findAllById(List.of("mcq-201"))).thenReturn(List.of(sampleMcqQuestion));
         when(questionBankRepository.save(any(QuestionBank.class))).thenAnswer(invocation -> {
@@ -154,7 +150,6 @@ class QuestionBankServiceImplTest {
 
         assertThat(response).isNotNull();
         assertThat(response.getTitle()).isEqualTo("Backend Java Assessment Bank");
-        assertThat(response.getSlug()).isEqualTo("backend-java-assessment-bank");
         assertThat(response.getTotalQuestions()).isEqualTo(2);
         assertThat(response.getCodingCount()).isEqualTo(1);
         assertThat(response.getMcqCount()).isEqualTo(1);
@@ -174,7 +169,6 @@ class QuestionBankServiceImplTest {
                 ))
                 .build();
 
-        when(questionBankRepository.findBySlug(any())).thenReturn(Optional.empty());
         when(codingProblemRepository.findAllById(List.of("non-existing-id"))).thenReturn(List.of());
 
         assertThatThrownBy(() -> questionBankService.createQuestionBank(request, "admin-1"))
@@ -224,7 +218,6 @@ class QuestionBankServiceImplTest {
                 .build();
 
         when(questionBankRepository.findById("qb-301")).thenReturn(Optional.of(sampleQuestionBank));
-        when(questionBankRepository.findBySlug("updated-bank-title")).thenReturn(Optional.empty());
         when(mcqQuestionRepository.findAllById(List.of("mcq-201"))).thenReturn(List.of(sampleMcqQuestion));
         when(questionBankRepository.save(any(QuestionBank.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -242,7 +235,6 @@ class QuestionBankServiceImplTest {
     @DisplayName("duplicateQuestionBank should clone existing bank with copy prefix and draft status")
     void duplicateQuestionBank_Success() {
         when(questionBankRepository.findById("qb-301")).thenReturn(Optional.of(sampleQuestionBank));
-        when(questionBankRepository.findBySlug("copy-of-backend-java-assessment-bank")).thenReturn(Optional.empty());
         when(questionBankRepository.save(any(QuestionBank.class))).thenAnswer(invocation -> {
             QuestionBank bank = invocation.getArgument(0);
             bank.setId("qb-clone-999");
@@ -268,9 +260,58 @@ class QuestionBankServiceImplTest {
     }
 
     @Test
+    @DisplayName("updateQuestionBank should throw ConflictException when bank is PUBLISHED")
+    void updateQuestionBank_WhenPublished_ThrowsConflictException() {
+        QuestionBank publishedBank = QuestionBank.builder()
+                .id("qb-published")
+                .title("Published Bank")
+                .status(QuestionBankStatus.PUBLISHED)
+                .items(List.of())
+                .build();
+        when(questionBankRepository.findById("qb-published")).thenReturn(Optional.of(publishedBank));
+
+        UpdateQuestionBankRequest req = UpdateQuestionBankRequest.builder().title("New Title").build();
+
+        assertThatThrownBy(() -> questionBankService.updateQuestionBank("qb-published", req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot edit Question Bank 'Published Bank' because it is currently PUBLISHED. Unpublish to DRAFT first.");
+    }
+
+    @Test
+    @DisplayName("unpublish should throw ConflictException when bank is in use by assessment")
+    void unpublish_WhenInUse_ThrowsConflictException() {
+        QuestionBank publishedBank = QuestionBank.builder()
+                .id("qb-301")
+                .title("Backend Java Assessment Bank")
+                .status(QuestionBankStatus.PUBLISHED)
+                .items(List.of(
+                        QuestionBankItem.builder().questionType(BankQuestionType.CODING).questionId("cp-101").order(1).build()
+                ))
+                .build();
+        when(questionBankRepository.findById("qb-301")).thenReturn(Optional.of(publishedBank));
+        when(assessmentRepository.existsByQuestionBankId("qb-301")).thenReturn(true);
+        when(assessmentRepository.findAllByQuestionBankId("qb-301")).thenReturn(List.of(
+                Assessment.builder().id("asm-1").title("Fullstack Developer Assessment").build()
+        ));
+
+        assertThatThrownBy(() -> questionBankService.unpublish("qb-301"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot move question bank 'Backend Java Assessment Bank' back to draft because it is currently in use");
+    }
+
+    @Test
+    @DisplayName("isInUse should return true when question bank is used by an assessment")
+    void isInUse_ReturnsTrue_WhenAssessmentReferencesBank() {
+        when(assessmentRepository.existsByQuestionBankId("qb-301")).thenReturn(true);
+
+        assertThat(questionBankService.isInUse("qb-301")).isTrue();
+    }
+
+    @Test
     @DisplayName("deleteQuestionBank should throw ConflictException when bank is in use by assessment")
     void deleteQuestionBank_ThrowsConflictException_WhenInUse() {
         when(questionBankRepository.findById("qb-301")).thenReturn(Optional.of(sampleQuestionBank));
+        when(assessmentRepository.existsByQuestionBankId("qb-301")).thenReturn(true);
         when(assessmentRepository.findAllByQuestionBankId("qb-301")).thenReturn(List.of(
                 Assessment.builder().id("asm-1").title("Fullstack Developer Assessment").build()
         ));

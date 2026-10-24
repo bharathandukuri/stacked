@@ -41,6 +41,7 @@
         private final ExecutionProperties executionProperties;
         private final ExecutionPathValidator executionPathValidator;
         private final ExecutionConstraintResolver executionConstraintResolver;
+        private final com.bharath.stacked.modules.execution.queue.ExecutionQueueService executionQueueService;
     
         @Autowired
         public CodeExecutionServiceImpl(
@@ -49,13 +50,36 @@
                 CodeExecutionStatusMapper codeExecutionStatusMapper,
                 ExecutionProperties executionProperties,
                 ExecutionPathValidator executionPathValidator,
-                ExecutionConstraintResolver executionConstraintResolver) {
+                ExecutionConstraintResolver executionConstraintResolver,
+                @Autowired(required = false) com.bharath.stacked.modules.execution.queue.ExecutionQueueService executionQueueService) {
             this.dockerExecutionService = dockerExecutionService;
             this.isolateExecutionService = isolateExecutionService;
             this.codeExecutionStatusMapper = codeExecutionStatusMapper;
             this.executionProperties = executionProperties;
             this.executionPathValidator = executionPathValidator;
             this.executionConstraintResolver = executionConstraintResolver;
+            this.executionQueueService = executionQueueService;
+        }
+    
+        /**
+         * Backward-compatible constructor for testing and manual wiring.
+         */
+        public CodeExecutionServiceImpl(
+                DockerExecutionService dockerExecutionService,
+                IsolateExecutionService isolateExecutionService,
+                CodeExecutionStatusMapper codeExecutionStatusMapper,
+                ExecutionProperties executionProperties,
+                ExecutionPathValidator executionPathValidator,
+                ExecutionConstraintResolver executionConstraintResolver) {
+            this(
+                    dockerExecutionService,
+                    isolateExecutionService,
+                    codeExecutionStatusMapper,
+                    executionProperties,
+                    executionPathValidator,
+                    executionConstraintResolver,
+                    null
+            );
         }
     
         /**
@@ -71,7 +95,8 @@
                     codeExecutionStatusMapper,
                     new ExecutionProperties(),
                     new ExecutionPathValidator(new ExecutionProperties()),
-                    new ExecutionConstraintResolver(new ExecutionProperties())
+                    new ExecutionConstraintResolver(new ExecutionProperties()),
+                    null
             );
         }
     
@@ -95,6 +120,13 @@
                         .build();
             }
     
+            if (executionQueueService != null) {
+                return executionQueueService.execute(resolveCurrentUserId(), () -> doRunSimple(request));
+            }
+            return doRunSimple(request);
+        }
+    
+        private SimpleCodeExecutionResult doRunSimple(SimpleCodeExecutionRequest request) {
             Language language = request.getLanguage();
             DockerImageDetails dockerImage = language.dockerImageDetails();
     
@@ -248,6 +280,13 @@
                         .build();
             }
     
+            if (executionQueueService != null) {
+                return executionQueueService.execute(resolveCurrentUserId(), () -> doRunBatch(request));
+            }
+            return doRunBatch(request);
+        }
+    
+        private BatchCodeExecutionResult doRunBatch(BatchCodeExecutionRequest request) {
             Language language = request.getLanguage();
             DockerImageDetails dockerImage = language.dockerImageDetails();
     
@@ -756,5 +795,17 @@
             wrapped.add("--");
             wrapped.addAll(command);
             return wrapped;
+        }
+
+        private String resolveCurrentUserId() {
+            try {
+                org.springframework.security.core.Authentication auth =
+                        org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+                if (auth != null && auth.isAuthenticated() && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
+                    return auth.getName();
+                }
+            } catch (Exception ignored) {
+            }
+            return null;
         }
     }

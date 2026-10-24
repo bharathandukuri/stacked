@@ -187,22 +187,43 @@ export function AssessmentExamPage() {
     }
   }, [currentIndex, currentQuestion?.questionId, recordEvent])
 
+  const [manualInterventionModal, setManualInterventionModal] = useState<string | null>(null)
+
   // WebSocket Connection
   const wsStatus = useAssessmentWebSocket({
     assessmentId,
     attemptId: attempt?.attemptId || "",
     enabled: Boolean(attempt && attempt.status === "IN_PROGRESS"),
+    onManualCompletion: (message) => {
+      setManualInterventionModal(message)
+    },
+    onManualActivation: (message) => {
+      toast.add({
+        title: "Assessment Active",
+        description: message,
+        type: "info",
+      })
+    },
   })
 
-  // If already submitted or expired, navigate to results
+  // Detect manual completion if reconnecting or reloading after completion
   useEffect(() => {
-    if (attempt?.status === "SUBMITTED" || attempt?.status === "EXPIRED") {
+    if (attempt?.manuallyCompleted && !manualInterventionModal) {
+      setManualInterventionModal(
+        attempt.manualInterventionMessage || "The administrator has manually completed this assessment."
+      )
+    }
+  }, [attempt?.manuallyCompleted, attempt?.manualInterventionMessage, manualInterventionModal])
+
+  // If already submitted or expired, navigate to results (unless showing manual completion modal)
+  useEffect(() => {
+    if (!manualInterventionModal && (attempt?.status === "SUBMITTED" || attempt?.status === "EXPIRED")) {
       navigate({
         to: "/assessments/$assessmentId/results",
         params: { assessmentId },
       })
     }
-  }, [attempt?.status, assessmentId, navigate])
+  }, [attempt?.status, assessmentId, navigate, manualInterventionModal])
 
   // Timer Tick
   useEffect(() => {
@@ -1666,6 +1687,34 @@ export function AssessmentExamPage() {
               className="w-full"
             >
               Finalize & View Results
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Administrator Completion Modal */}
+      <Dialog open={Boolean(manualInterventionModal)} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="size-5" />
+              <span>Assessment Completed by Administrator</span>
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-xs text-foreground/90 leading-relaxed">
+              {manualInterventionModal || "The administrator has manually completed this assessment. All your saved answers have been preserved."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-4">
+            <Button
+              onClick={() => {
+                navigate({
+                  to: "/assessments/$assessmentId/results",
+                  params: { assessmentId },
+                })
+              }}
+              className="w-full text-xs"
+            >
+              View Assessment Results
             </Button>
           </DialogFooter>
         </DialogContent>

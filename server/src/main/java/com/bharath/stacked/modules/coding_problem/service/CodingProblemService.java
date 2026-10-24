@@ -56,6 +56,8 @@ public interface CodingProblemService {
 
     CodingProblem unpublish(String idOrSlug);
 
+    boolean isInUse(String idOrSlug);
+
     List<SupportedLanguageResponse> getSupportedLanguages(CodingProblemType problemType);
 
     default List<SupportedLanguageResponse> getSupportedLanguages() {

@@ -13,6 +13,7 @@ import com.bharath.stacked.modules.assessment.enums.CandidateParticipationStatus
 import com.bharath.stacked.modules.assessment.model.*;
 import com.bharath.stacked.modules.assessment.repository.*;
 import com.bharath.stacked.modules.assessment.service.AssessmentService;
+import com.bharath.stacked.modules.assessment.websocket.AssessmentWebSocketHandler;
 import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemExecutionResponse;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemType;
@@ -81,6 +82,7 @@ public class AssessmentServiceImpl implements AssessmentService {
     private final ExecutionConstraintResolver executionConstraintResolver;
     private final MongoTemplate mongoTemplate;
     private final AssessmentAuditEventRepository auditEventRepository;
+    private final AssessmentWebSocketHandler webSocketHandler;
 
     private void recordAuditEvent(String assessmentId, String attemptId, String candidateUserId, String candidateEmail,
                                   String questionId, AssessmentAuditEventType eventType, AssessmentAuditEventSource source,
@@ -408,7 +410,6 @@ public class AssessmentServiceImpl implements AssessmentService {
                     .build());
             return QuestionBankPreviewDto.builder()
                     .id(bank.getId())
-                    .slug(bank.getSlug())
                     .title(bank.getTitle())
                     .description(bank.getDescription())
                     .category(bank.getCategory())
@@ -486,7 +487,6 @@ public class AssessmentServiceImpl implements AssessmentService {
         boolean eligible = errors.isEmpty();
         return QuestionBankPreviewDto.builder()
                 .id(bank.getId())
-                .slug(bank.getSlug())
                 .title(bank.getTitle())
                 .description(bank.getDescription())
                 .category(bank.getCategory())
@@ -738,16 +738,69 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     @Override
     @Transactional
+    public AssessmentDetailResponse activateAssessment(String idOrSlug) {
+        Assessment assessment = findByIdOrSlug(idOrSlug);
+        Instant now = Instant.now();
+
+        AssessmentStatus currentEffectiveStatus = assessment.getEffectiveStatus(now);
+        if (currentEffectiveStatus == AssessmentStatus.ACTIVE) {
+            throw new BadRequestException("Assessment is already ACTIVE.");
+        }
+        if (currentEffectiveStatus == AssessmentStatus.COMPLETED) {
+            throw new BadRequestException("Assessment is already COMPLETED and cannot be activated.");
+        }
+        if (assessment.isManuallyActivated()) {
+            throw new BadRequestException("Assessment has already been manually activated.");
+        }
+        if (assessment.getItems() == null || assessment.getItems().isEmpty()) {
+            throw new BadRequestException("Cannot activate an assessment with no questions configured.");
+        }
+
+        assessment.setManuallyActivated(true);
+        assessment.setManuallyActivatedAt(now);
+        if (assessment.getScheduledStart() == null || assessment.getScheduledStart().isAfter(now)) {
+            assessment.setScheduledStart(now);
+        }
+        assessment.setStatus(AssessmentStatus.ACTIVE);
+        String interventionMsg = "The administrator has manually activated this assessment.";
+        assessment.setManualInterventionMessage(interventionMsg);
+        assessment.setUpdatedAt(now);
+        Assessment saved = assessmentRepository.save(assessment);
+
+        recordAuditEvent(saved.getId(), null, null, null,
+                null, AssessmentAuditEventType.MANUAL_ACTIVATION, AssessmentAuditEventSource.SERVER_VERIFIED,
+                Map.of("action", "MANUAL_ACTIVATION", "timestamp", now.toString(), "overrodeStart", true));
+
+        if (webSocketHandler != null) {
+            webSocketHandler.broadcastToAssessment(saved.getId(), Map.of(
+                    "type", "ASSESSMENT_MANUALLY_ACTIVATED",
+                    "assessmentId", saved.getId(),
+                    "status", AssessmentStatus.ACTIVE.name(),
+                    "message", interventionMsg,
+                    "timestamp", now.toString()
+            ));
+        }
+
+        log.info("Admin manually activated Assessment: [{}] (id: {}) at {}", saved.getTitle(), saved.getId(), now);
+        return AssessmentDetailResponse.fromModel(saved);
+    }
+
+    @Override
+    @Transactional
     public AssessmentDetailResponse completeAssessment(String idOrSlug) {
         Assessment assessment = findByIdOrSlug(idOrSlug);
         Instant now = Instant.now();
 
-        if (assessment.getEffectiveStatus(now) == AssessmentStatus.COMPLETED) {
+        if (assessment.getEffectiveStatus(now) == AssessmentStatus.COMPLETED || assessment.isManuallyCompleted()) {
             throw new BadRequestException("Assessment is already COMPLETED.");
         }
 
+        assessment.setManuallyCompleted(true);
+        assessment.setManuallyCompletedAt(now);
         assessment.setScheduledEnd(now);
         assessment.setStatus(AssessmentStatus.COMPLETED);
+        String interventionMsg = "The administrator has manually completed this assessment.";
+        assessment.setManualInterventionMessage(interventionMsg);
         assessment.setUpdatedAt(now);
         Assessment saved = assessmentRepository.save(assessment);
 
@@ -757,17 +810,21 @@ public class AssessmentServiceImpl implements AssessmentService {
             if (attempt.getEffectiveDeadline() == null || attempt.getEffectiveDeadline().isAfter(now)) {
                 attempt.setEffectiveDeadline(now);
             }
-            attempt.setStatus(AttemptStatus.EXPIRED);
-            attempt.setUpdatedAt(now);
-            attemptRepository.save(attempt);
+            expireAttempt(attempt, saved, now);
+        }
 
-            assignmentRepository.findById(attempt.getAssignmentId()).ifPresent(assignment -> {
-                if (assignment.getStatus() == CandidateParticipationStatus.IN_PROGRESS) {
-                    assignment.setStatus(CandidateParticipationStatus.EXPIRED);
-                    assignment.setUpdatedAt(now);
-                    assignmentRepository.save(assignment);
-                }
-            });
+        recordAuditEvent(saved.getId(), null, null, null,
+                null, AssessmentAuditEventType.MANUAL_COMPLETION, AssessmentAuditEventSource.SERVER_VERIFIED,
+                Map.of("action", "MANUAL_COMPLETION", "timestamp", now.toString(), "terminatedActiveAttempts", activeAttempts.size()));
+
+        if (webSocketHandler != null) {
+            webSocketHandler.broadcastToAssessment(saved.getId(), Map.of(
+                    "type", "ASSESSMENT_MANUALLY_COMPLETED",
+                    "assessmentId", saved.getId(),
+                    "status", AssessmentStatus.COMPLETED.name(),
+                    "message", interventionMsg,
+                    "timestamp", now.toString()
+            ));
         }
 
         log.info("Admin manually completed Assessment: [{}] (id: {}) at {}", saved.getTitle(), saved.getId(), now);
@@ -781,6 +838,9 @@ public class AssessmentServiceImpl implements AssessmentService {
         AssessmentStatus effectiveStatus = assessment.getEffectiveStatus();
         if (effectiveStatus == AssessmentStatus.COMPLETED) {
             throw new BadRequestException("Candidate enrollment is closed. The assessment has already ended.");
+        }
+        if (assessment.isManuallyActivated() || effectiveStatus != AssessmentStatus.NOT_STARTED) {
+            throw new BadRequestException("Candidate roster is frozen. Candidates cannot be added after the assessment has been activated or started.");
         }
 
         Set<String> validEmails = new HashSet<>();
@@ -958,6 +1018,10 @@ public class AssessmentServiceImpl implements AssessmentService {
         } else if (existingByUser.isPresent()) {
             assignment = existingByUser.get();
         } else {
+            // New registration - check roster freeze
+            if (assessment.isManuallyActivated() || effectiveStatus == AssessmentStatus.COMPLETED) {
+                throw new BadRequestException("Candidate roster is frozen. New candidates cannot join after the assessment has been activated or ended.");
+            }
             // New registration
             assignment = AssessmentAssignment.builder()
                     .assessmentId(assessment.getId())
@@ -1036,6 +1100,9 @@ public class AssessmentServiceImpl implements AssessmentService {
                 .remainingSeconds(remainingSeconds)
                 .totalQuestions(assessment.getTotalQuestions())
                 .totalScore(assessment.getTotalScore())
+                .manuallyActivated(assessment.isManuallyActivated())
+                .manuallyCompleted(assessment.isManuallyCompleted())
+                .manualInterventionMessage(assessment.getManualInterventionMessage())
                 .backendReady(true)
                 .serverTimestamp(now)
                 .build();
@@ -1098,10 +1165,7 @@ public class AssessmentServiceImpl implements AssessmentService {
             AssessmentAttempt existingAttempt = activeAttemptOpt.get();
             // Check if deadline has passed
             if (now.isAfter(existingAttempt.getEffectiveDeadline())) {
-                existingAttempt.setStatus(AttemptStatus.EXPIRED);
-                attemptRepository.save(existingAttempt);
-                assignment.setStatus(CandidateParticipationStatus.EXPIRED);
-                assignmentRepository.save(assignment);
+                expireAttempt(existingAttempt, assessment, now);
                 throw new BadRequestException("Assessment attempt has expired.");
             }
 
@@ -1200,8 +1264,7 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         Instant now = Instant.now();
         if (now.isAfter(attempt.getEffectiveDeadline())) {
-            attempt.setStatus(AttemptStatus.EXPIRED);
-            attemptRepository.save(attempt);
+            expireAttempt(attempt, assessment, now);
             throw new BadRequestException("Assessment attempt has expired.");
         }
 
@@ -1242,6 +1305,8 @@ public class AssessmentServiceImpl implements AssessmentService {
                 .remainingSeconds(remainingSeconds)
                 .totalQuestions(assessment.getTotalQuestions())
                 .totalScore(assessment.getTotalScore())
+                .manuallyCompleted(assessment.isManuallyCompleted())
+                .manualInterventionMessage(assessment.getManualInterventionMessage())
                 .questions(candidateQuestions)
                 .responses(responsesMap)
                 .build();
@@ -1596,17 +1661,43 @@ public class AssessmentServiceImpl implements AssessmentService {
                 assessmentId, candidateUserId, AttemptStatus.IN_PROGRESS
         ).orElseThrow(() -> new BadRequestException("No active in-progress attempt found for candidate."));
 
-        if (Instant.now().isAfter(attempt.getEffectiveDeadline())) {
-            attempt.setStatus(AttemptStatus.EXPIRED);
-            attemptRepository.save(attempt);
-            assignmentRepository.findByAssessmentIdAndCandidateUserId(assessmentId, candidateUserId).ifPresent(as -> {
-                as.setStatus(CandidateParticipationStatus.EXPIRED);
-                assignmentRepository.save(as);
-            });
+        Instant now = Instant.now();
+        Assessment assessment = assessmentRepository.findById(assessmentId).orElse(null);
+        if (assessment != null && (assessment.getEffectiveStatus(now) == AssessmentStatus.COMPLETED || assessment.isManuallyCompleted())) {
+            expireAttempt(attempt, assessment, now);
+            throw new BadRequestException("Assessment has been completed. Further modifications or submissions are not accepted.");
+        }
+
+        if (now.isAfter(attempt.getEffectiveDeadline())) {
+            expireAttempt(attempt, assessment, now);
             throw new BadRequestException("Assessment attempt time has expired.");
         }
 
         return attempt;
+    }
+
+    private void expireAttempt(AssessmentAttempt attempt, Assessment assessment, Instant now) {
+        List<AssessmentQuestionResponse> responses = responseRepository.findAllByAttemptId(attempt.getId());
+        double totalScore = 0.0;
+        for (AssessmentQuestionResponse resp : responses) {
+            totalScore += resp.getAwardedPoints();
+        }
+        if (assessment == null) {
+            assessment = assessmentRepository.findById(attempt.getAssessmentId()).orElse(null);
+        }
+        boolean passed = assessment != null && (assessment.getPassingScore() == null || totalScore >= assessment.getPassingScore());
+
+        attempt.setStatus(AttemptStatus.EXPIRED);
+        attempt.setScore(totalScore);
+        attempt.setPassed(passed);
+        attempt.setUpdatedAt(now);
+        attemptRepository.save(attempt);
+
+        assignmentRepository.findByAssessmentIdAndCandidateUserId(attempt.getAssessmentId(), attempt.getCandidateUserId()).ifPresent(as -> {
+            as.setStatus(CandidateParticipationStatus.EXPIRED);
+            as.setUpdatedAt(now);
+            assignmentRepository.save(as);
+        });
     }
 
     private CandidateAssessmentSummaryResponse buildCandidateAssessmentSummary(
@@ -1670,6 +1761,9 @@ public class AssessmentServiceImpl implements AssessmentService {
                 .activeAttemptId(activeAttemptId)
                 .totalQuestions(assessment.getTotalQuestions())
                 .totalScore(assessment.getTotalScore())
+                .manuallyActivated(assessment.isManuallyActivated())
+                .manuallyCompleted(assessment.isManuallyCompleted())
+                .manualInterventionMessage(assessment.getManualInterventionMessage())
                 .build();
     }
 
@@ -1805,7 +1899,7 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     private double getDefaultPoints(BankQuestionType type, String questionId) {
         if (type == BankQuestionType.MCQ) {
-            return mcqQuestionRepository.findById(questionId).map(McqQuestion::getDefaultPoints).orElse(1.0);
+            return 1.0;
         } else {
             return codingProblemRepository.findById(questionId).map(cp -> {
                 return switch (cp.getDifficulty()) {

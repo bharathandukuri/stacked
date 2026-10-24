@@ -1,6 +1,7 @@
 package com.bharath.stacked.modules.execution.service.impl;
 
 import com.bharath.stacked.modules.execution.config.DockerProperties;
+import com.bharath.stacked.modules.execution.config.ExecutionProperties;
 import com.bharath.stacked.modules.execution.dto.DockerContainerConstraints;
 import com.bharath.stacked.modules.execution.dto.DockerContainerDetails;
 import com.bharath.stacked.modules.execution.dto.DockerImageDetails;
@@ -19,8 +20,8 @@ import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.StreamType;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -37,45 +38,122 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class DockerExecutionServiceImpl implements DockerExecutionService {
+
+    public static final long DEFAULT_OUTPUT_LIMIT_BYTES = 10485760L; // 10 MB
+    public static final long DEFAULT_HARD_OUTPUT_LIMIT_BYTES = 52428800L; // 50 MB
+    public static final int MAX_CONTAINER_LOG_BYTES = 1024 * 1024; // 1 MB
 
     private final DockerClient dockerClient;
     private final DockerProperties dockerProperties;
     private final ManagedContainerRegistry containerRegistry;
+    private final ExecutionProperties executionProperties;
 
-    private static class ExecOutputCallback
+    public DockerExecutionServiceImpl(
+            DockerClient dockerClient,
+            DockerProperties dockerProperties,
+            ManagedContainerRegistry containerRegistry
+    ) {
+        this(dockerClient, dockerProperties, containerRegistry, null);
+    }
+
+    @Autowired
+    public DockerExecutionServiceImpl(
+            DockerClient dockerClient,
+            DockerProperties dockerProperties,
+            ManagedContainerRegistry containerRegistry,
+            @Autowired(required = false) ExecutionProperties executionProperties
+    ) {
+        this.dockerClient = dockerClient;
+        this.dockerProperties = dockerProperties;
+        this.containerRegistry = containerRegistry;
+        this.executionProperties = executionProperties;
+    }
+
+    static class ExecOutputCallback
             extends ResultCallback.Adapter<Frame> {
 
+        public static final String TRUNCATION_SUFFIX = "\n[Output truncated: exceeded maximum limit of %d bytes]\n";
+
+        private final long maxOutputBytes;
         private final ByteArrayOutputStream stdout =
                 new ByteArrayOutputStream();
 
         private final ByteArrayOutputStream stderr =
                 new ByteArrayOutputStream();
 
+        private long totalBytesWritten = 0;
+        private volatile boolean truncated = false;
+
+        public ExecOutputCallback() {
+            this(DEFAULT_OUTPUT_LIMIT_BYTES);
+        }
+
+        public ExecOutputCallback(long maxOutputBytes) {
+            this.maxOutputBytes = maxOutputBytes;
+        }
+
         @Override
-        public void onNext(Frame frame) {
-            try {
-                if (frame.getStreamType() == StreamType.STDOUT) {
-                    stdout.write(frame.getPayload());
+        public synchronized void onNext(Frame frame) {
+            if (truncated || frame == null || frame.getPayload() == null) {
+                return;
+            }
 
-                } else if (frame.getStreamType() == StreamType.STDERR) {
-                    stderr.write(frame.getPayload());
+            byte[] payload = frame.getPayload();
+            if (payload.length == 0) {
+                return;
+            }
 
-                } else if (frame.getStreamType() == StreamType.RAW) {
-                    stdout.write(frame.getPayload());
+            StreamType streamType = frame.getStreamType();
+            ByteArrayOutputStream targetStream;
+            if (streamType == StreamType.STDERR) {
+                targetStream = stderr;
+            } else if (streamType == StreamType.STDOUT || streamType == StreamType.RAW) {
+                targetStream = stdout;
+            } else {
+                return;
+            }
+
+            long remainingCapacity = maxOutputBytes - totalBytesWritten;
+            if (payload.length <= remainingCapacity) {
+                try {
+                    targetStream.write(payload);
+                    totalBytesWritten += payload.length;
+                } catch (IOException e) {
+                    onError(e);
+                }
+            } else {
+                truncated = true;
+                int bytesToWrite = (int) Math.max(0, remainingCapacity);
+                if (bytesToWrite > 0) {
+                    targetStream.write(payload, 0, bytesToWrite);
+                    totalBytesWritten += bytesToWrite;
                 }
 
-            } catch (IOException e) {
-                onError(e);
+                byte[] notice = String.format(TRUNCATION_SUFFIX, maxOutputBytes).getBytes(StandardCharsets.UTF_8);
+                try {
+                    targetStream.write(notice);
+                } catch (IOException ignored) {}
+
+                try {
+                    close();
+                } catch (IOException ignored) {}
             }
         }
 
-        public String stdout() {
+        public synchronized boolean isTruncated() {
+            return truncated;
+        }
+
+        public synchronized long getTotalBytesWritten() {
+            return totalBytesWritten;
+        }
+
+        public synchronized String stdout() {
             return stdout.toString(StandardCharsets.UTF_8);
         }
 
-        public String stderr() {
+        public synchronized String stderr() {
             return stderr.toString(StandardCharsets.UTF_8);
         }
     }
@@ -412,9 +490,24 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                     .withStdErr(true)
                     .withTail(tailLines)
                     .exec(new ResultCallback.Adapter<Frame>() {
+                        private boolean truncated = false;
+
                         @Override
                         public void onNext(Frame frame) {
-                            if (frame != null && frame.getPayload() != null) {
+                            if (truncated || frame == null || frame.getPayload() == null) {
+                                return;
+                            }
+                            if (sb.length() + frame.getPayload().length > MAX_CONTAINER_LOG_BYTES) {
+                                truncated = true;
+                                int remaining = Math.max(0, MAX_CONTAINER_LOG_BYTES - sb.length());
+                                if (remaining > 0) {
+                                    sb.append(new String(frame.getPayload(), 0, remaining, StandardCharsets.UTF_8));
+                                }
+                                sb.append("\n[Container logs truncated: exceeded limit of 1MB]");
+                                try {
+                                    close();
+                                } catch (IOException ignored) {}
+                            } else {
                                 sb.append(new String(frame.getPayload(), StandardCharsets.UTF_8));
                             }
                         }
@@ -497,12 +590,26 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
         }
     }
 
+    private long resolveOutputLimit(Long requestedOutputLimitBytes) {
+        long defaultLimit = executionProperties != null && executionProperties.getDefaults() != null
+                ? executionProperties.getDefaults().getOutputLimitBytes()
+                : DEFAULT_OUTPUT_LIMIT_BYTES;
+        long hardLimit = executionProperties != null && executionProperties.getHardLimits() != null
+                ? executionProperties.getHardLimits().getMaxOutputLimitBytes()
+                : DEFAULT_HARD_OUTPUT_LIMIT_BYTES;
+
+        if (requestedOutputLimitBytes == null || requestedOutputLimitBytes <= 0) {
+            return defaultLimit;
+        }
+        return Math.min(requestedOutputLimitBytes, hardLimit);
+    }
+
     @Override
     public DockerExecutionResult execContainer(
             String containerId,
             List<String> command
     ) throws DockerExecutionException {
-        return execContainer(containerId, command, null);
+        return execContainer(containerId, command, null, null);
     }
 
     @Override
@@ -510,6 +617,16 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
             String containerId,
             List<String> command,
             Long timeLimitMs
+    ) throws DockerExecutionException {
+        return execContainer(containerId, command, timeLimitMs, null);
+    }
+
+    @Override
+    public DockerExecutionResult execContainer(
+            String containerId,
+            List<String> command,
+            Long timeLimitMs,
+            Long maxOutputBytes
     ) throws DockerExecutionException {
         requireManagedContainer(containerId);
 
@@ -527,7 +644,8 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                     .withAttachStderr(true)
                     .exec();
 
-            ExecOutputCallback callback = new ExecOutputCallback();
+            long effectiveOutputLimit = resolveOutputLimit(maxOutputBytes);
+            ExecOutputCallback callback = new ExecOutputCallback(effectiveOutputLimit);
 
             boolean completed;
             if (timeLimitMs != null && timeLimitMs > 0) {
@@ -552,6 +670,10 @@ public class DockerExecutionServiceImpl implements DockerExecutionService {
                         callback.stdout(),
                         callback.stderr() + (callback.stderr().isEmpty() ? "" : "\n") + "Command timed out after " + timeLimitMs + " ms."
                 );
+            }
+
+            if (callback.isTruncated()) {
+                log.warn("Command execution output truncated after reaching limit of {} bytes in container [{}]", effectiveOutputLimit, containerId);
             }
 
             Long exitCode = dockerClient

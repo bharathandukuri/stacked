@@ -66,14 +66,12 @@ class QuestionBankIntegrationTest extends AbstractIntegrationTest {
                 ),
                 List.of("opt_false"),
                 "Fields of records are declared private and final.",
-                2.0,
-                0.5,
                 false,
                 List.of()
         ), "admin-test");
         assertThat(mcq.id()).isNotNull();
 
-        // 3. Create a Question Bank referencing both questions
+        // 3. Create a Question Bank referencing both questions (setting points for MCQ in Question Bank module)
         CreateQuestionBankRequest createBankRequest = CreateQuestionBankRequest.builder()
                 .title("Junior Java Software Engineer Assessment Bank")
                 .description("Curated questions for screening Junior Java engineers")
@@ -91,14 +89,13 @@ class QuestionBankIntegrationTest extends AbstractIntegrationTest {
                                 .questionType(BankQuestionType.MCQ)
                                 .questionId(mcq.id())
                                 .order(2)
-                                .customPoints(null) // falls back to MCQ default points (2.0)
+                                .customPoints(2.0) // points specified in Question Bank module while selecting MCQ
                                 .build()
                 ))
                 .build();
 
         QuestionBankSummaryResponse summary = questionBankService.createQuestionBank(createBankRequest, "admin-test");
         assertThat(summary.getId()).isNotNull();
-        assertThat(summary.getSlug()).isEqualTo("junior-java-software-engineer-assessment-bank");
         assertThat(summary.getTotalQuestions()).isEqualTo(2);
         assertThat(summary.getCodingCount()).isEqualTo(1);
         assertThat(summary.getMcqCount()).isEqualTo(1);

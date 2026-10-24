@@ -5,11 +5,9 @@ import {
   Plus,
   Search,
   CheckCircle2,
-  Copy,
   RotateCcw,
   Layers,
   Loader2,
-  Check,
   MoreVertical,
   Pencil,
   Trash2,
@@ -22,6 +20,7 @@ import { AdminSidebar } from "@/components/admin/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -92,7 +91,6 @@ export function AdminMcqPage() {
   const [topicFilter, setTopicFilter] = useState<string>("ALL")
   const [page, setPage] = useState(0)
   const pageSize = 10
-  const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
   // Dialogs
   const [topicManagerOpen, setTopicManagerOpen] = useState(false)
@@ -123,9 +121,13 @@ export function AdminMcqPage() {
   }, [isAuthenticated, isInitialized, navigate])
 
   // Queries & Mutations
-  const { data: stats } = useMcqStats()
+  const statsQuery = useMcqStats()
+  const stats = statsQuery.data
   const { data: topicList = [] } = useMcqTopics()
   const deleteMutation = useDeleteMcqQuestion()
+  const publishMutation = usePublishMcq()
+  const unpublishMutation = useUnpublishMcq()
+  const [mutatingId, setMutatingId] = useState<string | null>(null)
 
   const { data: mcqPage, isLoading } = useMcqQuestions({
     page,
@@ -138,17 +140,6 @@ export function AdminMcqPage() {
   })
 
   // Handlers
-  const handleCopySlug = (slug: string) => {
-    navigator.clipboard.writeText(slug)
-    setCopiedSlug(slug)
-    toast.add({
-      title: "Slug Copied",
-      description: "Identifier copied to clipboard.",
-      type: "success",
-    })
-    setTimeout(() => setCopiedSlug(null), 2000)
-  }
-
   const handleOpenPreview = async (questionItem: McqQuestionItem) => {
     try {
       const detail = await mcqService.getQuestion(questionItem.id)
@@ -165,27 +156,25 @@ export function AdminMcqPage() {
 
   const handleDeleteConfirm = async () => {
     if (!questionToDelete) return
-    await deleteMutation.mutateAsync(questionToDelete.id)
-    setQuestionToDelete(null)
-  }
-
-  const publishMutation = usePublishMcq()
-  const unpublishMutation = useUnpublishMcq()
-  const [mutatingId, setMutatingId] = useState<string | null>(null)
-
-  const handlePublish = async (question: McqQuestionItem) => {
-    setMutatingId(question.id)
     try {
-      await publishMutation.mutateAsync(question.id)
-    } finally {
-      setMutatingId(null)
+      await deleteMutation.mutateAsync(questionToDelete.id)
+      setQuestionToDelete(null)
+    } catch {
+      // Error handled by mutation onError
     }
   }
 
-  const handleUnpublish = async (question: McqQuestionItem) => {
-    setMutatingId(question.id)
+  const handleToggleStatus = async (item: McqQuestionItem) => {
+    const isCurrentlyPublished = item.status === "PUBLISHED"
+    setMutatingId(item.id)
     try {
-      await unpublishMutation.mutateAsync(question.id)
+      if (isCurrentlyPublished) {
+        await unpublishMutation.mutateAsync(item.id)
+      } else {
+        await publishMutation.mutateAsync(item.id)
+      }
+    } catch {
+      // Error handled by mutation onError
     } finally {
       setMutatingId(null)
     }
@@ -423,10 +412,9 @@ export function AdminMcqPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[38%]">Question</TableHead>
-                  <TableHead className="w-[14%]">Type & Difficulty</TableHead>
-                  <TableHead className="w-[12%]">Options</TableHead>
-                  <TableHead className="w-[10%]">Points</TableHead>
+                  <TableHead className="w-[44%]">Question</TableHead>
+                  <TableHead className="w-[16%]">Type & Difficulty</TableHead>
+                  <TableHead className="w-[14%]">Options</TableHead>
                   <TableHead className="w-[12%]">Status</TableHead>
                   <TableHead className="w-[14%] text-right">Actions</TableHead>
                 </TableRow>
@@ -434,7 +422,7 @@ export function AdminMcqPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-48 text-center">
+                    <TableCell colSpan={5} className="h-48 text-center">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Loader2 className="size-6 animate-spin text-primary" />
                         <span className="text-xs text-muted-foreground">
@@ -445,7 +433,7 @@ export function AdminMcqPage() {
                   </TableRow>
                 ) : items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-48 text-center">
+                    <TableCell colSpan={5} className="h-48 text-center">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <FolderOpen className="size-8 stroke-1 text-muted-foreground/60" />
                         <span className="text-sm font-medium text-foreground">
@@ -471,7 +459,7 @@ export function AdminMcqPage() {
                         key={item.id}
                         className="group transition-colors hover:bg-muted/40"
                       >
-                        {/* Title, Snippet & Topics */}
+                        {/* Title & Topics */}
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Link
@@ -481,9 +469,6 @@ export function AdminMcqPage() {
                             >
                               {item.title}
                             </Link>
-                            <p className="text-xs text-muted-foreground line-clamp-1">
-                              {item.contentSnippet || "No description preview available."}
-                            </p>
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                               {item.topics?.map((topic) => (
                                 <Badge
@@ -494,19 +479,6 @@ export function AdminMcqPage() {
                                   {topic}
                                 </Badge>
                               ))}
-                              <button
-                                type="button"
-                                onClick={() => handleCopySlug(item.slug)}
-                                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/70 hover:text-foreground font-mono"
-                                title="Copy slug"
-                              >
-                                {copiedSlug === item.slug ? (
-                                  <Check className="size-2.5 text-emerald-500" />
-                                ) : (
-                                  <Copy className="size-2.5" />
-                                )}
-                                {item.slug}
-                              </button>
                             </div>
                           </div>
                         </TableCell>
@@ -542,34 +514,32 @@ export function AdminMcqPage() {
                           </div>
                         </TableCell>
 
-                        {/* Points */}
+                        {/* Status Toggle */}
                         <TableCell>
-                          <div className="flex flex-col text-xs font-mono">
-                            <span className="font-semibold text-foreground">
-                              +{item.defaultPoints}
-                            </span>
-                            {item.negativePoints > 0 && (
-                              <span className="text-destructive text-[11px]">
-                                -{item.negativePoints}
-                              </span>
-                            )}
+                          <div className="flex items-center gap-2.5">
+                            <Switch
+                              size="sm"
+                              checked={item.status === "PUBLISHED"}
+                              disabled={mutatingId === item.id}
+                              onCheckedChange={() => handleToggleStatus(item)}
+                              aria-label={`Toggle publication status for ${item.title}`}
+                            />
+                            <div className="flex items-center gap-1">
+                              {mutatingId === item.id ? (
+                                <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                              ) : (
+                                <span
+                                  className={`text-xs font-medium ${
+                                    item.status === "PUBLISHED"
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-muted-foreground"
+                                  }`}
+                                >
+                                  {item.status === "PUBLISHED" ? "Published" : "Draft"}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </TableCell>
-
-                        {/* Status */}
-                        <TableCell>
-                          <Badge
-                            variant={
-                              item.status === "PUBLISHED"
-                                ? "default"
-                                : item.status === "DRAFT"
-                                ? "secondary"
-                                : "outline"
-                            }
-                            className="text-[10px] uppercase font-bold"
-                          >
-                            {item.status}
-                          </Badge>
                         </TableCell>
 
                         {/* Action Menu */}
@@ -597,43 +567,34 @@ export function AdminMcqPage() {
                               </DropdownMenuItem>
 
                               <DropdownMenuItem
-                                onClick={() => handleCopySlug(item.slug)}
+                                onClick={() => handleToggleStatus(item)}
+                                disabled={mutatingId === item.id}
                                 className="gap-2 cursor-pointer"
                               >
-                                <Copy className="size-3.5" />
-                                <span>Copy Slug</span>
+                                <CheckCircle2 className="size-3.5" />
+                                <span>
+                                  {item.status === "PUBLISHED" ? "Unpublish" : "Publish"}
+                                </span>
                               </DropdownMenuItem>
-
-                              {item.status === "PUBLISHED" && (
-                                <DropdownMenuItem
-                                  onClick={() => handleUnpublish(item)}
-                                  disabled={mutatingId === item.id}
-                                  className="gap-2 cursor-pointer"
-                                >
-                                  <CheckCircle2 className="size-3.5" />
-                                  <span>Unpublish to Draft</span>
-                                </DropdownMenuItem>
-                              )}
-                              {item.status === "DRAFT" && (
-                                <DropdownMenuItem
-                                  onClick={() => handlePublish(item)}
-                                  disabled={mutatingId === item.id}
-                                  className="gap-2 cursor-pointer"
-                                >
-                                  <CheckCircle2 className="size-3.5" />
-                                  <span>Publish Question</span>
-                                </DropdownMenuItem>
-                              )}
 
                               <DropdownMenuSeparator />
 
                               <DropdownMenuItem
-                                onClick={() =>
+                                onClick={() => {
+                                  if (item.status === "PUBLISHED") {
+                                    toast.add({
+                                      title: "Cannot Edit Published Question",
+                                      description: "Only draft questions can be edited. Unpublish to DRAFT first.",
+                                      type: "warning",
+                                    })
+                                    return
+                                  }
                                   navigate({
                                     to: "/admin/mcq/studio/$questionId",
                                     params: { questionId: item.id },
                                   })
-                                }
+                                }}
+                                disabled={item.status === "PUBLISHED"}
                                 className="gap-2 cursor-pointer"
                               >
                                 <Pencil className="size-3.5" />

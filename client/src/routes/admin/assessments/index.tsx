@@ -17,6 +17,7 @@ import {
   Copy,
   Check,
   Share2,
+  Play,
 } from "lucide-react"
 
 import { AdminSidebar } from "@/components/admin/sidebar"
@@ -58,6 +59,7 @@ import { initializeAuthSession } from "@/hooks/use-auth"
 import {
   useAssessments,
   useDeleteAssessment,
+  useActivateAssessment,
   useCompleteAssessment,
 } from "@/hooks/use-assessments"
 import type { AssessmentStatus, AssessmentSummaryResponse } from "@/types/assessment"
@@ -94,6 +96,7 @@ export function AssessmentsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AssessmentSummaryResponse | null>(null)
   const [completeTarget, setCompleteTarget] = useState<AssessmentSummaryResponse | null>(null)
+  const [activateTarget, setActivateTarget] = useState<AssessmentSummaryResponse | null>(null)
 
   const handleSearchChange = (val: string) => {
     setSearchInput(val)
@@ -121,6 +124,7 @@ export function AssessmentsPage() {
 
   const deleteMutation = useDeleteAssessment()
   const completeMutation = useCompleteAssessment()
+  const activateMutation = useActivateAssessment()
 
   const assessments = data?.items ?? []
   const totalElements = data?.totalElements ?? 0
@@ -131,6 +135,14 @@ export function AssessmentsPage() {
     if (deleteTarget) {
       deleteMutation.mutate(deleteTarget.id, {
         onSuccess: () => setDeleteTarget(null),
+      })
+    }
+  }
+
+  const handleActivate = () => {
+    if (activateTarget) {
+      activateMutation.mutate(activateTarget.id, {
+        onSuccess: () => setActivateTarget(null),
       })
     }
   }
@@ -448,6 +460,16 @@ export function AssessmentsPage() {
 
                             <DropdownMenuSeparator />
 
+                            {item.status === "NOT_STARTED" && (
+                              <DropdownMenuItem
+                                onClick={() => setActivateTarget(item)}
+                                className="gap-2 cursor-pointer text-xs text-emerald-600 focus:text-emerald-600"
+                              >
+                                <Play className="size-3.5" />
+                                <span>Activate Assessment</span>
+                              </DropdownMenuItem>
+                            )}
+
                             {item.status !== "COMPLETED" && (
                               <DropdownMenuItem
                                 onClick={() => setCompleteTarget(item)}
@@ -562,6 +584,28 @@ export function AssessmentsPage() {
             >
               {completeMutation.isPending ? <Loader2 className="size-3.5 animate-spin mr-1" /> : null}
               Complete Assessment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Activate Confirmation Alert */}
+      <AlertDialog open={Boolean(activateTarget)} onOpenChange={(open) => !open && setActivateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-semibold">Activate Assessment?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              This will manually activate &ldquo;{activateTarget?.title}&rdquo; immediately, overriding any scheduled start time. The candidate roster will be frozen to prevent new enrollments, and candidates will be able to take the assessment.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleActivate}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+            >
+              {activateMutation.isPending ? <Loader2 className="size-3.5 animate-spin mr-1" /> : null}
+              Activate Assessment
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

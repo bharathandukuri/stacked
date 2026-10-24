@@ -71,7 +71,6 @@ class AdminMcqControllerTest {
         McqQuestionSummaryResponse summary = new McqQuestionSummaryResponse(
                 "q-1",
                 "Java Concurrency",
-                "java-concurrency",
                 "Snippet",
                 McqType.SINGLE_CHOICE,
                 McqDifficulty.MEDIUM,
@@ -80,8 +79,6 @@ class AdminMcqControllerTest {
                 List.of(),
                 3,
                 1,
-                2.0,
-                0.0,
                 Instant.now(),
                 Instant.now());
         PageResponse<McqQuestionSummaryResponse> page = PageResponse.of(List.of(summary), 0, 20, 1);
@@ -104,7 +101,6 @@ class AdminMcqControllerTest {
         McqQuestionDetailResponse detail = new McqQuestionDetailResponse(
                 "q-1",
                 "Java Concurrency",
-                "java-concurrency",
                 "Full question content",
                 McqType.SINGLE_CHOICE,
                 McqDifficulty.MEDIUM,
@@ -114,15 +110,13 @@ class AdminMcqControllerTest {
                 List.of(new McqOptionResponse("opt-1", "Text", null)),
                 List.of("opt-1"),
                 "Explanation",
-                2.0,
-                0.0,
                 true,
                 List.of(),
                 "admin-1",
                 Instant.now(),
                 Instant.now());
 
-        when(questionService.getQuestionByIdOrSlug("q-1")).thenReturn(detail);
+        when(questionService.getQuestionById("q-1")).thenReturn(detail);
 
         mockMvc.perform(get("/api/admin/mcq/questions/q-1"))
                 .andExpect(status().isOk())
@@ -147,15 +141,12 @@ class AdminMcqControllerTest {
                         new McqOptionRequest("opt_2", "Option B", null)),
                 List.of("opt_1"),
                 "Explanation",
-                1.0,
-                0.0,
                 true,
                 null);
 
         McqQuestionDetailResponse created = new McqQuestionDetailResponse(
                 "created-id",
                 "New Question",
-                "new-question",
                 "Content stem",
                 McqType.SINGLE_CHOICE,
                 McqDifficulty.EASY,
@@ -165,8 +156,6 @@ class AdminMcqControllerTest {
                 List.of(new McqOptionResponse("opt_1", "Option A", null)),
                 List.of("opt_1"),
                 "Explanation",
-                1.0,
-                0.0,
                 true,
                 List.of(),
                 null,
@@ -241,13 +230,13 @@ class AdminMcqControllerTest {
     }
 
     @Test
-    @DisplayName("PATCH /api/admin/mcq/questions/{idOrSlug}/status updates status and returns 200")
+    @DisplayName("PATCH /api/admin/mcq/questions/{id}/status updates status and returns 200")
     void updateQuestionStatus_Success() throws Exception {
         UpdateMcqStatusRequest request = new UpdateMcqStatusRequest(McqStatus.PUBLISHED);
         McqQuestionDetailResponse detail = new McqQuestionDetailResponse(
-                "q-1", "Java Concurrency", "java-concurrency", "Content",
+                "q-1", "Java Concurrency", "Content",
                 McqType.SINGLE_CHOICE, McqDifficulty.MEDIUM, McqStatus.PUBLISHED,
-                List.of("Java"), List.of(), List.of(), List.of(), "Exp", 1.0, 0.0, true, List.of(),
+                List.of("Java"), List.of(), List.of(), List.of(), "Exp", true, List.of(),
                 "admin-1", Instant.now(), Instant.now()
         );
         when(questionService.updateStatus("q-1", McqStatus.PUBLISHED)).thenReturn(detail);
@@ -263,12 +252,12 @@ class AdminMcqControllerTest {
     }
 
     @Test
-    @DisplayName("PATCH /api/admin/mcq/questions/{idOrSlug}/publish publishes question and returns 200")
+    @DisplayName("PATCH /api/admin/mcq/questions/{id}/publish publishes question and returns 200")
     void publishQuestion_Success() throws Exception {
         McqQuestionDetailResponse detail = new McqQuestionDetailResponse(
-                "q-1", "Java Concurrency", "java-concurrency", "Content",
+                "q-1", "Java Concurrency", "Content",
                 McqType.SINGLE_CHOICE, McqDifficulty.MEDIUM, McqStatus.PUBLISHED,
-                List.of("Java"), List.of(), List.of(), List.of(), "Exp", 1.0, 0.0, true, List.of(),
+                List.of("Java"), List.of(), List.of(), List.of(), "Exp", true, List.of(),
                 "admin-1", Instant.now(), Instant.now()
         );
         when(questionService.publish("q-1")).thenReturn(detail);
@@ -282,12 +271,12 @@ class AdminMcqControllerTest {
     }
 
     @Test
-    @DisplayName("PATCH /api/admin/mcq/questions/{idOrSlug}/unpublish unpublishes question and returns 200")
+    @DisplayName("PATCH /api/admin/mcq/questions/{id}/unpublish unpublishes question and returns 200")
     void unpublishQuestion_Success() throws Exception {
         McqQuestionDetailResponse detail = new McqQuestionDetailResponse(
-                "q-1", "Java Concurrency", "java-concurrency", "Content",
+                "q-1", "Java Concurrency", "Content",
                 McqType.SINGLE_CHOICE, McqDifficulty.MEDIUM, McqStatus.DRAFT,
-                List.of("Java"), List.of(), List.of(), List.of(), "Exp", 1.0, 0.0, true, List.of(),
+                List.of("Java"), List.of(), List.of(), List.of(), "Exp", true, List.of(),
                 "admin-1", Instant.now(), Instant.now()
         );
         when(questionService.unpublish("q-1")).thenReturn(detail);
@@ -298,5 +287,18 @@ class AdminMcqControllerTest {
                 .andExpect(jsonPath("$.data.status").value("DRAFT"));
 
         verify(questionService).unpublish("q-1");
+    }
+
+    @Test
+    @DisplayName("GET /api/admin/mcq/questions/{id}/in-use returns whether question is in use")
+    void isInUse_Success() throws Exception {
+        when(questionService.isInUse("q-1")).thenReturn(true);
+
+        mockMvc.perform(get("/api/admin/mcq/questions/q-1/in-use"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.inUse").value(true));
+
+        verify(questionService).isInUse("q-1");
     }
 }

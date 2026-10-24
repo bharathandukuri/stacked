@@ -43,6 +43,10 @@ public interface DockerExecutionService {
 
     DockerExecutionResult execContainer(String containerId, List<String> command, Long timeLimitMs) throws DockerExecutionException;
 
+    default DockerExecutionResult execContainer(String containerId, List<String> command, Long timeLimitMs, Long maxOutputBytes) throws DockerExecutionException {
+        return execContainer(containerId, command, timeLimitMs);
+    }
+
     String readFile(String containerId, String path) throws DockerExecutionException;
 
     void writeFile(String containerId, String path, String content) throws DockerExecutionException;

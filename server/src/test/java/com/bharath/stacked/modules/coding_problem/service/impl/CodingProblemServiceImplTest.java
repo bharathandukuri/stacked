@@ -613,6 +613,7 @@ class CodingProblemServiceImplTest {
                 .build();
 
         when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+        when(questionBankRepository.existsByItemsQuestionId("prob-1")).thenReturn(true);
         when(questionBankRepository.findAllByItemsQuestionId("prob-1")).thenReturn(List.of(
                 QuestionBank.builder().id("bank-1").title("Algorithms 101").build()
         ));
@@ -1306,5 +1307,57 @@ class CodingProblemServiceImplTest {
 
         assertThatThrownBy(() -> codingProblemService.delete("prob-404"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("updateStatus throws ConflictException when moving published problem to unpublished if in use")
+    void testUpdateStatus_ThrowsConflictException_WhenInUse() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-in-use")
+                .slug("two-sum")
+                .title("Two Sum")
+                .status(CodingProblemStatus.PUBLISHED)
+                .build();
+
+        when(codingProblemRepository.findById("prob-in-use")).thenReturn(Optional.of(problem));
+        when(questionBankRepository.existsByItemsQuestionId("prob-in-use")).thenReturn(true);
+        when(questionBankRepository.findAllByItemsQuestionId("prob-in-use")).thenReturn(List.of(
+                QuestionBank.builder().id("qb-1").title("Top 50 Algorithms").build()
+        ));
+
+        assertThatThrownBy(() -> codingProblemService.updateStatus("prob-in-use", CodingProblemStatus.UNPUBLISHED))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot move coding problem 'Two Sum' back to draft/unpublished because it is currently in use");
+    }
+
+    @Test
+    @DisplayName("update throws ConflictException when editing published problem")
+    void testUpdate_ThrowsConflictException_WhenPublished() {
+        CodingProblem problem = CodingProblem.builder()
+                .id("prob-published")
+                .slug("two-sum")
+                .title("Two Sum")
+                .status(CodingProblemStatus.PUBLISHED)
+                .build();
+
+        when(codingProblemRepository.findById("prob-published")).thenReturn(Optional.of(problem));
+
+        com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest updateReq =
+                new com.bharath.stacked.modules.coding_problem.dto.request.UpdateCodingProblemRequest();
+        updateReq.setTitle("New Two Sum");
+
+        assertThatThrownBy(() -> codingProblemService.update("prob-published", updateReq))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot edit coding problem 'Two Sum' because it is currently PUBLISHED. Unpublish to DRAFT first.");
+    }
+
+    @Test
+    @DisplayName("isInUse returns true when problem is referenced in question bank")
+    void testIsInUse_ReturnsTrue_WhenInQuestionBank() {
+        CodingProblem problem = CodingProblem.builder().id("prob-1").slug("two-sum").build();
+        when(codingProblemRepository.findById("prob-1")).thenReturn(Optional.of(problem));
+        when(questionBankRepository.existsByItemsQuestionId("prob-1")).thenReturn(true);
+
+        assertThat(codingProblemService.isInUse("prob-1")).isTrue();
     }
 }

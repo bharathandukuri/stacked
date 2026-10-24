@@ -1,5 +1,6 @@
 package com.bharath.stacked.modules.assessment.service.impl;
 
+import com.bharath.stacked.modules.assessment.config.AssessmentProperties;
 import com.bharath.stacked.modules.assessment.enums.AssessmentAuditEventSource;
 import com.bharath.stacked.modules.assessment.enums.AssessmentAuditEventType;
 import com.bharath.stacked.modules.assessment.enums.ConnectionEventType;
@@ -23,11 +24,11 @@ import java.util.Map;
 public class AssessmentConnectionServiceImpl implements AssessmentConnectionService {
 
     private static final String REDIS_KEY_PREFIX = "assessment:active_conn:";
-    private static final Duration HEARTBEAT_TTL = Duration.ofSeconds(45);
 
     private final StringRedisTemplate stringRedisTemplate;
     private final AssessmentConnectionEventRepository connectionEventRepository;
     private final AssessmentAuditEventRepository auditEventRepository;
+    private final AssessmentProperties assessmentProperties;
 
     private String buildRedisKey(String assessmentId, String candidateUserId) {
         return REDIS_KEY_PREFIX + assessmentId + ":" + candidateUserId;
@@ -44,7 +45,7 @@ public class AssessmentConnectionServiceImpl implements AssessmentConnectionServ
 
         String key = buildRedisKey(assessmentId, candidateUserId);
         String previousConnectionId = stringRedisTemplate.opsForValue().getAndSet(key, connectionId);
-        stringRedisTemplate.expire(key, HEARTBEAT_TTL);
+        stringRedisTemplate.expire(key, assessmentProperties.heartbeatTtl());
 
         boolean previousInvalidated = false;
         if (previousConnectionId != null && !previousConnectionId.equals(connectionId)) {
@@ -122,7 +123,7 @@ public class AssessmentConnectionServiceImpl implements AssessmentConnectionServ
         String currentConnId = stringRedisTemplate.opsForValue().get(key);
 
         if (connectionId != null && connectionId.equals(currentConnId)) {
-            stringRedisTemplate.expire(key, HEARTBEAT_TTL);
+            stringRedisTemplate.expire(key, assessmentProperties.heartbeatTtl());
             return true;
         }
 

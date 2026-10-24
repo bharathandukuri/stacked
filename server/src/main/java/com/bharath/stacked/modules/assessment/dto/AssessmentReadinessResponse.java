@@ -45,6 +45,9 @@ public class AssessmentReadinessResponse {
     private double totalScore;
 
     private boolean backendReady;
+    private boolean manuallyActivated;
+    private boolean manuallyCompleted;
+    private String manualInterventionMessage;
     private Instant serverTimestamp;
 }
 

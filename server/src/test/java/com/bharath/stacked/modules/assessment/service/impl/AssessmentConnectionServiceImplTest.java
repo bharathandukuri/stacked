@@ -1,5 +1,6 @@
 package com.bharath.stacked.modules.assessment.service.impl;
 
+import com.bharath.stacked.modules.assessment.config.AssessmentProperties;
 import com.bharath.stacked.modules.assessment.enums.ConnectionEventType;
 import com.bharath.stacked.modules.assessment.model.AssessmentConnectionEvent;
 import com.bharath.stacked.modules.assessment.repository.AssessmentAuditEventRepository;
@@ -33,12 +34,15 @@ class AssessmentConnectionServiceImplTest {
     @Mock
     private AssessmentAuditEventRepository auditEventRepository;
 
-    @InjectMocks
+    private AssessmentProperties assessmentProperties = new AssessmentProperties(Duration.ofSeconds(45), 60000L, 30);
+
     private AssessmentConnectionServiceImpl connectionService;
 
     @BeforeEach
     void setUp() {
         lenient().when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        connectionService = new AssessmentConnectionServiceImpl(
+                stringRedisTemplate, connectionEventRepository, auditEventRepository, assessmentProperties);
     }
 
     @Test

@@ -31,9 +31,6 @@ public class McqQuestion {
 
     private String title;
 
-    @Indexed(unique = true)
-    private String slug;
-
     private String content;
 
     @Builder.Default
@@ -58,12 +55,6 @@ public class McqQuestion {
     private List<String> correctOptionIds = new ArrayList<>();
 
     private String explanation;
-
-    @Builder.Default
-    private double defaultPoints = 1.0;
-
-    @Builder.Default
-    private double negativePoints = 0.0;
 
     @Builder.Default
     private boolean shuffleOptions = true;

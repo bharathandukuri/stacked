@@ -13,10 +13,6 @@ import java.util.Optional;
 @Repository
 public interface McqQuestionRepository extends MongoRepository<McqQuestion, String> {
 
-    Optional<McqQuestion> findBySlug(String slug);
-
-    boolean existsBySlug(String slug);
-
     long countByStatus(McqStatus status);
 
     long countByType(McqType type);

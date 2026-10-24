@@ -17,7 +17,6 @@ export interface McqOptionPayload {
 export interface McqQuestionItem {
   id: string
   title: string
-  slug: string
   contentSnippet: string
   type: McqType
   difficulty: McqDifficulty
@@ -26,8 +25,6 @@ export interface McqQuestionItem {
   tags: string[]
   optionsCount: number
   correctOptionsCount: number
-  defaultPoints: number
-  negativePoints: number
   createdAt?: string
   updatedAt?: string
 }
@@ -35,7 +32,6 @@ export interface McqQuestionItem {
 export interface McqQuestionDetail {
   id: string
   title: string
-  slug: string
   content: string
   type: McqType
   difficulty: McqDifficulty
@@ -45,8 +41,6 @@ export interface McqQuestionDetail {
   options: McqOption[]
   correctOptionIds: string[]
   explanation?: string | null
-  defaultPoints: number
-  negativePoints: number
   shuffleOptions: boolean
   imageFileIds: string[]
   authorId?: string | null
@@ -65,8 +59,6 @@ export interface CreateMcqPayload {
   options: McqOptionPayload[]
   correctOptionIds: string[]
   explanation?: string | null
-  defaultPoints?: number
-  negativePoints?: number
   shuffleOptions?: boolean
   imageFileIds?: string[]
 }
@@ -82,8 +74,6 @@ export interface UpdateMcqPayload {
   options: McqOptionPayload[]
   correctOptionIds: string[]
   explanation?: string | null
-  defaultPoints?: number
-  negativePoints?: number
   shuffleOptions?: boolean
   imageFileIds?: string[]
 }

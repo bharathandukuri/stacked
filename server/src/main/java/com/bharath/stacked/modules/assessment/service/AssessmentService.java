@@ -27,6 +27,8 @@ public interface AssessmentService {
 
     void deleteAssessment(String idOrSlug);
 
+    AssessmentDetailResponse activateAssessment(String idOrSlug);
+
     AssessmentDetailResponse completeAssessment(String idOrSlug);
 
     BulkAssignCandidatesResponse bulkAssignCandidates(String idOrSlug, BulkAssignCandidatesRequest request);

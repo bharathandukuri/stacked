@@ -148,6 +148,7 @@ class SecurityModelsAndDtoTest {
                 null,
                 null,
                 null,
+                null,
                 appProperties
         );
 

@@ -56,15 +56,12 @@ class McqIntegrationTest extends AbstractIntegrationTest {
                 ),
                 List.of("opt_2"),
                 "Virtual threads are user-mode threads scheduled by the JVM onto carrier platform threads.",
-                2.0,
-                0.0,
                 true,
                 null
         );
 
         McqQuestionDetailResponse createdQuestion = questionService.createQuestion(createReq, "admin-test");
         assertThat(createdQuestion.id()).isNotNull();
-        assertThat(createdQuestion.slug()).contains("java-virtual-threads-lifecycle");
         assertThat(createdQuestion.correctOptionIds()).containsExactly("opt_2");
 
         // Verify topic question count incremented to 1
@@ -89,12 +86,12 @@ class McqIntegrationTest extends AbstractIntegrationTest {
         String newTopicName = "JVM Performance";
         McqTopicResponse newTopic = topicService.createTopic(new CreateMcqTopicRequest(newTopicName, "Tuning"));
 
-        UpdateMcqRequest updateReq = new UpdateMcqRequest(
+        UpdateMcqRequest updateReqDraft = new UpdateMcqRequest(
                 "Java Virtual Threads Lifecycle Updated",
                 "How are Java 21+ Virtual Threads scheduled in modern JVMs?",
                 McqType.SINGLE_CHOICE,
                 McqDifficulty.HARD,
-                McqStatus.PUBLISHED,
+                McqStatus.DRAFT,
                 List.of(newTopicName), // Changed topic from topicName to newTopicName
                 List.of("Java21"),
                 List.of(
@@ -103,13 +100,19 @@ class McqIntegrationTest extends AbstractIntegrationTest {
                 ),
                 List.of("opt_2"),
                 "Explanation updated",
-                3.0,
-                0.5,
                 false,
                 null
         );
 
-        McqQuestionDetailResponse updatedQuestion = questionService.updateQuestion(createdQuestion.id(), updateReq);
+        // Attempting to update a PUBLISHED question must be rejected
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                questionService.updateQuestion(createdQuestion.id(), updateReqDraft)
+        ).isInstanceOf(com.bharath.stacked.exception.ConflictException.class);
+
+        // Unpublish to DRAFT first (allowed since question is not in use)
+        questionService.updateStatus(createdQuestion.id(), McqStatus.DRAFT);
+
+        McqQuestionDetailResponse updatedQuestion = questionService.updateQuestion(createdQuestion.id(), updateReqDraft);
         assertThat(updatedQuestion.difficulty()).isEqualTo(McqDifficulty.HARD);
         assertThat(updatedQuestion.topics()).containsExactly(newTopicName);
 

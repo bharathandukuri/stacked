@@ -42,6 +42,10 @@ public class ExecutionProperties {
     @NotNull
     private Cleanup cleanup = new Cleanup();
 
+    @Valid
+    @NotNull
+    private Queue queue = new Queue();
+
     @NotNull
     private Map<String, @Valid LanguageLimits> languages = new HashMap<>();
 
@@ -198,6 +202,29 @@ public class ExecutionProperties {
 
         @NotBlank
         private String cron = "0 */5 * * * *";
+    }
+
+    @Getter
+    @Setter
+    public static class Queue {
+        private boolean enabled = true;
+
+        @Positive
+        private int maxConcurrentWorkers = 4;
+
+        @Positive
+        private int maxQueueCapacity = 50;
+
+        @Positive
+        private long queueWaitTimeoutMs = 15000L;
+
+        @Positive
+        private int maxConcurrentPerUser = 2;
+
+        private boolean distributedRedisCheck = true;
+
+        @Positive
+        private int clusterMaxConcurrent = 16;
     }
 }
 

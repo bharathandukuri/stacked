@@ -5,8 +5,10 @@ import com.bharath.stacked.modules.assessment.enums.AttemptStatus;
 import com.bharath.stacked.modules.assessment.enums.CandidateParticipationStatus;
 import com.bharath.stacked.modules.assessment.model.Assessment;
 import com.bharath.stacked.modules.assessment.model.AssessmentAttempt;
+import com.bharath.stacked.modules.assessment.model.AssessmentQuestionResponse;
 import com.bharath.stacked.modules.assessment.repository.AssessmentAssignmentRepository;
 import com.bharath.stacked.modules.assessment.repository.AssessmentAttemptRepository;
+import com.bharath.stacked.modules.assessment.repository.AssessmentQuestionResponseRepository;
 import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +27,9 @@ public class AssessmentExpirationScheduler {
     private final AssessmentAttemptRepository attemptRepository;
     private final AssessmentAssignmentRepository assignmentRepository;
     private final AssessmentRepository assessmentRepository;
+    private final AssessmentQuestionResponseRepository responseRepository;
 
-    @Scheduled(fixedDelay = 60000) // Runs every minute
+    @Scheduled(fixedDelayString = "${app.assessment.sweep-fixed-delay-ms:60000}")
     @Transactional
     public void sweepExpiredAttempts() {
         Instant now = Instant.now();
@@ -40,7 +43,18 @@ public class AssessmentExpirationScheduler {
 
         log.info("Sweeping {} expired assessment attempt(s)", expired.size());
         for (AssessmentAttempt attempt : expired) {
+            List<AssessmentQuestionResponse> responses = responseRepository.findAllByAttemptId(attempt.getId());
+            double totalScore = 0.0;
+            for (AssessmentQuestionResponse resp : responses) {
+                totalScore += resp.getAwardedPoints();
+            }
+
+            Assessment assessment = assessmentRepository.findById(attempt.getAssessmentId()).orElse(null);
+            boolean passed = assessment != null && (assessment.getPassingScore() == null || totalScore >= assessment.getPassingScore());
+
             attempt.setStatus(AttemptStatus.EXPIRED);
+            attempt.setScore(totalScore);
+            attempt.setPassed(passed);
             attempt.setUpdatedAt(now);
             attemptRepository.save(attempt);
 
@@ -51,11 +65,12 @@ public class AssessmentExpirationScheduler {
                     assignmentRepository.save(assignment);
                 }
             });
-            log.info("Marked attempt [{}] as EXPIRED (deadline was {})", attempt.getId(), attempt.getEffectiveDeadline());
+            log.info("Marked attempt [{}] as EXPIRED (deadline was {}, calculated score: {})",
+                    attempt.getId(), attempt.getEffectiveDeadline(), totalScore);
         }
     }
 
-    @Scheduled(fixedDelay = 60000) // Runs every minute
+    @Scheduled(fixedDelayString = "${app.assessment.sweep-fixed-delay-ms:60000}")
     public void syncAssessmentStatusProjections() {
         Instant now = Instant.now();
         List<Assessment> assessments = assessmentRepository.findAll();

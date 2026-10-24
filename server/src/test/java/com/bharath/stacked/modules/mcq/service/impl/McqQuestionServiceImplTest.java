@@ -9,6 +9,7 @@ import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import com.bharath.stacked.modules.file.service.FileService;
 import com.bharath.stacked.modules.question_bank.model.QuestionBank;
 import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
+import com.bharath.stacked.modules.assessment.repository.AssessmentQuestionResponseRepository;
 import com.bharath.stacked.modules.mcq.dto.request.CreateMcqRequest;
 import com.bharath.stacked.modules.mcq.dto.request.McqFilterRequest;
 import com.bharath.stacked.modules.mcq.dto.request.McqOptionRequest;
@@ -73,6 +74,9 @@ class McqQuestionServiceImplTest {
     @Mock
     private AssessmentRepository assessmentRepository;
 
+    @Mock
+    private AssessmentQuestionResponseRepository assessmentQuestionResponseRepository;
+
     @InjectMocks
     private McqQuestionServiceImpl questionService;
 
@@ -83,11 +87,10 @@ class McqQuestionServiceImplTest {
         sampleQuestion = McqQuestion.builder()
                 .id("mcq-101")
                 .title("Java Volatile Visibility")
-                .slug("java-volatile-visibility")
                 .content("What is the effect of volatile keyword in Java?")
                 .type(McqType.SINGLE_CHOICE)
                 .difficulty(McqDifficulty.MEDIUM)
-                .status(McqStatus.PUBLISHED)
+                .status(McqStatus.DRAFT)
                 .topics(List.of("Java", "Concurrency"))
                 .tags(List.of("CoreJava"))
                 .options(List.of(
@@ -96,8 +99,6 @@ class McqQuestionServiceImplTest {
                         new McqOption("opt_3", "Prevents object garbage collection", "Incorrect")))
                 .correctOptionIds(List.of("opt_2"))
                 .explanation("Volatile creates a happens-before memory barrier ensuring visibility.")
-                .defaultPoints(2.0)
-                .negativePoints(0.5)
                 .shuffleOptions(true)
                 .authorId("admin-1")
                 .createdAt(Instant.now())
@@ -121,12 +122,9 @@ class McqQuestionServiceImplTest {
                         new McqOptionRequest("opt_2", "Ensures visibility across threads", "Correct")),
                 List.of("opt_2"),
                 "Volatile creates a happens-before memory barrier.",
-                2.0,
-                0.5,
                 true,
                 null);
 
-        when(questionRepository.findBySlug(any())).thenReturn(Optional.empty());
         when(questionRepository.save(any(McqQuestion.class))).thenAnswer(invocation -> {
             McqQuestion q = invocation.getArgument(0);
             q.setId("mcq-generated-id");
@@ -159,8 +157,6 @@ class McqQuestionServiceImplTest {
                 List.of(new McqOptionRequest("opt_1", "Only one option", null)),
                 List.of("opt_1"),
                 null,
-                1.0,
-                0.0,
                 true,
                 null);
 
@@ -185,8 +181,6 @@ class McqQuestionServiceImplTest {
                         new McqOptionRequest("opt_2", "Option 2", null)),
                 List.of("opt_1", "opt_2"),
                 null,
-                1.0,
-                0.0,
                 true,
                 null);
 
@@ -211,8 +205,6 @@ class McqQuestionServiceImplTest {
                         new McqOptionRequest("opt_2", "Option 2", null)),
                 List.of("opt_non_existent"),
                 null,
-                1.0,
-                0.0,
                 true,
                 null);
 
@@ -238,12 +230,9 @@ class McqQuestionServiceImplTest {
                         new McqOptionRequest("opt_3", "Set.of()", "Creates unmodifiable set")),
                 List.of("opt_1", "opt_3"),
                 "Factory methods List.of() and Set.of() return unmodifiable instances.",
-                2.0,
-                0.0,
                 true,
                 null);
 
-        when(questionRepository.findBySlug(any())).thenReturn(Optional.empty());
         when(questionRepository.save(any(McqQuestion.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         McqQuestionDetailResponse response = questionService.createQuestion(request, "admin-1");
@@ -256,6 +245,7 @@ class McqQuestionServiceImplTest {
     @Test
     @DisplayName("getCandidateQuestionById strips answers and explanations")
     void getCandidateQuestionById_StripsSensitiveData() {
+        sampleQuestion.setStatus(McqStatus.PUBLISHED);
         when(questionRepository.findById("mcq-101")).thenReturn(Optional.of(sampleQuestion));
 
         CandidateMcqResponse candidateView = questionService.getCandidateQuestionById("mcq-101", false);
@@ -269,8 +259,9 @@ class McqQuestionServiceImplTest {
     }
 
     @Test
-    @DisplayName("updateQuestion updates details and adjusts topics")
+    @DisplayName("updateQuestion updates details and adjusts topics when question is in DRAFT")
     void updateQuestion_Success() {
+        sampleQuestion.setStatus(McqStatus.DRAFT);
         when(questionRepository.findById("mcq-101")).thenReturn(Optional.of(sampleQuestion));
         when(questionRepository.save(any(McqQuestion.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -287,8 +278,6 @@ class McqQuestionServiceImplTest {
                         new McqOptionRequest("opt_2", "Updated Opt 2", null)),
                 List.of("opt_2"),
                 "Updated explanation",
-                3.0,
-                1.0,
                 false,
                 null);
 
@@ -297,10 +286,50 @@ class McqQuestionServiceImplTest {
         assertThat(updated).isNotNull();
         assertThat(updated.title()).isEqualTo("Java Volatile Visibility Updated");
         assertThat(updated.difficulty()).isEqualTo(McqDifficulty.HARD);
-        assertThat(updated.defaultPoints()).isEqualTo(3.0);
 
         verify(topicService).decrementQuestionCounts(eq(List.of("Concurrency")));
         verify(topicService).incrementQuestionCounts(eq(List.of("JVM")));
+    }
+
+    @Test
+    @DisplayName("updateQuestion throws ConflictException when question is PUBLISHED")
+    void updateQuestion_WhenPublished_ThrowsConflictException() {
+        sampleQuestion.setStatus(McqStatus.PUBLISHED);
+        when(questionRepository.findById("mcq-101")).thenReturn(Optional.of(sampleQuestion));
+
+        UpdateMcqRequest updateRequest = new UpdateMcqRequest(
+                "Updated Title",
+                "Content",
+                McqType.SINGLE_CHOICE,
+                McqDifficulty.EASY,
+                McqStatus.DRAFT,
+                List.of("Java"),
+                List.of(),
+                List.of(new McqOptionRequest("opt_1", "A", null), new McqOptionRequest("opt_2", "B", null)),
+                List.of("opt_1"),
+                null,
+                true,
+                null);
+
+        assertThatThrownBy(() -> questionService.updateQuestion("mcq-101", updateRequest))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot edit MCQ question")
+                .hasMessageContaining("Unpublish to DRAFT first");
+    }
+
+    @Test
+    @DisplayName("unpublish throws ConflictException when question is in use")
+    void unpublish_WhenInUse_ThrowsConflictException() {
+        sampleQuestion.setStatus(McqStatus.PUBLISHED);
+        when(questionRepository.findById("mcq-101")).thenReturn(Optional.of(sampleQuestion));
+        when(questionBankRepository.existsByItemsQuestionId("mcq-101")).thenReturn(true);
+        when(questionBankRepository.findAllByItemsQuestionId("mcq-101")).thenReturn(List.of(
+                QuestionBank.builder().id("bank-1").title("Java Bank").build()
+        ));
+
+        assertThatThrownBy(() -> questionService.unpublish("mcq-101"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot move MCQ question 'Java Volatile Visibility' back to draft because it is currently in use");
     }
 
     @Test
@@ -318,6 +347,7 @@ class McqQuestionServiceImplTest {
     @DisplayName("deleteQuestion should throw ConflictException when MCQ question is in use")
     void deleteQuestion_ThrowsConflictException_WhenInUse() {
         when(questionRepository.findById("mcq-101")).thenReturn(Optional.of(sampleQuestion));
+        when(questionBankRepository.existsByItemsQuestionId("mcq-101")).thenReturn(true);
         when(questionBankRepository.findAllByItemsQuestionId("mcq-101")).thenReturn(List.of(
                 QuestionBank.builder().id("bank-1").title("Java Core Bank").build()
         ));
@@ -384,7 +414,6 @@ class McqQuestionServiceImplTest {
         McqQuestion draft = McqQuestion.builder()
                 .id("mcq-valid")
                 .title("Valid MCQ")
-                .slug("valid-mcq")
                 .status(McqStatus.DRAFT)
                 .content("Valid content")
                 .options(sampleQuestion.getOptions())

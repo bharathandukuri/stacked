@@ -31,5 +31,8 @@ public class CandidateAssessmentSummaryResponse {
     private String activeAttemptId;
     private int totalQuestions;
     private double totalScore;
+    private boolean manuallyActivated;
+    private boolean manuallyCompleted;
+    private String manualInterventionMessage;
 }
 

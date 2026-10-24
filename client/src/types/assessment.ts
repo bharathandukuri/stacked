@@ -76,6 +76,11 @@ export interface AssessmentSummaryResponse {
   invitationCodeMaxUses?: number
   invitationCodeUsedCount?: number
   authorId?: string
+  manuallyActivated?: boolean
+  manuallyActivatedAt?: string
+  manuallyCompleted?: boolean
+  manuallyCompletedAt?: string
+  manualInterventionMessage?: string
   createdAt: string
   updatedAt?: string
 }
@@ -188,6 +193,9 @@ export interface CandidateAssessmentSummary {
   activeAttemptId?: string
   totalQuestions: number
   totalScore: number
+  manuallyActivated?: boolean
+  manuallyCompleted?: boolean
+  manualInterventionMessage?: string
 }
 
 export interface StartAttemptResponse {
@@ -253,6 +261,9 @@ export interface AssessmentReadinessResponse {
   totalQuestions: number
   totalScore: number
   backendReady: boolean
+  manuallyActivated?: boolean
+  manuallyCompleted?: boolean
+  manualInterventionMessage?: string
   serverTimestamp: string
 }
 
@@ -269,6 +280,8 @@ export interface CandidateAttemptDetail {
   remainingSeconds: number
   totalQuestions: number
   totalScore: number
+  manuallyCompleted?: boolean
+  manualInterventionMessage?: string
   questions: AssessmentItemResponse[]
   responses: Record<string, SavedQuestionResponse>
 }

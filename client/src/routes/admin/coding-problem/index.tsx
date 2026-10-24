@@ -633,12 +633,21 @@ export function AdminCodingProblemsPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                  onClick={() =>
+                                  onClick={() => {
+                                    if (isPublished) {
+                                      toast.add({
+                                        title: "Cannot Edit Published Problem",
+                                        description: "Only draft coding problems can be edited. Unpublish to DRAFT first.",
+                                        type: "warning",
+                                      })
+                                      return
+                                    }
                                     navigate({
                                       to: "/admin/coding-problem/studio/$problemId",
                                       params: { problemId: problem.id },
                                     })
-                                  }
+                                  }}
+                                  disabled={isPublished}
                                   className="gap-2 cursor-pointer"
                                 >
                                   <Pencil className="size-3.5" />

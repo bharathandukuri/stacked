@@ -71,6 +71,10 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   backend-url: ${BACKEND_URL:http://localhost:8080}
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173}
+  assessment:
+    heartbeat-ttl: ${ASSESSMENT_HEARTBEAT_TTL:45s}
+    sweep-fixed-delay-ms: ${ASSESSMENT_SWEEP_DELAY_MS:60000}
+    grace-period-seconds: ${ASSESSMENT_GRACE_PERIOD_SECONDS:30}
 
 # ------------------------------------------------------------------------------
 # File Storage Configuration
@@ -153,3 +157,52 @@ stacked:
     cleanup:
       stale-retention-minutes: ${EXECUTION_STALE_RETENTION_MINUTES:30}
       cron: "${EXECUTION_CLEANUP_CRON:0 */5 * * * *}"
+    queue:
+      enabled: ${EXECUTION_QUEUE_ENABLED:true}
+      max-concurrent-workers: ${EXECUTION_QUEUE_WORKERS:4}
+      max-queue-capacity: ${EXECUTION_QUEUE_CAPACITY:50}
+      queue-wait-timeout-ms: ${EXECUTION_QUEUE_WAIT_TIMEOUT_MS:15000}
+      max-concurrent-per-user: ${EXECUTION_QUEUE_PER_USER_CONCURRENT:2}
+      distributed-redis-check: ${EXECUTION_QUEUE_REDIS_ENABLED:true}
+      cluster-max-concurrent: ${EXECUTION_QUEUE_CLUSTER_CONCURRENT:16}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    trust-forward-headers: ${RATE_LIMIT_TRUST_FORWARD_HEADERS:false}
+    auth:
+      limit: ${RATE_LIMIT_AUTH_LIMIT:30}
+      window-seconds: ${RATE_LIMIT_AUTH_WINDOW_SECONDS:60}
+      fail-closed: ${RATE_LIMIT_AUTH_FAIL_CLOSED:true}
+      paths:
+        - "POST:/api/auth/login"
+        - "POST:/api/auth/admin/login"
+        - "POST:/api/auth/refresh"
+    code-execution:
+      limit: ${RATE_LIMIT_EXECUTION_LIMIT:15}
+      window-seconds: ${RATE_LIMIT_EXECUTION_WINDOW_SECONDS:60}
+      fail-closed: ${RATE_LIMIT_EXECUTION_FAIL_CLOSED:true}
+      paths:
+        - "POST:/api/admin/coding-problem/run-preview"
+        - "POST:/api/coding-problem/run-preview"
+        - "POST:/api/admin/coding-problem/test-run"
+        - "POST:/api/coding-problem/test-run"
+        - "POST:/api/admin/coding-problem/run-generator"
+        - "POST:/api/coding-problem/run-generator"
+        - "POST:/api/admin/coding-problem/generate-testcases"
+        - "POST:/api/coding-problem/generate-testcases"
+        - "POST:/api/assessments/*/run-sample"
+        - "POST:/api/assessments/*/run-custom-input"
+        - "POST:/api/assessments/*/submit-code"
+    assessment-integrity:
+      limit: ${RATE_LIMIT_ASSESSMENT_LIMIT:20}
+      window-seconds: ${RATE_LIMIT_ASSESSMENT_WINDOW_SECONDS:60}
+      fail-closed: ${RATE_LIMIT_ASSESSMENT_FAIL_CLOSED:false}
+      paths:
+        - "POST:/api/assessments/join-by-code"
+        - "POST:/api/assessments/*/start"
+        - "POST:/api/assessments/*/submit"
+    default-api:
+      limit: ${RATE_LIMIT_DEFAULT_LIMIT:120}
+      window-seconds: ${RATE_LIMIT_DEFAULT_WINDOW_SECONDS:60}
+      fail-closed: ${RATE_LIMIT_DEFAULT_FAIL_CLOSED:false}
+      paths:
+        - "/api/**"

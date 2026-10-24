@@ -387,6 +387,21 @@ function CandidateAssessmentLobbyPage() {
           )}
         </div>
 
+        {/* Manual Administrator Intervention Banner */}
+        {readiness.manualInterventionMessage && (
+          <Card className="border-primary/40 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold text-primary flex items-center gap-2">
+                <AlertCircle className="size-4" />
+                <span>Notice from Administrator</span>
+              </CardTitle>
+              <CardDescription className="text-xs text-foreground/90">
+                {readiness.manualInterventionMessage}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
         {/* Active Attempt Banner */}
         {readiness.hasActiveAttempt && (
           <Card className="border-amber-500/40 bg-amber-500/5">

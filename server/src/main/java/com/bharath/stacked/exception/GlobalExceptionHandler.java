@@ -3,14 +3,19 @@ package com.bharath.stacked.exception;
 import com.bharath.stacked.common.api.ApiError;
 import com.bharath.stacked.common.api.ApiResponse;
 import com.bharath.stacked.common.api.ErrorCode;
+import com.bharath.stacked.modules.execution.exception.ExecutionQueueFullException;
+import com.bharath.stacked.modules.execution.exception.ExecutionQueueTimeoutException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -47,6 +52,70 @@ public class GlobalExceptionHandler {
                 .build();
 
         return ApiResponse.error(apiError, ex.getStatus());
+    }
+
+    /**
+     * Handles ExecutionQueueFullException when execution queue or user concurrency limit is saturated.
+     */
+    @ExceptionHandler(ExecutionQueueFullException.class)
+    @NonNull
+    public ResponseEntity<ApiResponse<Void>> handleExecutionQueueFull(
+            @NonNull ExecutionQueueFullException ex, @NonNull HttpServletRequest request) {
+        log.warn("Execution queue saturated at [{} {}]: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+
+        ApiError apiError = ApiError.of(ErrorCode.RATE_LIMIT_EXCEEDED.name(), ex.getMessage(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, "5")
+                .body(ApiResponse.<Void>builder()
+                        .success(false)
+                        .message(apiError.getMessage())
+                        .error(apiError)
+                        .build());
+    }
+
+    /**
+     * Handles ExecutionQueueTimeoutException when execution task times out waiting or running.
+     */
+    @ExceptionHandler(ExecutionQueueTimeoutException.class)
+    @NonNull
+    public ResponseEntity<ApiResponse<Void>> handleExecutionQueueTimeout(
+            @NonNull ExecutionQueueTimeoutException ex, @NonNull HttpServletRequest request) {
+        log.warn("Execution queue timeout at [{} {}]: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+
+        ApiError apiError = ApiError.of(ErrorCode.SERVICE_UNAVAILABLE.name(), ex.getMessage(), request.getRequestURI());
+        return ApiResponse.error(apiError, HttpStatus.GATEWAY_TIMEOUT);
+    }
+
+    /**
+     * Handles Spring Security AccessDeniedException (e.g. from method-level @PreAuthorize).
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    @NonNull
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(
+            @NonNull AccessDeniedException ex, @NonNull HttpServletRequest request) {
+        log.warn("Access denied at [{} {}]: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+
+        ApiError apiError = ApiError.of(
+                ErrorCode.FORBIDDEN.name(),
+                "Access denied: You do not have permission to access this resource.",
+                request.getRequestURI());
+        return ApiResponse.error(apiError, HttpStatus.FORBIDDEN);
+    }
+
+    /**
+     * Handles Spring Security AuthenticationException when authentication fails during dispatch.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    @NonNull
+    public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(
+            @NonNull AuthenticationException ex, @NonNull HttpServletRequest request) {
+        log.warn("Authentication failed at [{} {}]: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+
+        ApiError apiError = ApiError.of(
+                ErrorCode.UNAUTHORIZED.name(),
+                "Authentication credentials are missing, invalid, or expired.",
+                request.getRequestURI());
+        return ApiResponse.error(apiError, HttpStatus.UNAUTHORIZED);
     }
 
     /**

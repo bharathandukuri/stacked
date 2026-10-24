@@ -84,6 +84,18 @@ public class Assessment {
 
     private String authorId;
 
+    @Builder.Default
+    private boolean manuallyActivated = false;
+
+    private Instant manuallyActivatedAt;
+
+    @Builder.Default
+    private boolean manuallyCompleted = false;
+
+    private Instant manuallyCompletedAt;
+
+    private String manualInterventionMessage;
+
     @CreatedDate
     private Instant createdAt;
 
@@ -95,7 +107,22 @@ public class Assessment {
     }
 
     public AssessmentStatus getEffectiveStatus(Instant now) {
-        return AssessmentStatus.deriveStatus(this.scheduledStart, this.scheduledEnd, now);
+        if (now == null) {
+            now = Instant.now();
+        }
+        if (manuallyCompleted) {
+            return AssessmentStatus.COMPLETED;
+        }
+        if (this.scheduledEnd != null && !now.isBefore(this.scheduledEnd)) {
+            return AssessmentStatus.COMPLETED;
+        }
+        if (manuallyActivated) {
+            return AssessmentStatus.ACTIVE;
+        }
+        if (this.scheduledStart != null && now.isBefore(this.scheduledStart)) {
+            return AssessmentStatus.NOT_STARTED;
+        }
+        return AssessmentStatus.ACTIVE;
     }
 }
 

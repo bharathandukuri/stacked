@@ -38,6 +38,11 @@ public class AssessmentSummaryResponse {
     private Integer invitationCodeMaxUses;
     private int invitationCodeUsedCount;
     private String authorId;
+    private boolean manuallyActivated;
+    private Instant manuallyActivatedAt;
+    private boolean manuallyCompleted;
+    private Instant manuallyCompletedAt;
+    private String manualInterventionMessage;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -66,6 +71,11 @@ public class AssessmentSummaryResponse {
                 .invitationCodeMaxUses(assessment.getInvitationCodeMaxUses())
                 .invitationCodeUsedCount(assessment.getInvitationCodeUsedCount())
                 .authorId(assessment.getAuthorId())
+                .manuallyActivated(assessment.isManuallyActivated())
+                .manuallyActivatedAt(assessment.getManuallyActivatedAt())
+                .manuallyCompleted(assessment.isManuallyCompleted())
+                .manuallyCompletedAt(assessment.getManuallyCompletedAt())
+                .manualInterventionMessage(assessment.getManualInterventionMessage())
                 .createdAt(assessment.getCreatedAt())
                 .updatedAt(assessment.getUpdatedAt())
                 .build();

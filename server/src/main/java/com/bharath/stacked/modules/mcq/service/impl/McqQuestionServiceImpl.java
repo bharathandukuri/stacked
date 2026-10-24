@@ -25,6 +25,7 @@ import com.bharath.stacked.modules.mcq.repository.McqQuestionRepository;
 import com.bharath.stacked.modules.mcq.repository.McqTopicRepository;
 import com.bharath.stacked.modules.mcq.service.McqQuestionService;
 import com.bharath.stacked.modules.mcq.service.McqTopicService;
+import com.bharath.stacked.modules.assessment.repository.AssessmentQuestionResponseRepository;
 import com.bharath.stacked.modules.question_bank.model.QuestionBank;
 import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -67,6 +69,7 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     private final ApplicationEventPublisher eventPublisher;
     private final QuestionBankRepository questionBankRepository;
     private final AssessmentRepository assessmentRepository;
+    private final AssessmentQuestionResponseRepository assessmentQuestionResponseRepository;
 
     @Override
     @NonNull
@@ -99,7 +102,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
             String sanitizedSearch = Pattern.quote(filter.getSearch().trim());
             criteriaList.add(new Criteria().orOperator(
                     Criteria.where("title").regex(sanitizedSearch, "i"),
-                    Criteria.where("slug").regex(sanitizedSearch, "i"),
                     Criteria.where("content").regex(sanitizedSearch, "i")
             ));
         }
@@ -132,8 +134,8 @@ public class McqQuestionServiceImpl implements McqQuestionService {
 
     @Override
     @NonNull
-    public McqQuestionDetailResponse getQuestionByIdOrSlug(@NonNull String idOrSlug) {
-        McqQuestion question = findEntityByIdOrSlug(idOrSlug);
+    public McqQuestionDetailResponse getQuestionById(@NonNull String id) {
+        McqQuestion question = findEntityById(id);
         return McqQuestionDetailResponse.fromModel(question);
     }
 
@@ -156,7 +158,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         ValidatedOptions validated = validateOptionsAndAnswers(request.type(), request.options(), request.correctOptionIds());
 
         String title = request.title().trim();
-        String slug = generateUniqueSlug(title, null);
 
         Set<String> imageIds = extractAndPromoteImages(request.content(), request.imageFileIds());
 
@@ -165,7 +166,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
 
         McqQuestion question = McqQuestion.builder()
                 .title(title)
-                .slug(slug)
                 .content(request.content().trim())
                 .type(request.type())
                 .difficulty(request.difficulty())
@@ -175,8 +175,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
                 .options(validated.options())
                 .correctOptionIds(validated.correctOptionIds())
                 .explanation(request.explanation() != null ? request.explanation().trim() : null)
-                .defaultPoints(request.defaultPoints() != null && request.defaultPoints() > 0 ? request.defaultPoints() : 1.0)
-                .negativePoints(request.negativePoints() != null && request.negativePoints() >= 0 ? request.negativePoints() : 0.0)
                 .shuffleOptions(request.shuffleOptions() == null || request.shuffleOptions())
                 .imageFileIds(new ArrayList<>(imageIds))
                 .authorId(authorId)
@@ -185,7 +183,7 @@ public class McqQuestionServiceImpl implements McqQuestionService {
                 .build();
 
         McqQuestion saved = questionRepository.save(question);
-        log.info("Created MCQ question: [{}] (id: {}, slug: {})", saved.getTitle(), saved.getId(), saved.getSlug());
+        log.info("Created MCQ question: [{}] (id: {})", saved.getTitle(), saved.getId());
 
         topicService.incrementQuestionCounts(saved.getTopics());
 
@@ -194,17 +192,16 @@ public class McqQuestionServiceImpl implements McqQuestionService {
 
     @Override
     @NonNull
-    public McqQuestionDetailResponse updateQuestion(@NonNull String idOrSlug, @NonNull UpdateMcqRequest request) {
-        McqQuestion existing = findEntityByIdOrSlug(idOrSlug);
+    public McqQuestionDetailResponse updateQuestion(@NonNull String id, @NonNull UpdateMcqRequest request) {
+        McqQuestion existing = findEntityById(id);
+        if (existing.getStatus() != McqStatus.DRAFT) {
+            throw new ConflictException("Cannot edit MCQ question '" + existing.getTitle() + "' because it is currently " + existing.getStatus() + ". Unpublish to DRAFT first.");
+        }
         String questionId = Objects.requireNonNull(existing.getId());
 
         ValidatedOptions validated = validateOptionsAndAnswers(request.type(), request.options(), request.correctOptionIds());
 
         String title = request.title().trim();
-        String slug = existing.getSlug();
-        if (!existing.getTitle().equalsIgnoreCase(title)) {
-            slug = generateUniqueSlug(title, questionId);
-        }
 
         Set<String> newImageIds = extractAndPromoteImages(request.content(), request.imageFileIds());
         cleanRemovedImages(new HashSet<>(existing.getImageFileIds()), newImageIds, questionId);
@@ -215,18 +212,16 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         updateTopicCountsDiff(oldTopics, newTopics);
 
         existing.setTitle(title);
-        existing.setSlug(slug);
         existing.setContent(request.content().trim());
         existing.setType(request.type());
         existing.setDifficulty(request.difficulty());
-        existing.setStatus(request.status());
+        // Enforce draft-only editing: status remains DRAFT and cannot be changed via update
+        existing.setStatus(McqStatus.DRAFT);
         existing.setTopics(newTopics);
         existing.setTags(sanitizeList(request.tags()));
         existing.setOptions(validated.options());
         existing.setCorrectOptionIds(validated.correctOptionIds());
         existing.setExplanation(request.explanation() != null ? request.explanation().trim() : null);
-        existing.setDefaultPoints(request.defaultPoints() != null && request.defaultPoints() > 0 ? request.defaultPoints() : 1.0);
-        existing.setNegativePoints(request.negativePoints() != null && request.negativePoints() >= 0 ? request.negativePoints() : 0.0);
         existing.setShuffleOptions(request.shuffleOptions() == null || request.shuffleOptions());
         existing.setImageFileIds(new ArrayList<>(newImageIds));
         existing.setUpdatedAt(Instant.now());
@@ -238,19 +233,32 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     }
 
     @Override
-    public void deleteQuestion(@NonNull String idOrSlug) {
-        McqQuestion question = findEntityByIdOrSlug(idOrSlug);
+    public boolean isInUse(@NonNull String id) {
+        if (!StringUtils.hasText(id)) {
+            return false;
+        }
+        return questionBankRepository.existsByItemsQuestionId(id)
+                || assessmentRepository.existsByItemsQuestionId(id)
+                || assessmentQuestionResponseRepository.existsByQuestionId(id);
+    }
+
+    @Override
+    public void deleteQuestion(@NonNull String id) {
+        McqQuestion question = findEntityById(id);
         String questionId = Objects.requireNonNull(question.getId());
 
-        List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(questionId);
-        List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(questionId);
-        if (!banks.isEmpty() || !assessments.isEmpty()) {
+        if (isInUse(questionId)) {
+            List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(questionId);
+            List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(questionId);
             List<String> usages = new ArrayList<>();
             if (!banks.isEmpty()) {
                 usages.add(banks.size() + " question bank(s) [" + banks.stream().map(QuestionBank::getTitle).collect(Collectors.joining(", ")) + "]");
             }
             if (!assessments.isEmpty()) {
                 usages.add(assessments.size() + " assessment(s) [" + assessments.stream().map(Assessment::getTitle).collect(Collectors.joining(", ")) + "]");
+            }
+            if (usages.isEmpty()) {
+                usages.add("historical assessment attempt responses");
             }
             throw new ConflictException("Cannot delete MCQ question '" + question.getTitle() + "' because it is currently in use by: " + String.join("; ", usages) + ".");
         }
@@ -270,12 +278,30 @@ public class McqQuestionServiceImpl implements McqQuestionService {
 
     @Override
     @NonNull
-    public McqQuestionDetailResponse updateStatus(@NonNull String idOrSlug, @NonNull McqStatus status) {
-        McqQuestion question = findEntityByIdOrSlug(idOrSlug);
+    public McqQuestionDetailResponse updateStatus(@NonNull String id, @NonNull McqStatus status) {
+        McqQuestion question = findEntityById(id);
         McqStatus currentStatus = question.getStatus();
 
         if (currentStatus == status) {
             return McqQuestionDetailResponse.fromModel(question);
+        }
+
+        if (status == McqStatus.DRAFT && currentStatus == McqStatus.PUBLISHED) {
+            if (isInUse(question.getId())) {
+                List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(question.getId());
+                List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(question.getId());
+                List<String> usages = new ArrayList<>();
+                if (!banks.isEmpty()) {
+                    usages.add(banks.size() + " question bank(s) [" + banks.stream().map(QuestionBank::getTitle).collect(Collectors.joining(", ")) + "]");
+                }
+                if (!assessments.isEmpty()) {
+                    usages.add(assessments.size() + " assessment(s) [" + assessments.stream().map(Assessment::getTitle).collect(Collectors.joining(", ")) + "]");
+                }
+                if (usages.isEmpty()) {
+                    usages.add("historical assessment attempt responses");
+                }
+                throw new ConflictException("Cannot move MCQ question '" + question.getTitle() + "' back to draft because it is currently in use by: " + String.join("; ", usages) + ".");
+            }
         }
 
         if (status == McqStatus.PUBLISHED) {
@@ -302,14 +328,14 @@ public class McqQuestionServiceImpl implements McqQuestionService {
 
     @Override
     @NonNull
-    public McqQuestionDetailResponse publish(@NonNull String idOrSlug) {
-        return updateStatus(idOrSlug, McqStatus.PUBLISHED);
+    public McqQuestionDetailResponse publish(@NonNull String id) {
+        return updateStatus(id, McqStatus.PUBLISHED);
     }
 
     @Override
     @NonNull
-    public McqQuestionDetailResponse unpublish(@NonNull String idOrSlug) {
-        return updateStatus(idOrSlug, McqStatus.DRAFT);
+    public McqQuestionDetailResponse unpublish(@NonNull String id) {
+        return updateStatus(id, McqStatus.DRAFT);
     }
 
     @Override
@@ -343,18 +369,9 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         );
     }
 
-    @Override
-    public boolean isSlugAvailable(@NonNull String slug, @Nullable String excludeId) {
-        if (slug.isBlank()) return false;
-        var existing = questionRepository.findBySlug(slug);
-        if (existing.isEmpty()) return true;
-        return excludeId != null && excludeId.equals(existing.get().getId());
-    }
-
-    private McqQuestion findEntityByIdOrSlug(String idOrSlug) {
-        return questionRepository.findById(idOrSlug)
-                .or(() -> questionRepository.findBySlug(idOrSlug))
-                .orElseThrow(() -> new ResourceNotFoundException("MCQ Question not found: " + idOrSlug));
+    private McqQuestion findEntityById(String id) {
+        return questionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MCQ Question not found: " + id));
     }
 
     private ValidatedOptions validateOptionsAndAnswers(
@@ -476,27 +493,6 @@ public class McqQuestionServiceImpl implements McqQuestionService {
 
         topicService.decrementQuestionCounts(removed);
         topicService.incrementQuestionCounts(added);
-    }
-
-    private String generateUniqueSlug(String title, @Nullable String excludeId) {
-        String base = title.toLowerCase(Locale.ROOT).trim()
-                .replaceAll("[^a-z0-9\\s-]", "")
-                .replaceAll("[\\s-]+", "-");
-        if (base.isBlank()) {
-            base = "question";
-        }
-
-        String candidate = base;
-        int attempt = 1;
-        while (!isSlugAvailable(candidate, excludeId)) {
-            candidate = base + "-" + UUID.randomUUID().toString().substring(0, 4);
-            attempt++;
-            if (attempt > 10) {
-                candidate = base + "-" + System.currentTimeMillis();
-                break;
-            }
-        }
-        return candidate;
     }
 
     private List<String> sanitizeList(@Nullable List<String> list) {

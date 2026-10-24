@@ -25,7 +25,7 @@ import java.util.List;
 
 @PreAuthorize("hasRole('ADMIN')")
 @RestController
-@RequestMapping("/api/coding-problem")
+@RequestMapping({"/api/admin/coding-problem", "/api/coding-problem"})
 public class CodingProblemController {
 
     private final CodingProblemService codingProblemService;
@@ -82,6 +82,13 @@ public class CodingProblemController {
             @PathVariable("idOrSlug") String idOrSlug) {
         codingProblemService.delete(idOrSlug);
         return ApiResponse.success(null, "Coding problem deleted successfully");
+    }
+
+    @GetMapping({"/{idOrSlug}/in-use", "/id/{idOrSlug}/in-use"})
+    public ResponseEntity<ApiResponse<java.util.Map<String, Boolean>>> checkInUse(
+            @PathVariable("idOrSlug") String idOrSlug) {
+        boolean inUse = codingProblemService.isInUse(idOrSlug);
+        return ApiResponse.success(java.util.Map.of("inUse", inUse), "Usage status retrieved successfully");
     }
 
     @GetMapping("/check-slug")

@@ -94,6 +94,13 @@ export const assessmentService = {
     await API.delete<ApiResponse<void>>(`/admin/assessments/${idOrSlug}`)
   },
 
+  async activateAssessment(idOrSlug: string): Promise<AssessmentDetailResponse> {
+    const res = await API.post<ApiResponse<AssessmentDetailResponse>>(
+      `/admin/assessments/${idOrSlug}/activate`
+    )
+    return res.data.data
+  },
+
   async completeAssessment(idOrSlug: string): Promise<AssessmentDetailResponse> {
     const res = await API.post<ApiResponse<AssessmentDetailResponse>>(
       `/admin/assessments/${idOrSlug}/complete`

@@ -70,6 +70,13 @@ public class AdminAssessmentController {
         return ApiResponse.success(null, "Assessment deleted successfully");
     }
 
+    @PostMapping("/{idOrSlug}/activate")
+    public ResponseEntity<ApiResponse<AssessmentDetailResponse>> activateAssessment(
+            @PathVariable String idOrSlug) {
+        AssessmentDetailResponse response = assessmentService.activateAssessment(idOrSlug);
+        return ApiResponse.success(response, "Assessment activated successfully");
+    }
+
     @PostMapping("/{idOrSlug}/complete")
     public ResponseEntity<ApiResponse<AssessmentDetailResponse>> completeAssessment(
             @PathVariable String idOrSlug) {

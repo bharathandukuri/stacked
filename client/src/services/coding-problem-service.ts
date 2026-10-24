@@ -185,8 +185,8 @@ export const codingProblemService = {
     problemType?: "GENERIC" | "DATABASE"
   ): Promise<SupportedLanguage[]> {
     const url = problemType
-      ? `/coding-problem/supported-languages?problemType=${problemType}`
-      : "/coding-problem/supported-languages";
+      ? `/admin/coding-problem/supported-languages?problemType=${problemType}`
+      : "/admin/coding-problem/supported-languages";
     const res = await API.get<ApiResponse<SupportedLanguage[]>>(url);
     return res.data.data;
   },
@@ -200,9 +200,19 @@ export const codingProblemService = {
       query.set("excludeId", excludeId.trim());
     }
     const res = await API.get<ApiResponse<SlugAvailabilityResponse>>(
-      `/coding-problem/check-slug?${query.toString()}`
+      `/admin/coding-problem/check-slug?${query.toString()}`
     );
     return Boolean(res.data.data?.available);
+  },
+
+  /**
+   * Check if a coding problem is currently in use.
+   */
+  async isInUse(idOrSlug: string): Promise<boolean> {
+    const res = await API.get<ApiResponse<{ inUse: boolean }>>(
+      `/admin/coding-problem/${encodeURIComponent(idOrSlug)}/in-use`
+    );
+    return Boolean(res.data.data?.inUse);
   },
 
   /**
@@ -210,7 +220,7 @@ export const codingProblemService = {
    */
   async getCodingProblem(idOrSlug: string): Promise<CodingProblem> {
     const res = await API.get<ApiResponse<CodingProblem>>(
-      `/coding-problem/${encodeURIComponent(idOrSlug)}`
+      `/admin/coding-problem/${encodeURIComponent(idOrSlug)}`
     );
     return res.data.data;
   },
@@ -222,7 +232,7 @@ export const codingProblemService = {
     payload: unknown
   ): Promise<CreatedCodingProblemResponse> {
     const res = await API.post<ApiResponse<CreatedCodingProblemResponse>>(
-      "/coding-problem",
+      "/admin/coding-problem",
       payload
     );
     return res.data.data;
@@ -236,7 +246,7 @@ export const codingProblemService = {
     payload: unknown
   ): Promise<CodingProblem> {
     const res = await API.put<ApiResponse<CodingProblem>>(
-      `/coding-problem/${encodeURIComponent(idOrSlug)}`,
+      `/admin/coding-problem/${encodeURIComponent(idOrSlug)}`,
       payload
     );
     return res.data.data;
@@ -246,7 +256,7 @@ export const codingProblemService = {
    * Delete an existing coding problem.
    */
   async deleteCodingProblem(idOrSlug: string): Promise<void> {
-    await API.delete(`/coding-problem/${encodeURIComponent(idOrSlug)}`);
+    await API.delete(`/admin/coding-problem/${encodeURIComponent(idOrSlug)}`);
   },
 
   /**
@@ -254,7 +264,7 @@ export const codingProblemService = {
    */
   async runPreview(payload: RunPreviewPayload): Promise<PreviewRunResponse> {
     const res = await API.post<ApiResponse<PreviewRunResponse>>(
-      "/coding-problem/run-preview",
+      "/admin/coding-problem/run-preview",
       payload
     );
     return res.data.data;
@@ -267,7 +277,7 @@ export const codingProblemService = {
     payload: RunTestcaseGeneratorPayload
   ): Promise<TestcaseGeneratorRunResponse> {
     const res = await API.post<ApiResponse<TestcaseGeneratorRunResponse>>(
-      "/coding-problem/run-generator",
+      "/admin/coding-problem/run-generator",
       payload
     );
     return res.data.data;
@@ -306,7 +316,7 @@ export const codingProblemService = {
     }
 
     const qs = query.toString();
-    const url = qs ? `/coding-problem?${qs}` : "/coding-problem";
+    const url = qs ? `/admin/coding-problem?${qs}` : "/admin/coding-problem";
     const res =
       await API.get<ApiResponse<PaginatedResponse<CodingProblemSummary>>>(url);
     return res.data.data;
@@ -320,7 +330,7 @@ export const codingProblemService = {
     status: "PUBLISHED" | "UNPUBLISHED" | "DRAFT"
   ): Promise<CodingProblemSummary> {
     const res = await API.patch<ApiResponse<CodingProblemSummary>>(
-      `/coding-problem/${encodeURIComponent(idOrSlug)}/status`,
+      `/admin/coding-problem/${encodeURIComponent(idOrSlug)}/status`,
       { status }
     );
     return res.data.data;
@@ -331,7 +341,7 @@ export const codingProblemService = {
    */
   async publishProblem(idOrSlug: string): Promise<CodingProblemSummary> {
     const res = await API.patch<ApiResponse<CodingProblemSummary>>(
-      `/coding-problem/${encodeURIComponent(idOrSlug)}/publish`
+      `/admin/coding-problem/${encodeURIComponent(idOrSlug)}/publish`
     );
     return res.data.data;
   },
@@ -341,7 +351,7 @@ export const codingProblemService = {
    */
   async unpublishProblem(idOrSlug: string): Promise<CodingProblemSummary> {
     const res = await API.patch<ApiResponse<CodingProblemSummary>>(
-      `/coding-problem/${encodeURIComponent(idOrSlug)}/unpublish`
+      `/admin/coding-problem/${encodeURIComponent(idOrSlug)}/unpublish`
     );
     return res.data.data;
   },

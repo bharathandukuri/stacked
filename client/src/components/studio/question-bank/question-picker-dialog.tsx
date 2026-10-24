@@ -41,10 +41,11 @@ export interface SelectedQuestionItem {
   questionType: BankQuestionType
   questionId: string
   title: string
-  slug: string
+  slug?: string
   snippet?: string
   difficulty?: string
   topics?: string[]
+  points?: number
   defaultPoints?: number
 }
 
@@ -65,6 +66,7 @@ export function QuestionPickerDialog({
   const [stagedMap, setStagedMap] = useState<Map<string, SelectedQuestionItem>>(
     new Map()
   )
+  const [mcqPointsMap, setMcqPointsMap] = useState<Record<string, number>>({})
 
   // MCQ Tab Filters & Pagination
   const [mcqSearch, setMcqSearch] = useState("")
@@ -110,21 +112,39 @@ export function QuestionPickerDialog({
     size: 6,
   })
 
+  const handleMcqPointsChange = (mcq: McqQuestionItem, value: string) => {
+    const pts = parseFloat(value)
+    const validPts = isNaN(pts) || pts < 0 ? 1.0 : pts
+    setMcqPointsMap((prev) => ({ ...prev, [mcq.id]: validPts }))
+    setStagedMap((prev) => {
+      if (!prev.has(mcq.id)) return prev
+      const next = new Map(prev)
+      const existing = next.get(mcq.id)!
+      next.set(mcq.id, {
+        ...existing,
+        points: validPts,
+        defaultPoints: validPts,
+      })
+      return next
+    })
+  }
+
   const toggleSelectMcq = (mcq: McqQuestionItem) => {
     setStagedMap((prev) => {
       const next = new Map(prev)
       if (next.has(mcq.id)) {
         next.delete(mcq.id)
       } else {
+        const assignedPoints = mcqPointsMap[mcq.id] ?? 1.0
         next.set(mcq.id, {
           questionType: "MCQ",
           questionId: mcq.id,
           title: mcq.title,
-          slug: mcq.slug,
           snippet: mcq.contentSnippet,
           difficulty: mcq.difficulty,
           topics: mcq.topics,
-          defaultPoints: mcq.defaultPoints,
+          points: assignedPoints,
+          defaultPoints: assignedPoints,
         })
       }
       return next
@@ -150,6 +170,7 @@ export function QuestionPickerDialog({
           slug: coding.slug,
           difficulty: coding.difficulty,
           topics: coding.topics,
+          points: fallbackPoints,
           defaultPoints: fallbackPoints,
         })
       }
@@ -168,6 +189,10 @@ export function QuestionPickerDialog({
     (i) => i.questionType === "MCQ"
   ).length
   const stagedCodings = stagedCount - stagedMcqs
+  const totalStagedPoints = Array.from(stagedMap.values()).reduce(
+    (sum, item) => sum + (item.points ?? item.defaultPoints ?? 1.0),
+    0
+  )
 
   const renderDifficultyBadge = (difficulty?: string) => {
     switch (difficulty) {
@@ -223,7 +248,7 @@ export function QuestionPickerDialog({
             </div>
             {stagedCount > 0 && (
               <Badge variant="secondary" className="px-3 py-1 text-xs">
-                {stagedCount} selected ({stagedMcqs} MCQ, {stagedCodings} Coding)
+                {stagedCount} selected ({stagedMcqs} MCQ, {stagedCodings} Coding) &bull; {totalStagedPoints} pts
               </Badge>
             )}
           </div>
@@ -333,7 +358,7 @@ export function QuestionPickerDialog({
                       <TableHead>Question Title</TableHead>
                       <TableHead className="w-24">Difficulty</TableHead>
                       <TableHead className="w-28">Type</TableHead>
-                      <TableHead className="w-20 text-right">Points</TableHead>
+                      <TableHead className="w-28 text-right">Points in Bank</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -403,8 +428,26 @@ export function QuestionPickerDialog({
                                   : "True / False"}
                             </span>
                           </TableCell>
-                          <TableCell className="text-right text-xs font-semibold">
-                            {mcq.defaultPoints} pts
+                          <TableCell
+                            className="text-right"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                disabled={alreadyInBank}
+                                value={mcqPointsMap[mcq.id] ?? 1.0}
+                                onChange={(e) =>
+                                  handleMcqPointsChange(mcq, e.target.value)
+                                }
+                                className="h-7 w-16 text-center text-xs font-mono"
+                                placeholder="1.0"
+                                title="Set points for this MCQ in the question bank"
+                              />
+                              <span className="text-[11px] text-muted-foreground">pts</span>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
@@ -632,7 +675,7 @@ export function QuestionPickerDialog({
               <span>Select questions above to add them to this bank</span>
             ) : (
               <span className="font-medium text-foreground">
-                Ready to add {stagedCount} question{stagedCount > 1 ? "s" : ""}
+                Ready to add {stagedCount} question{stagedCount > 1 ? "s" : ""} ({totalStagedPoints} total pts)
               </span>
             )}
           </div>

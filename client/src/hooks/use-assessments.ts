@@ -136,6 +136,31 @@ export function useDeleteAssessment() {
   })
 }
 
+export function useActivateAssessment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (idOrSlug: string) => assessmentService.activateAssessment(idOrSlug),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: assessmentQueryKeys.lists() })
+      queryClient.invalidateQueries({
+        queryKey: assessmentQueryKeys.detail(data.id),
+      })
+      toast.add({
+        title: "Assessment Activated",
+        description: `Assessment '${data.title}' is now ACTIVE. Candidate roster is frozen and attempts may begin.`,
+        type: "success",
+      })
+    },
+    onError: (error: unknown) => {
+      toast.add({
+        title: "Activation Failed",
+        description: getErrorMessage(error, "Failed to activate assessment."),
+        type: "error",
+      })
+    },
+  })
+}
+
 export function useCompleteAssessment() {
   const queryClient = useQueryClient()
   return useMutation({

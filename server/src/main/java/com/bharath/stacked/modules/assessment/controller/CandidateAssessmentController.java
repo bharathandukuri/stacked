@@ -2,6 +2,7 @@ package com.bharath.stacked.modules.assessment.controller;
 
 import com.bharath.stacked.common.api.ApiResponse;
 import com.bharath.stacked.exception.BadRequestException;
+import com.bharath.stacked.exception.UnauthorizedException;
 import com.bharath.stacked.modules.assessment.dto.*;
 import com.bharath.stacked.modules.assessment.service.AssessmentService;
 import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemExecutionResponse;
@@ -34,7 +35,7 @@ public class CandidateAssessmentController {
         if (auth != null && auth.getPrincipal() != null) {
             return auth.getPrincipal().toString();
         }
-        throw new BadRequestException("Unauthenticated request.");
+        throw new UnauthorizedException("Unauthenticated request.");
     }
 
     private String getCandidateEmail(String candidateUserId) {

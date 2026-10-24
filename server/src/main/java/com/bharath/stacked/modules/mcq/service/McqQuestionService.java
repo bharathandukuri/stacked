@@ -18,7 +18,11 @@ public interface McqQuestionService {
     PageResponse<McqQuestionSummaryResponse> listQuestions(@Nullable McqFilterRequest filter);
 
     @NonNull
-    McqQuestionDetailResponse getQuestionByIdOrSlug(@NonNull String idOrSlug);
+    McqQuestionDetailResponse getQuestionById(@NonNull String id);
+
+    default @NonNull McqQuestionDetailResponse getQuestionByIdOrSlug(@NonNull String idOrSlug) {
+        return getQuestionById(idOrSlug);
+    }
 
     @NonNull
     CandidateMcqResponse getCandidateQuestionById(@NonNull String id, boolean shuffle);
@@ -27,21 +31,21 @@ public interface McqQuestionService {
     McqQuestionDetailResponse createQuestion(@NonNull CreateMcqRequest request, @Nullable String authorId);
 
     @NonNull
-    McqQuestionDetailResponse updateQuestion(@NonNull String idOrSlug, @NonNull UpdateMcqRequest request);
+    McqQuestionDetailResponse updateQuestion(@NonNull String id, @NonNull UpdateMcqRequest request);
 
-    void deleteQuestion(@NonNull String idOrSlug);
-
-    @NonNull
-    McqQuestionDetailResponse updateStatus(@NonNull String idOrSlug, @NonNull McqStatus status);
+    void deleteQuestion(@NonNull String id);
 
     @NonNull
-    McqQuestionDetailResponse publish(@NonNull String idOrSlug);
+    McqQuestionDetailResponse updateStatus(@NonNull String id, @NonNull McqStatus status);
 
     @NonNull
-    McqQuestionDetailResponse unpublish(@NonNull String idOrSlug);
+    McqQuestionDetailResponse publish(@NonNull String id);
+
+    @NonNull
+    McqQuestionDetailResponse unpublish(@NonNull String id);
 
     @NonNull
     McqStatsResponse getStats();
 
-    boolean isSlugAvailable(@NonNull String slug, @Nullable String excludeId);
+    boolean isInUse(@NonNull String id);
 }

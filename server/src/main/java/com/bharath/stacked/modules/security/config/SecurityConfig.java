@@ -1,11 +1,14 @@
 package com.bharath.stacked.modules.security.config;
 
 import com.bharath.stacked.config.AppProperties;
+import com.bharath.stacked.modules.assessment.config.AssessmentProperties;
 import com.bharath.stacked.modules.execution.config.DockerProperties;
 import com.bharath.stacked.modules.security.filter.JwtAuthenticationFilter;
 import com.bharath.stacked.modules.security.handler.RestAccessDeniedHandler;
 import com.bharath.stacked.modules.security.handler.RestAuthenticationEntryPoint;
 import com.bharath.stacked.modules.security.service.CustomUserDetailsService;
+import com.bharath.stacked.modules.security.ratelimit.RateLimitProperties;
+import com.bharath.stacked.modules.security.ratelimit.RateLimitingFilter;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -32,11 +35,12 @@ import java.util.List;
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
-@EnableConfigurationProperties({JwtProperties.class, CookieProperties.class, AppProperties.class, DockerProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, CookieProperties.class, AppProperties.class, DockerProperties.class, RateLimitProperties.class, AdminProperties.class, AssessmentProperties.class})
 public class SecurityConfig {
 
     private final CustomUserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
     private final AppProperties appProperties;
@@ -62,6 +66,8 @@ public class SecurityConfig {
                                 "/api/files/*/content",
                                 "/api/coding-problem/supported-languages",
                                 "/api/coding-problem/languages",
+                                "/api/admin/coding-problem/supported-languages",
+                                "/api/admin/coding-problem/languages",
                                 "/ws/**")
                         .permitAll()
                         .requestMatchers("/api/auth/me").authenticated()
@@ -70,6 +76,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/coding-problem/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(rateLimitingFilter, JwtAuthenticationFilter.class)
                 .build();
     }
 

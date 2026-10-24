@@ -1,5 +1,10 @@
 import { create } from "zustand"
 import type { AdminUser, AuthUser } from "@/types/auth"
+import {
+  getAccessTokenCookie,
+  setAccessTokenCookie,
+  removeAccessTokenCookie,
+} from "@/lib/auth-cookie"
 
 interface AuthState {
   user: AuthUser | null
@@ -26,7 +31,12 @@ export type AuthStore = AuthState &
 
 export const useAuthStore = create<AuthStore>((set) => {
   const actions: AuthActions = {
-    setAuth: (accessToken, user) =>
+    setAuth: (accessToken, user) => {
+      if (accessToken) {
+        setAccessTokenCookie(accessToken)
+      } else {
+        removeAccessTokenCookie()
+      }
       set({
         user,
         admin: user,
@@ -34,13 +44,20 @@ export const useAuthStore = create<AuthStore>((set) => {
         isAuthenticated: Boolean(accessToken && user),
         isLoading: false,
         isInitialized: true,
-      }),
+      })
+    },
 
-    setAccessToken: (accessToken) =>
+    setAccessToken: (accessToken) => {
+      if (accessToken) {
+        setAccessTokenCookie(accessToken)
+      } else {
+        removeAccessTokenCookie()
+      }
       set({
         accessToken,
         isAuthenticated: Boolean(accessToken),
-      }),
+      })
+    },
 
     setLoading: (isLoading) =>
       set({
@@ -53,7 +70,8 @@ export const useAuthStore = create<AuthStore>((set) => {
         isLoading: false,
       }),
 
-    logout: () =>
+    logout: () => {
+      removeAccessTokenCookie()
       set({
         user: null,
         admin: null,
@@ -61,9 +79,11 @@ export const useAuthStore = create<AuthStore>((set) => {
         isAuthenticated: false,
         isLoading: false,
         isInitialized: true,
-      }),
+      })
+    },
 
-    clearAuth: () =>
+    clearAuth: () => {
+      removeAccessTokenCookie()
       set({
         user: null,
         admin: null,
@@ -71,15 +91,19 @@ export const useAuthStore = create<AuthStore>((set) => {
         isAuthenticated: false,
         isLoading: false,
         isInitialized: true,
-      }),
+      })
+    },
   }
+
+  const initialToken =
+    typeof window !== "undefined" ? getAccessTokenCookie() : null
 
   return {
     user: null,
     admin: null,
-    accessToken: null,
-    isAuthenticated: false,
-    isLoading: true,
+    accessToken: initialToken,
+    isAuthenticated: Boolean(initialToken),
+    isLoading: !initialToken,
     isInitialized: false,
     ...actions,
     actions,

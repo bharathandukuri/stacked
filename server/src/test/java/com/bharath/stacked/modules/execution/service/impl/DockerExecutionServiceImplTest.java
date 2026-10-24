@@ -1141,4 +1141,198 @@ class DockerExecutionServiceImplTest {
         assertThat(logs).contains("Server started");
         assertThat(logs).contains("Listening on :8080");
     }
+
+    @Test
+    @DisplayName("ExecOutputCallback: captures full output when within limit")
+    void execOutputCallbackWithinLimit() {
+        DockerExecutionServiceImpl.ExecOutputCallback callback =
+                new DockerExecutionServiceImpl.ExecOutputCallback(100);
+
+        callback.onNext(new Frame(StreamType.STDOUT, "Hello STDOUT\n".getBytes(StandardCharsets.UTF_8)));
+        callback.onNext(new Frame(StreamType.STDERR, "Hello STDERR\n".getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(callback.isTruncated()).isFalse();
+        assertThat(callback.stdout()).isEqualTo("Hello STDOUT\n");
+        assertThat(callback.stderr()).isEqualTo("Hello STDERR\n");
+        assertThat(callback.getTotalBytesWritten()).isEqualTo("Hello STDOUT\n".length() + "Hello STDERR\n".length());
+    }
+
+    @Test
+    @DisplayName("ExecOutputCallback: truncates STDOUT and ignores subsequent frames when limit is exceeded")
+    void execOutputCallbackStdoutTruncation() {
+        // Limit is 10 bytes
+        DockerExecutionServiceImpl.ExecOutputCallback callback =
+                new DockerExecutionServiceImpl.ExecOutputCallback(10);
+
+        // First frame: 7 bytes ("1234567")
+        callback.onNext(new Frame(StreamType.STDOUT, "1234567".getBytes(StandardCharsets.UTF_8)));
+        assertThat(callback.isTruncated()).isFalse();
+        assertThat(callback.getTotalBytesWritten()).isEqualTo(7);
+
+        // Second frame: 8 bytes ("890ABCD") -> only 3 bytes fit, triggers truncation
+        callback.onNext(new Frame(StreamType.STDOUT, "890ABCD".getBytes(StandardCharsets.UTF_8)));
+        assertThat(callback.isTruncated()).isTrue();
+        assertThat(callback.getTotalBytesWritten()).isEqualTo(10);
+        assertThat(callback.stdout())
+                .startsWith("1234567890")
+                .contains("[Output truncated: exceeded maximum limit of 10 bytes]");
+
+        // Subsequent frame should be completely ignored and not write to stream
+        callback.onNext(new Frame(StreamType.STDOUT, "SHOULD_BE_IGNORED".getBytes(StandardCharsets.UTF_8)));
+        assertThat(callback.stdout()).doesNotContain("SHOULD_BE_IGNORED");
+        assertThat(callback.getTotalBytesWritten()).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("ExecOutputCallback: truncates STDERR when limit is exceeded")
+    void execOutputCallbackStderrTruncation() {
+        // Limit is 8 bytes
+        DockerExecutionServiceImpl.ExecOutputCallback callback =
+                new DockerExecutionServiceImpl.ExecOutputCallback(8);
+
+        // Frame: 20 bytes on STDERR
+        callback.onNext(new Frame(StreamType.STDERR, "12345678901234567890".getBytes(StandardCharsets.UTF_8)));
+        assertThat(callback.isTruncated()).isTrue();
+        assertThat(callback.getTotalBytesWritten()).isEqualTo(8);
+        assertThat(callback.stderr())
+                .startsWith("12345678")
+                .contains("[Output truncated: exceeded maximum limit of 8 bytes]");
+    }
+
+    @Test
+    @DisplayName("execContainer: enforces output limit and truncates stdout")
+    void execContainerEnforcesOutputLimit() {
+        String containerId = "cnt-limit-exec";
+        List<String> command = List.of("bash", "-c", "yes");
+
+        InspectContainerCmd inspectContainerCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectContainerCmd);
+        when(inspectContainerCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-id-limit");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd(any(String[].class))).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-id-limit")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> callback = invocation.getArgument(0);
+
+            // Emit 50 bytes of repeated data
+            callback.onNext(new Frame(StreamType.STDOUT, "01234567890123456789012345678901234567890123456789".getBytes(StandardCharsets.UTF_8)));
+            callback.onComplete();
+            return callback;
+        });
+
+        InspectExecCmd inspectExecCmd = mock(InspectExecCmd.class);
+        InspectExecResponse inspectExecResponse = mock(InspectExecResponse.class);
+        when(inspectExecResponse.getExitCodeLong()).thenReturn(0L);
+
+        when(dockerClient.inspectExecCmd("exec-id-limit")).thenReturn(inspectExecCmd);
+        when(inspectExecCmd.exec()).thenReturn(inspectExecResponse);
+
+        // Limit to 15 bytes
+        DockerExecutionResult result = service.execContainer(containerId, command, 5000L, 15L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.exitCode()).isEqualTo(0L);
+        assertThat(result.stdout())
+                .startsWith("012345678901234")
+                .contains("[Output truncated: exceeded maximum limit of 15 bytes]");
+    }
+
+    @Test
+    @DisplayName("execContainer: clamps requested output limit to hardLimits.maxOutputLimitBytes")
+    void execContainerClampsToHardLimit() {
+        String containerId = "cnt-hard-limit";
+        List<String> command = List.of("bash", "-c", "yes");
+
+        // Set up service with ExecutionProperties (hard limit = 50 bytes)
+        com.bharath.stacked.modules.execution.config.ExecutionProperties props =
+                new com.bharath.stacked.modules.execution.config.ExecutionProperties();
+        props.getHardLimits().setMaxOutputLimitBytes(50L);
+
+        DockerExecutionServiceImpl customService =
+                new DockerExecutionServiceImpl(dockerClient, dockerProperties, containerRegistry, props);
+
+        InspectContainerCmd inspectContainerCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd(containerId)).thenReturn(inspectContainerCmd);
+        when(inspectContainerCmd.exec()).thenReturn(mock(InspectContainerResponse.class));
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateResponse.getId()).thenReturn("exec-id-clamp");
+
+        when(dockerClient.execCreateCmd(containerId)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withCmd(any(String[].class))).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStdout(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.withAttachStderr(true)).thenReturn(execCreateCmd);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class);
+        when(dockerClient.execStartCmd("exec-id-clamp")).thenReturn(execStartCmd);
+        when(execStartCmd.withDetach(false)).thenReturn(execStartCmd);
+
+        when(execStartCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> callback = invocation.getArgument(0);
+            byte[] hundredBytes = "0123456789".repeat(10).getBytes(StandardCharsets.UTF_8);
+            callback.onNext(new Frame(StreamType.STDOUT, hundredBytes));
+            callback.onComplete();
+            return callback;
+        });
+
+        InspectExecCmd inspectExecCmd = mock(InspectExecCmd.class);
+        InspectExecResponse inspectExecResponse = mock(InspectExecResponse.class);
+        when(inspectExecResponse.getExitCodeLong()).thenReturn(0L);
+
+        when(dockerClient.inspectExecCmd("exec-id-clamp")).thenReturn(inspectExecCmd);
+        when(inspectExecCmd.exec()).thenReturn(inspectExecResponse);
+
+        // Requested 5000L bytes, but hard limit is 50L bytes
+        DockerExecutionResult result = customService.execContainer(containerId, command, 5000L, 5000L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.stdout())
+                .startsWith("0123456789".repeat(5))
+                .contains("[Output truncated: exceeded maximum limit of 50 bytes]");
+    }
+
+    @Test
+    @DisplayName("getContainerLogs: truncates logs if daemon streams more than 1MB")
+    void getContainerLogsTruncatesWhenExceeding1MB() {
+        LogContainerCmd logCmd = mock(LogContainerCmd.class);
+        when(dockerClient.logContainerCmd("cid-biglog")).thenReturn(logCmd);
+        when(logCmd.withStdOut(true)).thenReturn(logCmd);
+        when(logCmd.withStdErr(true)).thenReturn(logCmd);
+        when(logCmd.withTail(anyInt())).thenReturn(logCmd);
+
+        when(logCmd.exec(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            ResultCallback<Frame> cb = invocation.getArgument(0);
+
+            // Emit 600KB + 600KB = 1.2MB (exceeds 1MB limit)
+            byte[] chunk = new byte[600 * 1024];
+            java.util.Arrays.fill(chunk, (byte) 'A');
+
+            cb.onNext(new Frame(StreamType.STDOUT, chunk));
+            cb.onNext(new Frame(StreamType.STDOUT, chunk));
+            cb.onComplete();
+            return cb;
+        });
+
+        String logs = service.getContainerLogs("cid-biglog", 100);
+
+        assertThat(logs).contains("[Container logs truncated: exceeded limit of 1MB]");
+        assertThat(logs.length()).isLessThanOrEqualTo(1024 * 1024 + 100);
+    }
 }

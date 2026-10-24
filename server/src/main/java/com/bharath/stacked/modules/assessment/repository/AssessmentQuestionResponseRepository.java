@@ -16,6 +16,8 @@ public interface AssessmentQuestionResponseRepository extends MongoRepository<As
 
     List<AssessmentQuestionResponse> findAllByQuestionId(String questionId);
 
+    boolean existsByQuestionId(String questionId);
+
     long countByAttemptId(String attemptId);
 }
 

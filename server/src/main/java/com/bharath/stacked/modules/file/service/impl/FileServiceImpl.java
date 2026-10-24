@@ -254,7 +254,9 @@ public class FileServiceImpl implements FileService {
                 Files.createDirectories(storageDir);
             }
 
-            Files.copy(file.getInputStream(), destinationPath, StandardCopyOption.REPLACE_EXISTING);
+            try (var in = file.getInputStream()) {
+                Files.copy(in, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             log.error("Failed to store file [{}] at [{}]: {}", originalFilename, destinationPath, e.getMessage());
             throw new InternalServerException("Could not store uploaded file.");

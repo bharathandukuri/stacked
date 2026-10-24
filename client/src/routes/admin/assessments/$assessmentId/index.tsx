@@ -29,6 +29,7 @@ import {
   TrendingUp,
   Target,
   CheckCircle2,
+  Play,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -71,6 +72,7 @@ import {
   useAssessmentAttempts,
   useCandidateAssignments,
   useBulkAssignCandidates,
+  useActivateAssessment,
   useCompleteAssessment,
   useGenerateInvitationCode,
   useRevokeInvitationCode,
@@ -131,12 +133,14 @@ function AssessmentDetailPage() {
 
   // Mutations
   const bulkAssignMutation = useBulkAssignCandidates(assessmentId)
+  const activateMutation = useActivateAssessment()
   const completeMutation = useCompleteAssessment()
   const generateCodeMutation = useGenerateInvitationCode(assessmentId)
   const revokeCodeMutation = useRevokeInvitationCode(assessmentId)
 
   const [copiedCode, setCopiedCode] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
+  const [activateConfirmOpen, setActivateConfirmOpen] = useState(false)
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false)
 
   const handleCopyCode = (code: string) => {
@@ -177,6 +181,13 @@ function AssessmentDetailPage() {
     setCandidateEmailsRaw("")
     setBulkAssignOpen(false)
     refetchCandidates()
+    refetchAssessment()
+    refetchMetrics()
+  }
+
+  const handleActivateAssessment = async () => {
+    await activateMutation.mutateAsync(assessmentId)
+    setActivateConfirmOpen(false)
     refetchAssessment()
     refetchMetrics()
   }
@@ -309,6 +320,16 @@ function AssessmentDetailPage() {
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold tracking-tight truncate">{assessment.title}</h1>
                   {getStatusBadge(assessment.status)}
+                  {assessment.manuallyActivated && (
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-500/30 text-xs">
+                      Manually Activated
+                    </Badge>
+                  )}
+                  {assessment.manuallyCompleted && (
+                    <Badge variant="outline" className="text-purple-600 border-purple-500/30 text-xs">
+                      Manually Completed
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground truncate font-mono mt-0.5">
                   ID: {assessment.id} • Slug: {assessment.slug}
@@ -340,6 +361,17 @@ function AssessmentDetailPage() {
                 <span>Immutable</span>
               </div>
 
+              {assessment.status === "NOT_STARTED" && (
+                <Button
+                  size="sm"
+                  onClick={() => setActivateConfirmOpen(true)}
+                  className="gap-1.5 text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <Play className="size-3.5 fill-current" />
+                  <span>Activate Assessment</span>
+                </Button>
+              )}
+
               {assessment.status !== "COMPLETED" && (
                 <Button
                   variant="outline"
@@ -356,6 +388,18 @@ function AssessmentDetailPage() {
         </header>
 
         <div className="p-8 space-y-6">
+          {assessment.manualInterventionMessage && (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm">
+              <AlertCircle className="size-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  Manual Intervention Notice
+                </p>
+                <p className="mt-0.5 text-sm">{assessment.manualInterventionMessage}</p>
+              </div>
+            </div>
+          )}
+
           {/* Key Metric Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
@@ -917,10 +961,10 @@ function AssessmentDetailPage() {
                     className="pl-8 h-9"
                   />
                 </div>
-                {assessment.status === "COMPLETED" ? (
+                {assessment.status !== "NOT_STARTED" || assessment.manuallyActivated ? (
                   <Badge variant="outline" className="text-muted-foreground border-border gap-1.5 text-xs py-1.5 px-3">
                     <Lock className="size-3.5 text-muted-foreground" />
-                    <span>Candidate Roster Closed (Assessment Ended)</span>
+                    <span>Candidate Roster Frozen ({assessment.status === "COMPLETED" ? "Assessment Ended" : "Assessment Active"})</span>
                   </Badge>
                 ) : (
                   <Button size="sm" onClick={() => setBulkAssignOpen(true)} className="gap-1.5">
@@ -1358,6 +1402,28 @@ function AssessmentDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Activate Assessment Confirmation Dialog */}
+      <AlertDialog open={activateConfirmOpen} onOpenChange={setActivateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Activate Assessment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will manually activate this assessment immediately, overriding any scheduled start time. The candidate roster will be frozen to prevent new candidate enrollments, and candidates will be able to begin taking the assessment.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleActivateAssessment}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {activateMutation.isPending ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
+              Yes, Activate Assessment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Complete Assessment Confirmation Dialog */}
       <AlertDialog open={completeConfirmOpen} onOpenChange={setCompleteConfirmOpen}>

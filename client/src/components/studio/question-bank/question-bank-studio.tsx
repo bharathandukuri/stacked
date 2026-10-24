@@ -47,7 +47,7 @@ export interface StudioBankItem {
   customPoints?: number | null
   effectivePoints: number
   title: string
-  slug: string
+  slug?: string | null
   snippet?: string | null
   difficulty?: string | null
   topics?: string[]
@@ -196,18 +196,24 @@ function QuestionBankStudioForm({
   const handleAddQuestions = (newSelected: SelectedQuestionItem[]) => {
     setItems((prev) => {
       const startOrder = prev.length + 1
-      const addedItems: StudioBankItem[] = newSelected.map((sel, idx) => ({
-        questionType: sel.questionType,
-        questionId: sel.questionId,
-        order: startOrder + idx,
-        customPoints: null,
-        effectivePoints: sel.defaultPoints || 10,
-        title: sel.title,
-        slug: sel.slug,
-        snippet: sel.snippet,
-        difficulty: sel.difficulty,
-        topics: sel.topics,
-      }))
+      const addedItems: StudioBankItem[] = newSelected.map((sel, idx) => {
+        const assignedPoints =
+          sel.points ??
+          sel.defaultPoints ??
+          (sel.questionType === "CODING" ? 10 : 1.0)
+        return {
+          questionType: sel.questionType,
+          questionId: sel.questionId,
+          order: startOrder + idx,
+          customPoints: assignedPoints,
+          effectivePoints: assignedPoints,
+          title: sel.title,
+          slug: sel.slug,
+          snippet: sel.snippet,
+          difficulty: sel.difficulty,
+          topics: sel.topics,
+        }
+      })
       return [...prev, ...addedItems]
     })
     toast.add({
@@ -317,10 +323,19 @@ function QuestionBankStudioForm({
       })),
     }
 
+    if (isPublishedReadOnly) {
+      toast.add({
+        title: "Question Bank is Published",
+        description: "Only draft question banks can be edited. Unpublish to DRAFT first.",
+        type: "warning",
+      })
+      return
+    }
+
     try {
       if (isEditMode && bankId) {
         await updateMutation.mutateAsync({
-          idOrSlug: bankId,
+          id: bankId,
           payload,
         })
       } else {
@@ -349,6 +364,7 @@ function QuestionBankStudioForm({
     }
   }
 
+  const isPublishedReadOnly = isEditMode && initialData?.status === "PUBLISHED"
   const isSaving = createMutation.isPending || updateMutation.isPending
 
   return (
@@ -371,7 +387,7 @@ function QuestionBankStudioForm({
               {isEditMode ? "Edit Question Bank" : "Create Question Bank"}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {isEditMode ? initialData?.slug : "New reusable assessment bundle"}
+              {isEditMode ? `ID: ${initialData?.id}` : "New reusable assessment bundle"}
             </p>
           </div>
         </div>
@@ -397,7 +413,7 @@ function QuestionBankStudioForm({
           <Button
             size="sm"
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || isPublishedReadOnly}
             className="gap-2 px-4"
           >
             {isSaving ? (
@@ -414,6 +430,16 @@ function QuestionBankStudioForm({
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-6 lg:flex-row">
         {/* Left Column: Title, Description, Curated Questions */}
         <section className="flex flex-1 flex-col gap-6">
+          {isPublishedReadOnly && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-300 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  This Question Bank is currently <strong>PUBLISHED</strong> and read-only. Only draft banks can be edited. Unpublish to DRAFT to make changes.
+                </span>
+              </div>
+            </div>
+          )}
           {/* Title Card */}
           <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
             <label
@@ -618,12 +644,12 @@ function QuestionBankStudioForm({
                             value={
                               hasCustomPoints ? String(item.customPoints) : ""
                             }
-                            placeholder={String(item.effectivePoints || 10)}
+                            placeholder={String(item.effectivePoints || (isMcq ? 1 : 10))}
                             onChange={(e) =>
                               handleCustomPointsChange(index, e.target.value)
                             }
                             className="h-8 w-20 text-xs text-center"
-                            title={`Default points: ${item.effectivePoints}. Leave empty to use default.`}
+                            title={`Points: ${item.effectivePoints || (isMcq ? 1 : 10)}`}
                           />
                         </div>
 

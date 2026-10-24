@@ -58,11 +58,11 @@ public class AdminMcqController {
         return ApiResponse.success(response, "MCQ questions retrieved successfully");
     }
 
-    @GetMapping("/questions/{idOrSlug}")
+    @GetMapping("/questions/{id}")
     @NonNull
     public ResponseEntity<ApiResponse<McqQuestionDetailResponse>> getQuestion(
-            @PathVariable @NonNull String idOrSlug) {
-        McqQuestionDetailResponse response = questionService.getQuestionByIdOrSlug(idOrSlug);
+            @PathVariable @NonNull String id) {
+        McqQuestionDetailResponse response = questionService.getQuestionById(id);
         return ApiResponse.success(response, "MCQ question retrieved successfully");
     }
 
@@ -79,55 +79,54 @@ public class AdminMcqController {
                 .body(ApiResponse.success(response, "MCQ question created successfully").getBody());
     }
 
-    @PutMapping("/questions/{idOrSlug}")
+    @PutMapping("/questions/{id}")
     @NonNull
     public ResponseEntity<ApiResponse<McqQuestionDetailResponse>> updateQuestion(
-            @PathVariable @NonNull String idOrSlug,
+            @PathVariable @NonNull String id,
             @Valid @RequestBody @NonNull UpdateMcqRequest request) {
-        McqQuestionDetailResponse response = questionService.updateQuestion(idOrSlug, request);
+        McqQuestionDetailResponse response = questionService.updateQuestion(id, request);
         return ApiResponse.success(response, "MCQ question updated successfully");
     }
 
-    @DeleteMapping("/questions/{idOrSlug}")
+    @DeleteMapping("/questions/{id}")
     @NonNull
     public ResponseEntity<ApiResponse<Void>> deleteQuestion(
-            @PathVariable @NonNull String idOrSlug) {
-        questionService.deleteQuestion(idOrSlug);
+            @PathVariable @NonNull String id) {
+        questionService.deleteQuestion(id);
         return ApiResponse.success(null, "MCQ question deleted successfully");
     }
 
-    @PatchMapping("/questions/{idOrSlug}/status")
+    @GetMapping("/questions/{id}/in-use")
+    @NonNull
+    public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkInUse(
+            @PathVariable @NonNull String id) {
+        boolean inUse = questionService.isInUse(id);
+        return ApiResponse.success(Map.of("inUse", inUse), "Usage status retrieved successfully");
+    }
+
+    @PatchMapping("/questions/{id}/status")
     @NonNull
     public ResponseEntity<ApiResponse<McqQuestionDetailResponse>> updateQuestionStatus(
-            @PathVariable @NonNull String idOrSlug,
+            @PathVariable @NonNull String id,
             @Valid @RequestBody @NonNull UpdateMcqStatusRequest request) {
-        McqQuestionDetailResponse response = questionService.updateStatus(idOrSlug, request.status());
+        McqQuestionDetailResponse response = questionService.updateStatus(id, request.status());
         return ApiResponse.success(response, "MCQ question status updated successfully");
     }
 
-    @PatchMapping("/questions/{idOrSlug}/publish")
+    @PatchMapping("/questions/{id}/publish")
     @NonNull
     public ResponseEntity<ApiResponse<McqQuestionDetailResponse>> publishQuestion(
-            @PathVariable @NonNull String idOrSlug) {
-        McqQuestionDetailResponse response = questionService.publish(idOrSlug);
+            @PathVariable @NonNull String id) {
+        McqQuestionDetailResponse response = questionService.publish(id);
         return ApiResponse.success(response, "MCQ question published successfully");
     }
 
-    @PatchMapping("/questions/{idOrSlug}/unpublish")
+    @PatchMapping("/questions/{id}/unpublish")
     @NonNull
     public ResponseEntity<ApiResponse<McqQuestionDetailResponse>> unpublishQuestion(
-            @PathVariable @NonNull String idOrSlug) {
-        McqQuestionDetailResponse response = questionService.unpublish(idOrSlug);
+            @PathVariable @NonNull String id) {
+        McqQuestionDetailResponse response = questionService.unpublish(id);
         return ApiResponse.success(response, "MCQ question unpublished successfully");
-    }
-
-    @GetMapping("/questions/check-slug")
-    @NonNull
-    public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkSlug(
-            @RequestParam @NonNull String slug,
-            @RequestParam(required = false) @Nullable String excludeId) {
-        boolean available = questionService.isSlugAvailable(slug, excludeId);
-        return ApiResponse.success(Map.of("available", available), "Slug availability checked");
     }
 
     @GetMapping("/stats")

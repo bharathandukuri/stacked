@@ -43,6 +43,11 @@ public class AssessmentDetailResponse {
     private Integer invitationCodeMaxUses;
     private int invitationCodeUsedCount;
     private String authorId;
+    private boolean manuallyActivated;
+    private Instant manuallyActivatedAt;
+    private boolean manuallyCompleted;
+    private Instant manuallyCompletedAt;
+    private String manualInterventionMessage;
     @Builder.Default
     private List<AssessmentItemResponse> items = new ArrayList<>();
     private Instant createdAt;
@@ -81,6 +86,11 @@ public class AssessmentDetailResponse {
                 .invitationCodeMaxUses(assessment.getInvitationCodeMaxUses())
                 .invitationCodeUsedCount(assessment.getInvitationCodeUsedCount())
                 .authorId(assessment.getAuthorId())
+                .manuallyActivated(assessment.isManuallyActivated())
+                .manuallyActivatedAt(assessment.getManuallyActivatedAt())
+                .manuallyCompleted(assessment.isManuallyCompleted())
+                .manuallyCompletedAt(assessment.getManuallyCompletedAt())
+                .manualInterventionMessage(assessment.getManualInterventionMessage())
                 .items(itemResponses)
                 .createdAt(assessment.getCreatedAt())
                 .updatedAt(assessment.getUpdatedAt())

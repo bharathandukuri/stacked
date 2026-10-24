@@ -6,6 +6,8 @@ interface UseAssessmentWebSocketOptions {
   attemptId: string
   enabled?: boolean
   onSuperseded?: (message: string) => void
+  onManualActivation?: (message: string) => void
+  onManualCompletion?: (message: string) => void
 }
 
 interface WebSocketStatus {
@@ -13,6 +15,7 @@ interface WebSocketStatus {
   isConnecting: boolean
   isSuperseded: boolean
   supersededMessage: string | null
+  manualInterventionMessage: string | null
   lastHeartbeatTime: Date | null
   connectionId: string | null
 }
@@ -22,6 +25,8 @@ export function useAssessmentWebSocket({
   attemptId,
   enabled = true,
   onSuperseded,
+  onManualActivation,
+  onManualCompletion,
 }: UseAssessmentWebSocketOptions) {
   const accessToken = useAuthStore((s) => s.accessToken)
   const [status, setStatus] = useState<WebSocketStatus>({
@@ -29,6 +34,7 @@ export function useAssessmentWebSocket({
     isConnecting: false,
     isSuperseded: false,
     supersededMessage: null,
+    manualInterventionMessage: null,
     lastHeartbeatTime: null,
     connectionId: null,
   })
@@ -118,6 +124,24 @@ export function useAssessmentWebSocket({
               supersededMessage: msg,
             }))
             onSuperseded?.(msg)
+          } else if (payload.type === "ASSESSMENT_MANUALLY_ACTIVATED") {
+            const msg =
+              payload.message ||
+              "The administrator has manually activated this assessment."
+            setStatus((prev) => ({
+              ...prev,
+              manualInterventionMessage: msg,
+            }))
+            onManualActivation?.(msg)
+          } else if (payload.type === "ASSESSMENT_MANUALLY_COMPLETED") {
+            const msg =
+              payload.message ||
+              "The administrator has manually completed this assessment."
+            setStatus((prev) => ({
+              ...prev,
+              manualInterventionMessage: msg,
+            }))
+            onManualCompletion?.(msg)
           }
         } catch {
           // ignore non-json messages
@@ -152,7 +176,7 @@ export function useAssessmentWebSocket({
     } catch {
       setStatus((prev) => ({ ...prev, isConnecting: false, isConnected: false }))
     }
-  }, [accessToken, assessmentId, attemptId, enabled, onSuperseded, clearTimers])
+  }, [accessToken, assessmentId, attemptId, enabled, onSuperseded, onManualActivation, onManualCompletion, clearTimers])
 
   useEffect(() => {
     connectRef.current = connect

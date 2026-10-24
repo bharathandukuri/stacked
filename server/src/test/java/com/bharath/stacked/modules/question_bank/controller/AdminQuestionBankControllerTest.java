@@ -53,7 +53,6 @@ class AdminQuestionBankControllerTest {
 
         sampleSummary = QuestionBankSummaryResponse.builder()
                 .id("qb-101")
-                .slug("spring-boot-assessment-bank")
                 .title("Spring Boot Assessment Bank")
                 .description("Curated Spring Boot questions")
                 .category("Backend")
@@ -69,7 +68,6 @@ class AdminQuestionBankControllerTest {
 
         sampleDetail = QuestionBankDetailResponse.builder()
                 .id("qb-101")
-                .slug("spring-boot-assessment-bank")
                 .title("Spring Boot Assessment Bank")
                 .description("Curated Spring Boot questions")
                 .category("Backend")
@@ -274,5 +272,18 @@ class AdminQuestionBankControllerTest {
                 .andExpect(jsonPath("$.data.status").value("DRAFT"));
 
         verify(questionBankService).unpublish("qb-101");
+    }
+
+    @Test
+    @DisplayName("GET /api/admin/question-banks/{id}/in-use returns whether question bank is in use")
+    void isInUse_Success() throws Exception {
+        when(questionBankService.isInUse("qb-101")).thenReturn(true);
+
+        mockMvc.perform(get("/api/admin/question-banks/qb-101/in-use"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.inUse").value(true));
+
+        verify(questionBankService).isInUse("qb-101");
     }
 }

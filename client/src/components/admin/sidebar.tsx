@@ -30,46 +30,66 @@ interface NavItem {
   badge?: string
 }
 
+interface NavSection {
+  title: string
+  items: NavItem[]
+}
+
 export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
   const admin = useAdmin()
   const logoutMutation = useLogout()
 
-  const navItems: NavItem[] = [
+  const navSections: NavSection[] = [
     {
-      title: "Dashboard",
-      icon: LayoutDashboard,
-      to: "/admin",
-      active: currentPath === "/admin",
+      title: "Overview",
+      items: [
+        {
+          title: "Dashboard",
+          icon: LayoutDashboard,
+          to: "/admin",
+          active: currentPath === "/admin",
+        },
+        {
+          title: "Assessments",
+          icon: GraduationCap,
+          to: "/admin/assessments",
+          active: currentPath.startsWith("/admin/assessments"),
+        },
+      ],
     },
     {
-      title: "Coding Problems",
-      icon: Code2,
-      to: "/admin/coding-problem",
-      active: currentPath.startsWith("/admin/coding-problem"),
+      title: "Question Management",
+      items: [
+        {
+          title: "Question Banks",
+          icon: FileQuestion,
+          to: "/admin/questions",
+          active: currentPath.startsWith("/admin/questions"),
+        },
+        {
+          title: "Coding Problems",
+          icon: Code2,
+          to: "/admin/coding-problem",
+          active: currentPath.startsWith("/admin/coding-problem"),
+        },
+        {
+          title: "MCQs",
+          icon: CheckSquare,
+          to: "/admin/mcq",
+          active: currentPath.startsWith("/admin/mcq"),
+        },
+      ],
     },
     {
-      title: "MCQs",
-      icon: CheckSquare,
-      to: "/admin/mcq",
-      active: currentPath.startsWith("/admin/mcq"),
-    },
-    {
-      title: "Users",
-      icon: Users,
-      to: "/admin/users",
-      active: currentPath.startsWith("/admin/users"),
-    },
-    {
-      title: "Assessments",
-      icon: GraduationCap,
-      to: "/admin/assessments",
-      active: currentPath.startsWith("/admin/assessments"),
-    },
-    {
-      title: "Question Bank",
-      icon: FileQuestion,
-      to: "/admin/questions",
-      active: currentPath.startsWith("/admin/questions"),
+      title: "Administration",
+      items: [
+        {
+          title: "Users",
+          icon: Users,
+          to: "/admin/users",
+          active: currentPath.startsWith("/admin/users"),
+        },
+      ],
     },
   ]
 
@@ -89,47 +109,51 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="mb-2 px-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-          Navigation
-        </div>
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = item.active
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+        {navSections.map((section) => (
+          <div key={section.title}>
+            <div className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+              {section.title}
+            </div>
+            <nav className="space-y-1">
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive = item.active
 
-            return (
-              <Link
-                key={item.title}
-                to={item.to}
-                className={`group flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon
-                    className={`size-4 ${isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"}`}
-                  />
-                  <span>{item.title}</span>
-                </div>
-                {item.badge && (
-                  <Badge
-                    variant="outline"
-                    className={`px-1.5 py-0 text-[10px] font-normal ${
+                return (
+                  <Link
+                    key={item.title}
+                    to={item.to}
+                    className={`group flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                       isActive
-                        ? "border-primary-foreground/30 text-primary-foreground"
-                        : "border-border text-muted-foreground"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
-                    {item.badge}
-                  </Badge>
-                )}
-              </Link>
-            )
-          })}
-        </nav>
+                    <div className="flex items-center gap-3">
+                      <Icon
+                        className={`size-4 ${isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"}`}
+                      />
+                      <span>{item.title}</span>
+                    </div>
+                    {item.badge && (
+                      <Badge
+                        variant="outline"
+                        className={`px-1.5 py-0 text-[10px] font-normal ${
+                          isActive
+                            ? "border-primary-foreground/30 text-primary-foreground"
+                            : "border-border text-muted-foreground"
+                        }`}
+                      >
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </Link>
+                )
+              })}
+            </nav>
+          </div>
+        ))}
       </div>
 
       {/* Admin User Footer */}

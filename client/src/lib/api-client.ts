@@ -6,6 +6,7 @@ import axios, {
 } from "axios"
 import type { ApiError, ApiResponse } from "@/types/api"
 import { useAuthStore } from "@/stores/auth-store"
+import { getAccessTokenCookie, setAccessTokenCookie } from "@/lib/auth-cookie"
 
 /**
  * Default API Base URL. Uses environment variable or defaults to /api.
@@ -80,7 +81,8 @@ function normalizeApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
  */
 API.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = useAuthStore.getState().accessToken
+    const token =
+      useAuthStore.getState().accessToken || getAccessTokenCookie()
     if (token && !config.headers.get("Authorization")) {
       config.headers.set("Authorization", `Bearer ${token}`)
     }
@@ -164,6 +166,7 @@ API.interceptors.response.use(
         >(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true })
 
         const newAccessToken = refreshResponse.data.data.accessToken
+        setAccessTokenCookie(newAccessToken)
         useAuthStore.getState().actions.setAccessToken(newAccessToken)
 
         processQueue(null, newAccessToken)

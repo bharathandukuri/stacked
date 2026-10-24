@@ -156,5 +156,27 @@ public class AssessmentWebSocketHandler extends TextWebSocketHandler {
         }
         return params;
     }
+
+    public void broadcastToAssessment(String assessmentId, Map<String, Object> payload) {
+        if (!StringUtils.hasText(assessmentId) || payload == null || activeSessions.isEmpty()) {
+            return;
+        }
+        try {
+            String json = objectMapper.writeValueAsString(payload);
+            TextMessage textMessage = new TextMessage(json);
+            for (WebSocketSession session : activeSessions.values()) {
+                if (session.isOpen() && assessmentId.equals(session.getAttributes().get("assessmentId"))) {
+                    try {
+                        session.sendMessage(textMessage);
+                    } catch (IOException e) {
+                        log.warn("Failed to deliver broadcast WebSocket message to session [{}]: {}",
+                                session.getAttributes().get("connectionId"), e.getMessage());
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            log.error("Failed to serialize WebSocket broadcast payload for assessment [{}]: {}", assessmentId, ex.getMessage());
+        }
+    }
 }
 

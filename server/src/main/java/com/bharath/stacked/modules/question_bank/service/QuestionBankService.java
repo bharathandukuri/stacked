@@ -17,23 +17,25 @@ public interface QuestionBankService {
 
     PageResponse<QuestionBankSummaryResponse> getQuestionBanks(QuestionBankFilterRequest filter);
 
-    QuestionBankDetailResponse getQuestionBank(String idOrSlug);
+    QuestionBankDetailResponse getQuestionBank(String id);
 
-    QuestionBankSummaryResponse updateQuestionBank(String idOrSlug, UpdateQuestionBankRequest request);
+    QuestionBankSummaryResponse updateQuestionBank(String id, UpdateQuestionBankRequest request);
 
-    void deleteQuestionBank(String idOrSlug);
+    void deleteQuestionBank(String id);
 
-    QuestionBankSummaryResponse updateStatus(String idOrSlug, QuestionBankStatus status);
+    QuestionBankSummaryResponse updateStatus(String id, QuestionBankStatus status);
 
-    QuestionBankSummaryResponse publish(String idOrSlug);
+    QuestionBankSummaryResponse publish(String id);
 
-    QuestionBankSummaryResponse unpublish(String idOrSlug);
+    QuestionBankSummaryResponse unpublish(String id);
 
-    QuestionBankSummaryResponse duplicateQuestionBank(String idOrSlug, String authorId);
+    QuestionBankSummaryResponse duplicateQuestionBank(String id, String authorId);
 
     List<String> getDistinctCategories();
 
     QuestionBankStatsResponse getStats();
 
     void removeQuestionFromAllBanks(String questionId);
+
+    boolean isInUse(String id);
 }

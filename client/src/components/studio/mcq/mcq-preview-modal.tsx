@@ -58,16 +58,10 @@ export function McqPreviewModal({
     setSubmitted(false)
   }
 
-  // Calculate score if submitted
+  // Check correctness if submitted
   const isCorrect =
     question.correctOptionIds.length === selectedOptionIds.length &&
     question.correctOptionIds.every((id) => selectedOptionIds.includes(id))
-
-  const earnedPoints = isCorrect
-    ? question.defaultPoints
-    : selectedOptionIds.length > 0 && question.negativePoints > 0
-    ? -question.negativePoints
-    : 0
 
   const showAnswers = examinerMode || submitted
 
@@ -91,10 +85,6 @@ export function McqPreviewModal({
                 className="text-[11px] font-medium"
               >
                 {question.difficulty}
-              </Badge>
-              <Badge variant="outline" className="text-[11px]">
-                +{question.defaultPoints} pts
-                {question.negativePoints > 0 && ` / -${question.negativePoints}`}
               </Badge>
             </div>
 
@@ -247,12 +237,12 @@ export function McqPreviewModal({
                   {isCorrect ? (
                     <>
                       <CheckCircle2 className="h-4 w-4" />
-                      Correct! (+{earnedPoints} pts)
+                      Correct!
                     </>
                   ) : (
                     <>
                       <XCircle className="h-4 w-4" />
-                      Incorrect ({earnedPoints} pts)
+                      Incorrect
                     </>
                   )}
                 </div>

@@ -536,4 +536,17 @@ class CodingProblemControllerTest {
 
         verify(codingProblemService).delete("prob-999");
     }
+
+    @Test
+    @DisplayName("GET /api/coding-problem/{idOrSlug}/in-use returns whether problem is in use")
+    void testIsInUse_Success() throws Exception {
+        when(codingProblemService.isInUse("two-sum")).thenReturn(true);
+
+        mockMvc.perform(get("/api/coding-problem/two-sum/in-use"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.inUse").value(true));
+
+        verify(codingProblemService).isInUse("two-sum");
+    }
 }

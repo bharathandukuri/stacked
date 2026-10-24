@@ -17,8 +17,6 @@ public record CandidateMcqResponse(
         @NonNull McqDifficulty difficulty,
         @NonNull List<String> topics,
         @NonNull List<CandidateMcqOptionResponse> options,
-        double defaultPoints,
-        double negativePoints,
         boolean shuffleOptions) {
 
     public static CandidateMcqResponse fromModel(@NonNull McqQuestion question, boolean doShuffle) {
@@ -38,8 +36,6 @@ public record CandidateMcqResponse(
                 question.getDifficulty(),
                 question.getTopics() != null ? question.getTopics() : List.of(),
                 optionResponses,
-                question.getDefaultPoints(),
-                question.getNegativePoints(),
                 question.isShuffleOptions()
         );
     }

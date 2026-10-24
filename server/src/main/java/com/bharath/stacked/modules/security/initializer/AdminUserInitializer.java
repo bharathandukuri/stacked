@@ -1,11 +1,11 @@
 package com.bharath.stacked.modules.security.initializer;
 
+import com.bharath.stacked.modules.security.config.AdminProperties;
 import com.bharath.stacked.modules.security.model.Role;
 import com.bharath.stacked.modules.security.model.User;
 import com.bharath.stacked.modules.security.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,25 +18,18 @@ public class AdminUserInitializer implements ApplicationRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-
-    @Value("${admin.default.enabled:true}")
-    private boolean enabled;
-
-    @Value("${admin.default.email:}")
-    private String defaultEmail;
-
-    @Value("${admin.default.password:}")
-    private String defaultPassword;
-
-    @Value("${admin.default.name:Platform Admin}")
-    private String defaultName;
+    private final AdminProperties adminProperties;
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!enabled) {
+        if (!adminProperties.enabled()) {
             log.info("Default admin provisioning is disabled (admin.default.enabled=false).");
             return;
         }
+
+        String defaultEmail = adminProperties.email();
+        String defaultPassword = adminProperties.password();
+        String defaultName = adminProperties.name();
 
         if (defaultEmail == null || defaultEmail.isBlank() || defaultPassword == null || defaultPassword.isBlank()) {
             log.info("Default admin provisioning credentials not configured. Skipping admin user seeding.");

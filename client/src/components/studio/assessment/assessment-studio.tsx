@@ -52,7 +52,7 @@ interface CuratedQuestionItem {
   questionId: string
   questionType: BankQuestionType
   title: string
-  slug: string
+  slug?: string
   difficulty?: string
   points: number
   order: number
@@ -230,7 +230,7 @@ export function AssessmentStudio() {
       title: item.title,
       slug: item.slug,
       difficulty: item.difficulty,
-      points: item.defaultPoints ?? (item.questionType === "CODING" ? 10 : 1),
+      points: item.points ?? item.defaultPoints ?? (item.questionType === "CODING" ? 10 : 1),
       order: curatedQuestions.length + idx + 1,
     }))
     setCuratedQuestions((prev) => [...prev, ...newItems])

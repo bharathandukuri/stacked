@@ -41,11 +41,11 @@ export const mcqService = {
   },
 
   /**
-   * Get single MCQ question by ID or Slug
+   * Get single MCQ question by ID
    */
-  async getQuestion(idOrSlug: string): Promise<McqQuestionDetail> {
+  async getQuestion(id: string): Promise<McqQuestionDetail> {
     const response = await API.get<ApiResponse<McqQuestionDetail>>(
-      `/admin/mcq/questions/${encodeURIComponent(idOrSlug)}`
+      `/admin/mcq/questions/${encodeURIComponent(id)}`
     )
     return response.data.data
   },
@@ -65,11 +65,11 @@ export const mcqService = {
    * Update an existing MCQ question
    */
   async updateQuestion(
-    idOrSlug: string,
+    id: string,
     payload: UpdateMcqPayload
   ): Promise<McqQuestionDetail> {
     const response = await API.put<ApiResponse<McqQuestionDetail>>(
-      `/admin/mcq/questions/${encodeURIComponent(idOrSlug)}`,
+      `/admin/mcq/questions/${encodeURIComponent(id)}`,
       payload
     )
     return response.data.data
@@ -78,9 +78,9 @@ export const mcqService = {
   /**
    * Delete an MCQ question
    */
-  async deleteQuestion(idOrSlug: string): Promise<void> {
+  async deleteQuestion(id: string): Promise<void> {
     await API.delete<ApiResponse<void>>(
-      `/admin/mcq/questions/${encodeURIComponent(idOrSlug)}`
+      `/admin/mcq/questions/${encodeURIComponent(id)}`
     )
   },
 
@@ -88,11 +88,11 @@ export const mcqService = {
    * Update question status
    */
   async updateStatus(
-    idOrSlug: string,
+    id: string,
     status: McqStatus
   ): Promise<McqQuestionDetail> {
     const response = await API.patch<ApiResponse<McqQuestionDetail>>(
-      `/admin/mcq/questions/${encodeURIComponent(idOrSlug)}/status`,
+      `/admin/mcq/questions/${encodeURIComponent(id)}/status`,
       { status }
     )
     return response.data.data
@@ -101,9 +101,9 @@ export const mcqService = {
   /**
    * Publish a question
    */
-  async publishQuestion(idOrSlug: string): Promise<McqQuestionDetail> {
+  async publishQuestion(id: string): Promise<McqQuestionDetail> {
     const response = await API.patch<ApiResponse<McqQuestionDetail>>(
-      `/admin/mcq/questions/${encodeURIComponent(idOrSlug)}/publish`
+      `/admin/mcq/questions/${encodeURIComponent(id)}/publish`
     )
     return response.data.data
   },
@@ -111,24 +111,21 @@ export const mcqService = {
   /**
    * Unpublish a question (restore to DRAFT)
    */
-  async unpublishQuestion(idOrSlug: string): Promise<McqQuestionDetail> {
+  async unpublishQuestion(id: string): Promise<McqQuestionDetail> {
     const response = await API.patch<ApiResponse<McqQuestionDetail>>(
-      `/admin/mcq/questions/${encodeURIComponent(idOrSlug)}/unpublish`
+      `/admin/mcq/questions/${encodeURIComponent(id)}/unpublish`
     )
     return response.data.data
   },
 
   /**
-   * Check if a slug is available
+   * Check if a question is currently in use
    */
-  async checkSlug(slug: string, excludeId?: string): Promise<boolean> {
-    const response = await API.get<ApiResponse<{ available: boolean }>>(
-      "/admin/mcq/questions/check-slug",
-      {
-        params: { slug, excludeId },
-      }
+  async isInUse(id: string): Promise<boolean> {
+    const response = await API.get<ApiResponse<{ inUse: boolean }>>(
+      `/admin/mcq/questions/${encodeURIComponent(id)}/in-use`
     )
-    return response.data.data.available
+    return response.data.data.inUse
   },
 
   /**

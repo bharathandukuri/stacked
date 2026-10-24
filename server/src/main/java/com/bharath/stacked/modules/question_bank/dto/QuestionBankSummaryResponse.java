@@ -15,7 +15,6 @@ import java.util.List;
 @AllArgsConstructor
 public class QuestionBankSummaryResponse {
     private String id;
-    private String slug;
     private String title;
     private String description;
     private String category;

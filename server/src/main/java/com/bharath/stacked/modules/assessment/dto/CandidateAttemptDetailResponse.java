@@ -30,6 +30,8 @@ public class CandidateAttemptDetailResponse {
     private long remainingSeconds;
     private int totalQuestions;
     private double totalScore;
+    private boolean manuallyCompleted;
+    private String manualInterventionMessage;
 
     @Builder.Default
     private List<AssessmentItemResponse> questions = new ArrayList<>();

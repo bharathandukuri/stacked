@@ -23,6 +23,10 @@ public interface AssessmentRepository extends MongoRepository<Assessment, String
 
     List<Assessment> findAllByItemsQuestionId(String questionId);
 
+    boolean existsByItemsQuestionId(String questionId);
+
     List<Assessment> findAllByQuestionBankId(String questionBankId);
+
+    boolean existsByQuestionBankId(String questionBankId);
 }
 

@@ -91,8 +91,6 @@ class QuestionBankCurriculumIntegrationTest extends AbstractIntegrationTest {
                 ),
                 List.of("opt-1"),
                 "Explanation",
-                1.0,
-                0.0,
                 true,
                 List.of()
         ), "admin");
@@ -152,8 +150,6 @@ class QuestionBankCurriculumIntegrationTest extends AbstractIntegrationTest {
                 ),
                 List.of("opt-t"),
                 "Explanation",
-                2.0,
-                0.0,
                 true,
                 List.of()
         ), "admin");

@@ -33,6 +33,7 @@ import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
 import com.bharath.stacked.modules.assessment.model.Assessment;
+import com.bharath.stacked.modules.assessment.repository.AssessmentQuestionResponseRepository;
 import com.bharath.stacked.modules.assessment.repository.AssessmentRepository;
 import com.bharath.stacked.modules.coding_problem.dto.request.CodingProblemFilterRequest;
 import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemSummaryResponse;
@@ -80,6 +81,7 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     private final ApplicationEventPublisher eventPublisher;
     private final QuestionBankRepository questionBankRepository;
     private final AssessmentRepository assessmentRepository;
+    private final AssessmentQuestionResponseRepository assessmentQuestionResponseRepository;
 
     public CodingProblemServiceImpl(CodingProblemRepository codingProblemRepository,
                                   MongoTemplate mongoTemplate,
@@ -90,6 +92,23 @@ public class CodingProblemServiceImpl implements CodingProblemService {
                                   ApplicationEventPublisher eventPublisher,
                                   QuestionBankRepository questionBankRepository,
                                   AssessmentRepository assessmentRepository) {
+        this(codingProblemRepository, mongoTemplate, languageRegistry, executionConstraintResolver,
+                codingProblemJudgeService, fileService, eventPublisher, questionBankRepository,
+                assessmentRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CodingProblemServiceImpl(CodingProblemRepository codingProblemRepository,
+                                  MongoTemplate mongoTemplate,
+                                  LanguageRegistry languageRegistry,
+                                  ExecutionConstraintResolver executionConstraintResolver,
+                                  CodingProblemJudgeService codingProblemJudgeService,
+                                  FileService fileService,
+                                  ApplicationEventPublisher eventPublisher,
+                                  QuestionBankRepository questionBankRepository,
+                                  AssessmentRepository assessmentRepository,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  AssessmentQuestionResponseRepository assessmentQuestionResponseRepository) {
         this.codingProblemRepository = codingProblemRepository;
         this.mongoTemplate = mongoTemplate;
         this.languageRegistry = languageRegistry;
@@ -99,6 +118,7 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         this.eventPublisher = eventPublisher;
         this.questionBankRepository = questionBankRepository;
         this.assessmentRepository = assessmentRepository;
+        this.assessmentQuestionResponseRepository = assessmentQuestionResponseRepository;
     }
 
     @Override
@@ -453,6 +473,10 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     public CodingProblem update(String idOrSlug, UpdateCodingProblemRequest request) {
         CodingProblem existing = findByIdOrSlug(idOrSlug);
 
+        if (existing.getStatus() == CodingProblemStatus.PUBLISHED) {
+            throw new ConflictException("Cannot edit coding problem '" + existing.getTitle() + "' because it is currently PUBLISHED. Unpublish to DRAFT first.");
+        }
+
         // Validate slug uniqueness against other problems
         if (!existing.getSlug().equals(request.getSlug())) {
             Optional<CodingProblem> duplicate = codingProblemRepository.findBySlug(request.getSlug());
@@ -519,15 +543,18 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     public void delete(String idOrSlug) {
         CodingProblem existing = findByIdOrSlug(idOrSlug);
 
-        List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(existing.getId());
-        List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(existing.getId());
-        if (!banks.isEmpty() || !assessments.isEmpty()) {
+        if (isInUse(existing.getId())) {
+            List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(existing.getId());
+            List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(existing.getId());
             List<String> usages = new ArrayList<>();
             if (!banks.isEmpty()) {
                 usages.add(banks.size() + " question bank(s) [" + banks.stream().map(QuestionBank::getTitle).collect(Collectors.joining(", ")) + "]");
             }
             if (!assessments.isEmpty()) {
                 usages.add(assessments.size() + " assessment(s) [" + assessments.stream().map(Assessment::getTitle).collect(Collectors.joining(", ")) + "]");
+            }
+            if (usages.isEmpty()) {
+                usages.add("historical assessment attempt responses");
             }
             throw new ConflictException("Cannot delete coding problem '" + existing.getTitle() + "' because it is currently in use by: " + String.join("; ", usages) + ".");
         }
@@ -910,6 +937,25 @@ public class CodingProblemServiceImpl implements CodingProblemService {
             return codingProblem;
         }
 
+        if ((status == CodingProblemStatus.DRAFT || status == CodingProblemStatus.UNPUBLISHED)
+                && currentStatus == CodingProblemStatus.PUBLISHED) {
+            if (isInUse(codingProblem.getId())) {
+                List<QuestionBank> banks = questionBankRepository.findAllByItemsQuestionId(codingProblem.getId());
+                List<Assessment> assessments = assessmentRepository.findAllByItemsQuestionId(codingProblem.getId());
+                List<String> usages = new ArrayList<>();
+                if (!banks.isEmpty()) {
+                    usages.add(banks.size() + " question bank(s) [" + banks.stream().map(QuestionBank::getTitle).collect(Collectors.joining(", ")) + "]");
+                }
+                if (!assessments.isEmpty()) {
+                    usages.add(assessments.size() + " assessment(s) [" + assessments.stream().map(Assessment::getTitle).collect(Collectors.joining(", ")) + "]");
+                }
+                if (usages.isEmpty()) {
+                    usages.add("historical assessment attempt responses");
+                }
+                throw new ConflictException("Cannot move coding problem '" + codingProblem.getTitle() + "' back to draft/unpublished because it is currently in use by: " + String.join("; ", usages) + ".");
+            }
+        }
+
         if (status == CodingProblemStatus.PUBLISHED) {
             if (codingProblem.getTitle() == null || codingProblem.getTitle().isBlank()) {
                 throw new BadRequestException("Cannot publish coding problem without a title.");
@@ -927,6 +973,25 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         codingProblem.setStatus(status);
         codingProblem.setUpdatedAt(Instant.now());
         return codingProblemRepository.save(codingProblem);
+    }
+
+    @Override
+    public boolean isInUse(String idOrSlug) {
+        if (!org.springframework.util.StringUtils.hasText(idOrSlug)) {
+            return false;
+        }
+        CodingProblem problem = codingProblemRepository.findById(idOrSlug)
+                .or(() -> codingProblemRepository.findBySlug(idOrSlug))
+                .orElse(null);
+        if (problem == null) {
+            return false;
+        }
+        String problemId = problem.getId();
+        boolean inBanks = questionBankRepository.existsByItemsQuestionId(problemId);
+        boolean inAssessments = assessmentRepository.existsByItemsQuestionId(problemId);
+        boolean inResponses = assessmentQuestionResponseRepository != null
+                && assessmentQuestionResponseRepository.existsByQuestionId(problemId);
+        return inBanks || inAssessments || inResponses;
     }
 
     @Transactional

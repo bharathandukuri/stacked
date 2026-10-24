@@ -36,11 +36,11 @@ export const questionBankService = {
   },
 
   /**
-   * Get single Question Bank by ID or Slug (with hydrated questions)
+   * Get single Question Bank by ID (with hydrated questions)
    */
-  async getQuestionBank(idOrSlug: string): Promise<QuestionBankDetail> {
+  async getQuestionBank(id: string): Promise<QuestionBankDetail> {
     const response = await API.get<ApiResponse<QuestionBankDetail>>(
-      `/admin/question-banks/${encodeURIComponent(idOrSlug)}`
+      `/admin/question-banks/${encodeURIComponent(id)}`
     )
     return response.data.data
   },
@@ -60,11 +60,11 @@ export const questionBankService = {
    * Update an existing Question Bank
    */
   async updateQuestionBank(
-    idOrSlug: string,
+    id: string,
     payload: UpdateQuestionBankPayload
   ): Promise<QuestionBankSummary> {
     const response = await API.put<ApiResponse<QuestionBankSummary>>(
-      `/admin/question-banks/${encodeURIComponent(idOrSlug)}`,
+      `/admin/question-banks/${encodeURIComponent(id)}`,
       payload
     )
     return response.data.data
@@ -73,19 +73,19 @@ export const questionBankService = {
   /**
    * Delete a Question Bank
    */
-  async deleteQuestionBank(idOrSlug: string): Promise<void> {
-    await API.delete(`/admin/question-banks/${encodeURIComponent(idOrSlug)}`)
+  async deleteQuestionBank(id: string): Promise<void> {
+    await API.delete(`/admin/question-banks/${encodeURIComponent(id)}`)
   },
 
   /**
    * Update question bank status
    */
   async updateStatus(
-    idOrSlug: string,
+    id: string,
     status: QuestionBankStatus
   ): Promise<QuestionBankSummary> {
     const response = await API.patch<ApiResponse<QuestionBankSummary>>(
-      `/admin/question-banks/${encodeURIComponent(idOrSlug)}/status`,
+      `/admin/question-banks/${encodeURIComponent(id)}/status`,
       { status }
     )
     return response.data.data
@@ -94,9 +94,9 @@ export const questionBankService = {
   /**
    * Publish a question bank
    */
-  async publish(idOrSlug: string): Promise<QuestionBankSummary> {
+  async publish(id: string): Promise<QuestionBankSummary> {
     const response = await API.patch<ApiResponse<QuestionBankSummary>>(
-      `/admin/question-banks/${encodeURIComponent(idOrSlug)}/publish`
+      `/admin/question-banks/${encodeURIComponent(id)}/publish`
     )
     return response.data.data
   },
@@ -104,19 +104,29 @@ export const questionBankService = {
   /**
    * Unpublish a question bank (restore to DRAFT)
    */
-  async unpublish(idOrSlug: string): Promise<QuestionBankSummary> {
+  async unpublish(id: string): Promise<QuestionBankSummary> {
     const response = await API.patch<ApiResponse<QuestionBankSummary>>(
-      `/admin/question-banks/${encodeURIComponent(idOrSlug)}/unpublish`
+      `/admin/question-banks/${encodeURIComponent(id)}/unpublish`
     )
     return response.data.data
   },
 
   /**
+   * Check if a question bank is currently in use
+   */
+  async isInUse(id: string): Promise<boolean> {
+    const response = await API.get<ApiResponse<{ inUse: boolean }>>(
+      `/admin/question-banks/${encodeURIComponent(id)}/in-use`
+    )
+    return response.data.data.inUse
+  },
+
+  /**
    * Duplicate a Question Bank
    */
-  async duplicateQuestionBank(idOrSlug: string): Promise<QuestionBankSummary> {
+  async duplicateQuestionBank(id: string): Promise<QuestionBankSummary> {
     const response = await API.post<ApiResponse<QuestionBankSummary>>(
-      `/admin/question-banks/${encodeURIComponent(idOrSlug)}/duplicate`
+      `/admin/question-banks/${encodeURIComponent(id)}/duplicate`
     )
     return response.data.data
   },

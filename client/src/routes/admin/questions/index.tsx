@@ -7,7 +7,6 @@ import {
   Copy,
   RotateCcw,
   Loader2,
-  Check,
   MoreVertical,
   Pencil,
   Trash2,
@@ -24,6 +23,7 @@ import { AdminSidebar } from "@/components/admin/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -87,8 +87,6 @@ export function AdminQuestionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL")
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
-  const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
-
   // Dialog State
   const [bankToDelete, setBankToDelete] = useState<QuestionBankSummary | null>(
     null
@@ -141,17 +139,9 @@ export function AdminQuestionsPage() {
 
   const deleteMutation = useDeleteQuestionBank()
   const duplicateMutation = useDuplicateQuestionBank()
-
-  const handleCopySlug = (slug: string) => {
-    navigator.clipboard.writeText(slug)
-    setCopiedSlug(slug)
-    toast.add({
-      title: "Slug Copied",
-      description: "Identifier copied to clipboard.",
-      type: "success",
-    })
-    setTimeout(() => setCopiedSlug(null), 2000)
-  }
+  const publishMutation = usePublishQuestionBank()
+  const unpublishMutation = useUnpublishQuestionBank()
+  const [mutatingId, setMutatingId] = useState<string | null>(null)
 
   const handleDeleteConfirm = async () => {
     if (!bankToDelete) return
@@ -175,12 +165,9 @@ export function AdminQuestionsPage() {
     }
   }
 
-  const publishMutation = usePublishQuestionBank()
-  const unpublishMutation = useUnpublishQuestionBank()
-  const [mutatingId, setMutatingId] = useState<string | null>(null)
-
-  const handlePublish = async (bank: QuestionBankSummary) => {
-    if (bank.totalQuestions === 0) {
+  const handleToggleStatus = async (bank: QuestionBankSummary) => {
+    const isCurrentlyPublished = bank.status === "PUBLISHED"
+    if (!isCurrentlyPublished && bank.totalQuestions === 0) {
       toast.add({
         title: "Cannot Publish",
         description: "Curate at least one question before publishing this question bank.",
@@ -190,16 +177,13 @@ export function AdminQuestionsPage() {
     }
     setMutatingId(bank.id)
     try {
-      await publishMutation.mutateAsync(bank.id)
-    } finally {
-      setMutatingId(null)
-    }
-  }
-
-  const handleUnpublish = async (bank: QuestionBankSummary) => {
-    setMutatingId(bank.id)
-    try {
-      await unpublishMutation.mutateAsync(bank.id)
+      if (isCurrentlyPublished) {
+        await unpublishMutation.mutateAsync(bank.id)
+      } else {
+        await publishMutation.mutateAsync(bank.id)
+      }
+    } catch {
+      // toast handled in hook
     } finally {
       setMutatingId(null)
     }
@@ -343,7 +327,7 @@ export function AdminQuestionsPage() {
                   setSearchInput(e.target.value)
                   setPage(0)
                 }}
-                placeholder="Search by title, description, or slug..."
+                placeholder="Search by title or description..."
                 className="pl-9 text-sm"
               />
               {searchInput && (
@@ -499,7 +483,7 @@ export function AdminQuestionsPage() {
                         key={bank.id}
                         className="group transition-colors hover:bg-muted/40"
                       >
-                        {/* Bank Title, Description & Slug */}
+                        {/* Bank Title & Tags */}
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Link
@@ -509,25 +493,7 @@ export function AdminQuestionsPage() {
                             >
                               {bank.title}
                             </Link>
-                            {bank.description ? (
-                              <p className="text-xs text-muted-foreground line-clamp-1">
-                                {bank.description}
-                              </p>
-                            ) : null}
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                              <button
-                                type="button"
-                                onClick={() => handleCopySlug(bank.slug)}
-                                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/70 hover:text-foreground font-mono"
-                                title="Copy slug"
-                              >
-                                {copiedSlug === bank.slug ? (
-                                  <Check className="size-3 text-emerald-500" />
-                                ) : (
-                                  <Copy className="size-3" />
-                                )}
-                                <span>{bank.slug}</span>
-                              </button>
                               {bank.tags?.map((tag) => (
                                 <Badge
                                   key={tag}
@@ -581,24 +547,32 @@ export function AdminQuestionsPage() {
                           </div>
                         </TableCell>
 
-                        {/* Status */}
+                        {/* Status Toggle */}
                         <TableCell>
-                          {bank.status === "PUBLISHED" && (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] uppercase font-bold"
-                            >
-                              Published
-                            </Badge>
-                          )}
-                          {bank.status === "DRAFT" && (
-                            <Badge
-                              variant="outline"
-                              className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] uppercase font-bold"
-                            >
-                              Draft
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-2.5">
+                            <Switch
+                              size="sm"
+                              checked={bank.status === "PUBLISHED"}
+                              disabled={mutatingId === bank.id}
+                              onCheckedChange={() => handleToggleStatus(bank)}
+                              aria-label={`Toggle publication status for ${bank.title}`}
+                            />
+                            <div className="flex items-center gap-1">
+                              {mutatingId === bank.id ? (
+                                <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                              ) : (
+                                <span
+                                  className={`text-xs font-medium ${
+                                    bank.status === "PUBLISHED"
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-muted-foreground"
+                                  }`}
+                                >
+                                  {bank.status === "PUBLISHED" ? "Published" : "Draft"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </TableCell>
 
                         {/* Actions */}
@@ -618,37 +592,15 @@ export function AdminQuestionsPage() {
                             />
                             <DropdownMenuContent align="end" className="w-44">
                               <DropdownMenuItem
-                                onClick={() => handleCopySlug(bank.slug)}
+                                onClick={() => handleToggleStatus(bank)}
+                                disabled={mutatingId === bank.id}
                                 className="gap-2 cursor-pointer"
                               >
-                                <Copy className="size-3.5" />
-                                <span>Copy Slug</span>
+                                <CheckCircle2 className="size-3.5" />
+                                <span>
+                                  {bank.status === "PUBLISHED" ? "Unpublish" : "Publish"}
+                                </span>
                               </DropdownMenuItem>
-
-                              {bank.status === "PUBLISHED" && (
-                                <DropdownMenuItem
-                                  onClick={() => handleUnpublish(bank)}
-                                  disabled={mutatingId === bank.id}
-                                  className="gap-2 cursor-pointer"
-                                >
-                                  <CheckCircle2 className="size-3.5" />
-                                  <span>Unpublish to Draft</span>
-                                </DropdownMenuItem>
-                              )}
-                              {bank.status === "DRAFT" && (
-                                <DropdownMenuItem
-                                  onClick={() => handlePublish(bank)}
-                                  disabled={mutatingId === bank.id || bank.totalQuestions === 0}
-                                  className="gap-2 cursor-pointer"
-                                  title={bank.totalQuestions === 0 ? "Curate at least 1 question to publish" : undefined}
-                                >
-                                  <CheckCircle2 className="size-3.5" />
-                                  <span>
-                                    Publish Bank
-                                    {bank.totalQuestions === 0 && " (Empty)"}
-                                  </span>
-                                </DropdownMenuItem>
-                              )}
 
                               <DropdownMenuSeparator />
 
@@ -663,12 +615,21 @@ export function AdminQuestionsPage() {
                               <DropdownMenuSeparator />
 
                               <DropdownMenuItem
-                                onClick={() =>
+                                onClick={() => {
+                                  if (bank.status === "PUBLISHED") {
+                                    toast.add({
+                                      title: "Cannot Edit Published Bank",
+                                      description: "Only draft question banks can be edited. Unpublish to DRAFT first.",
+                                      type: "warning",
+                                    })
+                                    return
+                                  }
                                   navigate({
                                     to: "/admin/questions/studio/$bankId",
                                     params: { bankId: bank.id },
                                   })
-                                }
+                                }}
+                                disabled={bank.status === "PUBLISHED"}
                                 className="gap-2 cursor-pointer"
                               >
                                 <Pencil className="size-3.5" />

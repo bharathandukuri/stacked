@@ -15,7 +15,7 @@ export interface HydratedQuestionItem {
   customPoints?: number | null
   effectivePoints: number
   title: string
-  slug: string
+  slug?: string | null
   snippet?: string | null
   difficulty?: string | null
   topics?: string[]
@@ -23,7 +23,6 @@ export interface HydratedQuestionItem {
 
 export interface QuestionBankSummary {
   id: string
-  slug: string
   title: string
   description?: string | null
   category?: string | null
@@ -39,7 +38,6 @@ export interface QuestionBankSummary {
 
 export interface QuestionBankDetail {
   id: string
-  slug: string
   title: string
   description?: string | null
   category?: string | null

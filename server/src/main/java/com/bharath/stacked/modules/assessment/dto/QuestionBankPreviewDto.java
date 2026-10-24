@@ -16,7 +16,6 @@ import java.util.Map;
 @AllArgsConstructor
 public class QuestionBankPreviewDto {
     private String id;
-    private String slug;
     private String title;
     private String description;
     private String category;

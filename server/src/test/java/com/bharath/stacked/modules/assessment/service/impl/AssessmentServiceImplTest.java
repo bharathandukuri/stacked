@@ -8,6 +8,7 @@ import com.bharath.stacked.modules.assessment.enums.AttemptStatus;
 import com.bharath.stacked.modules.assessment.enums.CandidateParticipationStatus;
 import com.bharath.stacked.modules.assessment.model.*;
 import com.bharath.stacked.modules.assessment.repository.*;
+import com.bharath.stacked.modules.assessment.websocket.AssessmentWebSocketHandler;
 import com.bharath.stacked.modules.coding_problem.dto.response.CodingProblemExecutionResponse;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemDifficulty;
 import com.bharath.stacked.modules.coding_problem.enums.CodingProblemStatus;
@@ -81,6 +82,8 @@ class AssessmentServiceImplTest {
     private MongoTemplate mongoTemplate;
     @Mock
     private AssessmentAuditEventRepository auditEventRepository;
+    @Mock
+    private AssessmentWebSocketHandler webSocketHandler;
 
     @InjectMocks
     private AssessmentServiceImpl assessmentService;
@@ -93,12 +96,10 @@ class AssessmentServiceImplTest {
     void setUp() {
         sampleMcq = McqQuestion.builder()
                 .id("mcq-101")
-                .slug("java-basics")
                 .title("Java Basics")
                 .content("What is byte code?")
                 .type(McqType.SINGLE_CHOICE)
                 .status(McqStatus.PUBLISHED)
-                .defaultPoints(5.0)
                 .options(List.of(
                         new McqOption("opt-1", "Intermediate language", null),
                         new McqOption("opt-2", "Machine code", null)
@@ -739,6 +740,109 @@ class AssessmentServiceImplTest {
         assertThat(res.getStatus()).isEqualTo(AssessmentStatus.COMPLETED);
         assertThat(assessment.getScheduledEnd()).isNotNull();
         assertThat(assessment.getStatus()).isEqualTo(AssessmentStatus.COMPLETED);
+        assertThat(assessment.isManuallyCompleted()).isTrue();
+        assertThat(assessment.getManualInterventionMessage()).contains("manually completed");
+        verify(webSocketHandler).broadcastToAssessment(eq("ass-open"), anyMap());
+        verify(auditEventRepository).save(any(AssessmentAuditEvent.class));
+    }
+
+    @Test
+    @DisplayName("activateAssessment should override future start, set status to ACTIVE, and notify candidates")
+    void shouldManuallyActivateAssessment() {
+        AssessmentItem item = AssessmentItem.builder().questionId("q-1").questionType(BankQuestionType.MCQ).points(5.0).build();
+        Assessment assessment = Assessment.builder()
+                .id("ass-future")
+                .title("Future Test")
+                .status(AssessmentStatus.NOT_STARTED)
+                .scheduledStart(Instant.now().plus(Duration.ofHours(24)))
+                .scheduledEnd(Instant.now().plus(Duration.ofHours(48)))
+                .items(List.of(item))
+                .build();
+
+        when(assessmentRepository.findById("ass-future")).thenReturn(Optional.of(assessment));
+        when(assessmentRepository.save(any(Assessment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AssessmentDetailResponse res = assessmentService.activateAssessment("ass-future");
+
+        assertThat(res.getStatus()).isEqualTo(AssessmentStatus.ACTIVE);
+        assertThat(assessment.isManuallyActivated()).isTrue();
+        assertThat(assessment.getScheduledStart()).isBeforeOrEqualTo(Instant.now());
+        assertThat(assessment.getManualInterventionMessage()).contains("manually activated");
+        verify(webSocketHandler).broadcastToAssessment(eq("ass-future"), anyMap());
+        verify(auditEventRepository).save(any(AssessmentAuditEvent.class));
+    }
+
+    @Test
+    @DisplayName("activateAssessment should reject if assessment has no questions")
+    void activateAssessment_FailsWhenNoQuestions() {
+        Assessment assessment = Assessment.builder()
+                .id("ass-empty")
+                .status(AssessmentStatus.NOT_STARTED)
+                .scheduledStart(Instant.now().plus(Duration.ofHours(2)))
+                .items(List.of())
+                .build();
+
+        when(assessmentRepository.findById("ass-empty")).thenReturn(Optional.of(assessment));
+
+        assertThatThrownBy(() -> assessmentService.activateAssessment("ass-empty"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("no questions configured");
+    }
+
+    @Test
+    @DisplayName("activateAssessment should reject if already ACTIVE or COMPLETED")
+    void activateAssessment_FailsWhenAlreadyActiveOrCompleted() {
+        Assessment activeAssessment = Assessment.builder()
+                .id("ass-active")
+                .status(AssessmentStatus.ACTIVE)
+                .items(List.of(AssessmentItem.builder().questionId("q-1").build()))
+                .build();
+
+        when(assessmentRepository.findById("ass-active")).thenReturn(Optional.of(activeAssessment));
+
+        assertThatThrownBy(() -> assessmentService.activateAssessment("ass-active"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("already ACTIVE");
+    }
+
+    @Test
+    @DisplayName("bulkAssignCandidates should reject enrollment after assessment is manually activated")
+    void bulkAssignCandidates_FailsWhenManuallyActivated() {
+        Assessment assessment = Assessment.builder()
+                .id("ass-activated")
+                .manuallyActivated(true)
+                .status(AssessmentStatus.ACTIVE)
+                .build();
+
+        when(assessmentRepository.findById("ass-activated")).thenReturn(Optional.of(assessment));
+
+        BulkAssignCandidatesRequest req = BulkAssignCandidatesRequest.builder()
+                .emails(List.of("new@test.com"))
+                .build();
+
+        assertThatThrownBy(() -> assessmentService.bulkAssignCandidates("ass-activated", req))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Candidate roster is frozen");
+    }
+
+    @Test
+    @DisplayName("joinByInvitationCode should reject new registration when assessment is manually activated")
+    void joinByInvitationCode_FailsWhenManuallyActivated() {
+        Assessment assessment = Assessment.builder()
+                .id("ass-man-act")
+                .invitationCode("STK-FROZEN")
+                .invitationCodeEnabled(true)
+                .manuallyActivated(true)
+                .status(AssessmentStatus.ACTIVE)
+                .build();
+
+        when(assessmentRepository.findByInvitationCode("STK-FROZEN")).thenReturn(Optional.of(assessment));
+        when(assignmentRepository.findByAssessmentIdAndCandidateEmail(eq("ass-man-act"), anyString())).thenReturn(Optional.empty());
+        when(assignmentRepository.findByAssessmentIdAndCandidateUserId(eq("ass-man-act"), anyString())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> assessmentService.joinByInvitationCode("user-99", "new@test.com", new JoinByCodeRequest("STK-FROZEN")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Candidate roster is frozen");
     }
 }
 

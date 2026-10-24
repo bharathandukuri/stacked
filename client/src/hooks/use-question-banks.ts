@@ -29,8 +29,8 @@ export const questionBankKeys = {
   banks: () => [...questionBankKeys.all, "banks"] as const,
   bankList: (filters: QuestionBankFilterParams) =>
     [...questionBankKeys.banks(), "list", filters] as const,
-  bankDetail: (idOrSlug: string) =>
-    [...questionBankKeys.banks(), "detail", idOrSlug] as const,
+  bankDetail: (id: string) =>
+    [...questionBankKeys.banks(), "detail", id] as const,
   stats: () => [...questionBankKeys.all, "stats"] as const,
   categories: () => [...questionBankKeys.all, "categories"] as const,
 }
@@ -47,13 +47,24 @@ export function useQuestionBanks(filters: QuestionBankFilterParams = {}) {
 }
 
 /**
- * Hook to retrieve a single Question Bank by ID or Slug
+ * Hook to retrieve a single Question Bank by ID
  */
-export function useQuestionBank(idOrSlug?: string) {
+export function useQuestionBank(id?: string) {
   return useQuery<QuestionBankDetail>({
-    queryKey: questionBankKeys.bankDetail(idOrSlug || ""),
-    queryFn: () => questionBankService.getQuestionBank(idOrSlug!),
-    enabled: Boolean(idOrSlug),
+    queryKey: questionBankKeys.bankDetail(id || ""),
+    queryFn: () => questionBankService.getQuestionBank(id!),
+    enabled: Boolean(id),
+  })
+}
+
+/**
+ * Hook to check if a Question Bank is in use
+ */
+export function useQuestionBankInUse(id?: string) {
+  return useQuery<boolean>({
+    queryKey: [...questionBankKeys.banks(), "in-use", id],
+    queryFn: () => questionBankService.isInUse(id!),
+    enabled: Boolean(id),
   })
 }
 
@@ -116,12 +127,12 @@ export function useUpdateQuestionBank() {
 
   return useMutation({
     mutationFn: ({
-      idOrSlug,
+      id,
       payload,
     }: {
-      idOrSlug: string
+      id: string
       payload: UpdateQuestionBankPayload
-    }) => questionBankService.updateQuestionBank(idOrSlug, payload),
+    }) => questionBankService.updateQuestionBank(id, payload),
     onSuccess: (updated) => {
       toast.add({
         title: "Question Bank Updated",
@@ -131,9 +142,6 @@ export function useUpdateQuestionBank() {
       queryClient.invalidateQueries({ queryKey: questionBankKeys.banks() })
       queryClient.invalidateQueries({
         queryKey: questionBankKeys.bankDetail(updated.id),
-      })
-      queryClient.invalidateQueries({
-        queryKey: questionBankKeys.bankDetail(updated.slug),
       })
       queryClient.invalidateQueries({ queryKey: questionBankKeys.stats() })
       queryClient.invalidateQueries({ queryKey: questionBankKeys.categories() })
@@ -155,8 +163,8 @@ export function useDuplicateQuestionBank() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (idOrSlug: string) =>
-      questionBankService.duplicateQuestionBank(idOrSlug),
+    mutationFn: (id: string) =>
+      questionBankService.duplicateQuestionBank(id),
     onSuccess: (duplicated) => {
       toast.add({
         title: "Question Bank Duplicated",
@@ -184,7 +192,7 @@ export function useDeleteQuestionBank() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (idOrSlug: string) => questionBankService.deleteQuestionBank(idOrSlug),
+    mutationFn: (id: string) => questionBankService.deleteQuestionBank(id),
     onSuccess: () => {
       toast.add({
         title: "Question Bank Deleted",
@@ -213,12 +221,12 @@ export function useUpdateQuestionBankStatus() {
 
   return useMutation({
     mutationFn: ({
-      idOrSlug,
+      id,
       status,
     }: {
-      idOrSlug: string
+      id: string
       status: QuestionBankStatus
-    }) => questionBankService.updateStatus(idOrSlug, status),
+    }) => questionBankService.updateStatus(id, status),
     onSuccess: (updated) => {
       toast.add({
         title: "Status Updated",
@@ -228,9 +236,6 @@ export function useUpdateQuestionBankStatus() {
       queryClient.invalidateQueries({ queryKey: questionBankKeys.banks() })
       queryClient.invalidateQueries({
         queryKey: questionBankKeys.bankDetail(updated.id),
-      })
-      queryClient.invalidateQueries({
-        queryKey: questionBankKeys.bankDetail(updated.slug),
       })
       queryClient.invalidateQueries({ queryKey: questionBankKeys.stats() })
     },
@@ -251,7 +256,7 @@ export function usePublishQuestionBank() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (idOrSlug: string) => questionBankService.publish(idOrSlug),
+    mutationFn: (id: string) => questionBankService.publish(id),
     onSuccess: (updated) => {
       toast.add({
         title: "Question Bank Published",
@@ -261,9 +266,6 @@ export function usePublishQuestionBank() {
       queryClient.invalidateQueries({ queryKey: questionBankKeys.banks() })
       queryClient.invalidateQueries({
         queryKey: questionBankKeys.bankDetail(updated.id),
-      })
-      queryClient.invalidateQueries({
-        queryKey: questionBankKeys.bankDetail(updated.slug),
       })
       queryClient.invalidateQueries({ queryKey: questionBankKeys.stats() })
     },
@@ -284,7 +286,7 @@ export function useUnpublishQuestionBank() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (idOrSlug: string) => questionBankService.unpublish(idOrSlug),
+    mutationFn: (id: string) => questionBankService.unpublish(id),
     onSuccess: (updated) => {
       toast.add({
         title: "Question Bank Unpublished",
@@ -294,9 +296,6 @@ export function useUnpublishQuestionBank() {
       queryClient.invalidateQueries({ queryKey: questionBankKeys.banks() })
       queryClient.invalidateQueries({
         queryKey: questionBankKeys.bankDetail(updated.id),
-      })
-      queryClient.invalidateQueries({
-        queryKey: questionBankKeys.bankDetail(updated.slug),
       })
       queryClient.invalidateQueries({ queryKey: questionBankKeys.stats() })
     },

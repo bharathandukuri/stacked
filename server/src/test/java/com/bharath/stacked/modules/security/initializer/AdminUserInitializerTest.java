@@ -1,5 +1,6 @@
 package com.bharath.stacked.modules.security.initializer;
 
+import com.bharath.stacked.modules.security.config.AdminProperties;
 import com.bharath.stacked.modules.security.model.Role;
 import com.bharath.stacked.modules.security.model.User;
 import com.bharath.stacked.modules.security.repository.UserRepository;
@@ -8,12 +9,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -34,15 +33,13 @@ class AdminUserInitializerTest {
     @Mock
     private ApplicationArguments args;
 
-    @InjectMocks
+    private AdminProperties adminProperties;
     private AdminUserInitializer initializer;
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(initializer, "enabled", true);
-        ReflectionTestUtils.setField(initializer, "defaultEmail", "  Admin@Stacked.com ");
-        ReflectionTestUtils.setField(initializer, "defaultPassword", "AdminSecret123");
-        ReflectionTestUtils.setField(initializer, "defaultName", "Super Admin");
+        adminProperties = new AdminProperties(true, "  Admin@Stacked.com ", "AdminSecret123", "Super Admin");
+        initializer = new AdminUserInitializer(userRepository, passwordEncoder, adminProperties);
     }
 
     @Test
@@ -92,7 +89,8 @@ class AdminUserInitializerTest {
     @Test
     @DisplayName("Skips seeding when admin provisioning is disabled")
     void skipsSeedingWhenDisabled() {
-        ReflectionTestUtils.setField(initializer, "enabled", false);
+        adminProperties = new AdminProperties(false, "admin@stacked.com", "AdminSecret123", "Super Admin");
+        initializer = new AdminUserInitializer(userRepository, passwordEncoder, adminProperties);
 
         initializer.run(args);
 
@@ -102,14 +100,15 @@ class AdminUserInitializerTest {
     @Test
     @DisplayName("Skips seeding when default credentials are blank or null")
     void skipsSeedingWhenCredentialsBlank() {
-        ReflectionTestUtils.setField(initializer, "defaultEmail", "   ");
+        adminProperties = new AdminProperties(true, "   ", "AdminSecret123", "Super Admin");
+        initializer = new AdminUserInitializer(userRepository, passwordEncoder, adminProperties);
 
         initializer.run(args);
 
         verifyNoInteractions(userRepository, passwordEncoder);
 
-        ReflectionTestUtils.setField(initializer, "defaultEmail", "admin@stacked.com");
-        ReflectionTestUtils.setField(initializer, "defaultPassword", "");
+        adminProperties = new AdminProperties(true, "admin@stacked.com", "", "Super Admin");
+        initializer = new AdminUserInitializer(userRepository, passwordEncoder, adminProperties);
 
         initializer.run(args);
 
@@ -119,7 +118,9 @@ class AdminUserInitializerTest {
     @Test
     @DisplayName("Skips seeding when password is shorter than 8 characters")
     void skipsSeedingWhenPasswordTooShort() {
-        ReflectionTestUtils.setField(initializer, "defaultPassword", "short");
+        adminProperties = new AdminProperties(true, "admin@stacked.com", "short", "Super Admin");
+        initializer = new AdminUserInitializer(userRepository, passwordEncoder, adminProperties);
+
         when(userRepository.countByRole(Role.ADMIN)).thenReturn(0L);
         when(userRepository.findByEmail("admin@stacked.com")).thenReturn(Optional.empty());
 

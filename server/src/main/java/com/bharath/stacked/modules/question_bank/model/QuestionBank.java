@@ -31,9 +31,6 @@ public class QuestionBank {
     @Id
     private String id;
 
-    @Indexed(unique = true)
-    private String slug;
-
     private String title;
 
     private String description;

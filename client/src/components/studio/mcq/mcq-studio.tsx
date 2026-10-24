@@ -124,12 +124,6 @@ function McqStudioForm({
   const [explanation, setExplanation] = useState(
     initialData?.explanation || ""
   )
-  const [defaultPoints, setDefaultPoints] = useState(
-    initialData?.defaultPoints ?? 1.0
-  )
-  const [negativePoints, setNegativePoints] = useState(
-    initialData?.negativePoints ?? 0.0
-  )
   const [shuffleOptions, setShuffleOptions] = useState(
     initialData?.shuffleOptions ?? true
   )
@@ -287,6 +281,15 @@ function McqStudioForm({
       explanation: opt.explanation?.trim() || null,
     }))
 
+    if (isPublishedReadOnly) {
+      toast.add({
+        title: "Question is Published",
+        description: "Only draft questions can be edited. Unpublish to DRAFT first.",
+        type: "warning",
+      })
+      return
+    }
+
     if (isEditMode && questionId) {
       const payload: UpdateMcqPayload = {
         title: title.trim(),
@@ -299,12 +302,10 @@ function McqStudioForm({
         options: cleanedOptions,
         correctOptionIds,
         explanation: explanation.trim() || null,
-        defaultPoints: Number(defaultPoints) || 1.0,
-        negativePoints: Number(negativePoints) || 0.0,
         shuffleOptions,
         imageFileIds,
       }
-      await updateMutation.mutateAsync({ idOrSlug: questionId, payload })
+      await updateMutation.mutateAsync({ id: questionId, payload })
       navigate({ to: "/admin/mcq" })
     } else {
       const payload: CreateMcqPayload = {
@@ -318,8 +319,6 @@ function McqStudioForm({
         options: cleanedOptions,
         correctOptionIds,
         explanation: explanation.trim() || null,
-        defaultPoints: Number(defaultPoints) || 1.0,
-        negativePoints: Number(negativePoints) || 0.0,
         shuffleOptions,
         imageFileIds,
       }
@@ -328,11 +327,12 @@ function McqStudioForm({
     }
   }
 
+  const isPublishedReadOnly = isEditMode && initialData?.status === "PUBLISHED"
+
   // Build live preview object
   const previewQuestion: McqQuestionDetail = {
     id: questionId || "preview-id",
     title: title || "Untitled Question",
-    slug: "preview-slug",
     content: content || "No question prompt provided yet.",
     type,
     difficulty,
@@ -346,8 +346,6 @@ function McqStudioForm({
     })),
     correctOptionIds,
     explanation: explanation || null,
-    defaultPoints: Number(defaultPoints) || 1.0,
-    negativePoints: Number(negativePoints) || 0.0,
     shuffleOptions,
     imageFileIds,
   }
@@ -400,7 +398,7 @@ function McqStudioForm({
           <Button
             size="sm"
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || isPublishedReadOnly}
             className="gap-1.5 text-xs h-8"
           >
             {isSaving ? (
@@ -417,6 +415,17 @@ function McqStudioForm({
       <main className="mx-auto w-full max-w-[1600px] grid flex-1 grid-cols-1 gap-6 p-6 xl:grid-cols-4">
         {/* Left Column (3 spans): Full Width Markdown Editors & Options */}
         <div className="space-y-6 xl:col-span-3">
+          {isPublishedReadOnly && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-300 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  This MCQ is currently <strong>PUBLISHED</strong> and read-only. Only draft questions can be edited. Unpublish to DRAFT to make changes.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Validation Banner */}
           {validationErrors.length > 0 && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3.5 text-xs text-destructive">
@@ -694,41 +703,6 @@ function McqStudioForm({
                   Published (Available for assessments)
                 </NativeSelectOption>
               </NativeSelect>
-            </div>
-
-            {/* Scoring & Penalties */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">
-                  Default Points
-                </label>
-                <Input
-                  type="number"
-                  min="0.1"
-                  step="0.5"
-                  value={defaultPoints}
-                  onChange={(e) =>
-                    setDefaultPoints(parseFloat(e.target.value) || 0)
-                  }
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">
-                  Negative Points
-                </label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.25"
-                  value={negativePoints}
-                  onChange={(e) =>
-                    setNegativePoints(parseFloat(e.target.value) || 0)
-                  }
-                  className="h-8 text-xs"
-                />
-              </div>
             </div>
 
             {/* Shuffle Options */}

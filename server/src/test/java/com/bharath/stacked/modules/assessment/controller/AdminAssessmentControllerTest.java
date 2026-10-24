@@ -246,6 +246,24 @@ class AdminAssessmentControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/admin/assessments/{id}/activate should return 200 with activated assessment")
+    void shouldActivateAssessmentSuccessfully() throws Exception {
+        AssessmentDetailResponse res = AssessmentDetailResponse.builder()
+                .id("ass-1")
+                .title("Activated Test")
+                .status(AssessmentStatus.ACTIVE)
+                .manuallyActivated(true)
+                .build();
+
+        when(assessmentService.activateAssessment("ass-1")).thenReturn(res);
+
+        mockMvc.perform(post("/api/admin/assessments/ass-1/activate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.manuallyActivated").value(true));
+    }
+
+    @Test
     @DisplayName("POST /api/admin/assessments/{id}/complete should return 200 with completed assessment")
     void shouldCompleteAssessmentSuccessfully() throws Exception {
         AssessmentDetailResponse res = AssessmentDetailResponse.builder()

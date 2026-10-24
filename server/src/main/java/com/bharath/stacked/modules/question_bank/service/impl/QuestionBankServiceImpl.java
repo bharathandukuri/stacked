@@ -47,10 +47,10 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     private final AssessmentRepository assessmentRepository;
     private final MongoTemplate mongoTemplate;
 
+    private static final double DEFAULT_MCQ_POINTS = 1.0;
+
     @Override
     public QuestionBankSummaryResponse createQuestionBank(CreateQuestionBankRequest request, String authorId) {
-        String slug = generateUniqueSlug(request.getTitle(), null);
-
         ValidatedItemsResult validated = processAndValidateItems(request.getItems());
         QuestionBankStatus status = request.getStatus() != null ? request.getStatus() : QuestionBankStatus.DRAFT;
         if (status == QuestionBankStatus.PUBLISHED && validated.items.isEmpty()) {
@@ -59,7 +59,6 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
         QuestionBank bank = QuestionBank.builder()
                 .title(request.getTitle().trim())
-                .slug(slug)
                 .description(request.getDescription() != null ? request.getDescription().trim() : null)
                 .category(request.getCategory() != null ? request.getCategory().trim() : "General")
                 .status(status)
@@ -75,7 +74,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                 .build();
 
         QuestionBank saved = questionBankRepository.save(bank);
-        log.info("Created Question Bank: [{}] (id: {}, slug: {})", saved.getTitle(), saved.getId(), saved.getSlug());
+        log.info("Created Question Bank: [{}] (id: {})", saved.getTitle(), saved.getId());
         return mapToSummary(saved);
     }
 
@@ -122,13 +121,12 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     }
 
     @Override
-    public QuestionBankDetailResponse getQuestionBank(String idOrSlug) {
-        QuestionBank bank = findByIdOrSlug(idOrSlug);
+    public QuestionBankDetailResponse getQuestionBank(String id) {
+        QuestionBank bank = findById(id);
         List<HydratedQuestionItemResponse> hydratedItems = hydrateItems(bank.getItems());
 
         return QuestionBankDetailResponse.builder()
                 .id(bank.getId())
-                .slug(bank.getSlug())
                 .title(bank.getTitle())
                 .description(bank.getDescription())
                 .category(bank.getCategory())
@@ -146,24 +144,20 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     }
 
     @Override
-    public QuestionBankSummaryResponse updateQuestionBank(String idOrSlug, UpdateQuestionBankRequest request) {
-        QuestionBank existing = findByIdOrSlug(idOrSlug);
+    public QuestionBankSummaryResponse updateQuestionBank(String id, UpdateQuestionBankRequest request) {
+        QuestionBank existing = findById(id);
 
-        QuestionBankStatus targetStatus = request.getStatus() != null ? request.getStatus() : existing.getStatus();
-
-        if (!existing.getTitle().equalsIgnoreCase(request.getTitle().trim())) {
-            existing.setSlug(generateUniqueSlug(request.getTitle(), existing.getId()));
+        if (existing.getStatus() != QuestionBankStatus.DRAFT) {
+            throw new ConflictException("Cannot edit Question Bank '" + existing.getTitle() + "' because it is currently " + existing.getStatus() + ". Unpublish to DRAFT first.");
         }
 
         ValidatedItemsResult validated = processAndValidateItems(request.getItems());
-        if (targetStatus == QuestionBankStatus.PUBLISHED && validated.items.isEmpty()) {
-            throw new BadRequestException("Cannot publish an empty Question Bank. Curate at least one question first.");
-        }
 
         existing.setTitle(request.getTitle().trim());
         existing.setDescription(request.getDescription() != null ? request.getDescription().trim() : null);
         existing.setCategory(request.getCategory() != null ? request.getCategory().trim() : "General");
-        existing.setStatus(targetStatus);
+        // Status remains DRAFT during editing
+        existing.setStatus(QuestionBankStatus.DRAFT);
         existing.setTags(request.getTags() != null ? request.getTags() : new ArrayList<>());
         existing.setItems(validated.items);
         existing.setTotalQuestions(validated.items.size());
@@ -178,18 +172,36 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     }
 
     @Override
-    public QuestionBankSummaryResponse updateStatus(String idOrSlug, QuestionBankStatus status) {
-        if (idOrSlug == null || idOrSlug.isBlank()) {
+    public boolean isInUse(String id) {
+        if (!StringUtils.hasText(id)) {
+            return false;
+        }
+        return assessmentRepository.existsByQuestionBankId(id);
+    }
+
+    @Override
+    public QuestionBankSummaryResponse updateStatus(String id, QuestionBankStatus status) {
+        if (id == null || id.isBlank()) {
             throw new BadRequestException("Question bank identifier cannot be empty.");
         }
         if (status == null) {
             throw new BadRequestException("Status cannot be null.");
         }
 
-        QuestionBank bank = findByIdOrSlug(idOrSlug);
+        QuestionBank bank = findById(id);
         QuestionBankStatus currentStatus = bank.getStatus();
         if (currentStatus == status) {
             return mapToSummary(bank);
+        }
+
+        if (status == QuestionBankStatus.DRAFT && currentStatus == QuestionBankStatus.PUBLISHED) {
+            if (isInUse(bank.getId())) {
+                List<Assessment> assessments = assessmentRepository.findAllByQuestionBankId(bank.getId());
+                String assessmentTitles = assessments.stream()
+                        .map(Assessment::getTitle)
+                        .collect(Collectors.joining(", "));
+                throw new ConflictException("Cannot move question bank '" + bank.getTitle() + "' back to draft because it is currently in use by " + assessments.size() + " assessment(s) [" + assessmentTitles + "].");
+            }
         }
 
         if (status == QuestionBankStatus.PUBLISHED) {
@@ -207,21 +219,21 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     }
 
     @Override
-    public QuestionBankSummaryResponse publish(String idOrSlug) {
-        return updateStatus(idOrSlug, QuestionBankStatus.PUBLISHED);
+    public QuestionBankSummaryResponse publish(String id) {
+        return updateStatus(id, QuestionBankStatus.PUBLISHED);
     }
 
     @Override
-    public QuestionBankSummaryResponse unpublish(String idOrSlug) {
-        return updateStatus(idOrSlug, QuestionBankStatus.DRAFT);
+    public QuestionBankSummaryResponse unpublish(String id) {
+        return updateStatus(id, QuestionBankStatus.DRAFT);
     }
 
     @Override
-    public void deleteQuestionBank(String idOrSlug) {
-        QuestionBank bank = findByIdOrSlug(idOrSlug);
+    public void deleteQuestionBank(String id) {
+        QuestionBank bank = findById(id);
 
-        List<Assessment> assessments = assessmentRepository.findAllByQuestionBankId(bank.getId());
-        if (!assessments.isEmpty()) {
+        if (isInUse(bank.getId())) {
+            List<Assessment> assessments = assessmentRepository.findAllByQuestionBankId(bank.getId());
             String assessmentTitles = assessments.stream()
                     .map(Assessment::getTitle)
                     .collect(Collectors.joining(", "));
@@ -233,15 +245,13 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     }
 
     @Override
-    public QuestionBankSummaryResponse duplicateQuestionBank(String idOrSlug, String authorId) {
-        QuestionBank source = findByIdOrSlug(idOrSlug);
+    public QuestionBankSummaryResponse duplicateQuestionBank(String id, String authorId) {
+        QuestionBank source = findById(id);
 
         String newTitle = "Copy of " + source.getTitle();
-        String newSlug = generateUniqueSlug(newTitle, null);
 
         QuestionBank duplicate = QuestionBank.builder()
                 .title(newTitle)
-                .slug(newSlug)
                 .description(source.getDescription())
                 .category(source.getCategory())
                 .status(QuestionBankStatus.DRAFT)
@@ -386,8 +396,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                 if (item.getCustomPoints() != null) {
                     totalPoints += item.getCustomPoints();
                 } else {
-                    McqQuestion mcq = mcqMap.get(item.getQuestionId());
-                    totalPoints += (mcq != null ? mcq.getDefaultPoints() : 1.0);
+                    totalPoints += DEFAULT_MCQ_POINTS;
                 }
             }
         }
@@ -457,7 +466,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                     throw new BadRequestException("MCQ Question '" + mcq.getTitle() + "' is not published and cannot be added to a Question Bank.");
                 }
                 mcqCount++;
-                points = req.getCustomPoints() != null ? req.getCustomPoints() : mcq.getDefaultPoints();
+                points = req.getCustomPoints() != null ? req.getCustomPoints() : DEFAULT_MCQ_POINTS;
             }
 
             totalPoints += points;
@@ -564,7 +573,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
             } else {
                 McqQuestion mcq = mcqMap.get(item.getQuestionId());
                 if (mcq != null) {
-                    double effectivePoints = item.getCustomPoints() != null ? item.getCustomPoints() : mcq.getDefaultPoints();
+                    double effectivePoints = item.getCustomPoints() != null ? item.getCustomPoints() : DEFAULT_MCQ_POINTS;
                     result.add(HydratedQuestionItemResponse.builder()
                             .questionType(BankQuestionType.MCQ)
                             .questionId(mcq.getId())
@@ -572,7 +581,6 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                             .customPoints(item.getCustomPoints())
                             .effectivePoints(effectivePoints)
                             .title(mcq.getTitle())
-                            .slug(mcq.getSlug())
                             .snippet(createSnippet(mcq.getContent()))
                             .difficulty(mcq.getDifficulty() != null ? mcq.getDifficulty().name() : "MEDIUM")
                             .topics(mcq.getTopics())
@@ -600,32 +608,14 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         return cleaned.length() > 140 ? cleaned.substring(0, 137) + "..." : cleaned;
     }
 
-    private QuestionBank findByIdOrSlug(String idOrSlug) {
-        return questionBankRepository.findById(idOrSlug)
-                .or(() -> questionBankRepository.findBySlug(idOrSlug))
-                .orElseThrow(() -> new ResourceNotFoundException("Question Bank not found: " + idOrSlug));
-    }
-
-    private String generateUniqueSlug(String title, String existingId) {
-        String base = title.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
-        if (base.isEmpty()) base = "question-bank";
-
-        String slug = base;
-        int counter = 1;
-
-        while (true) {
-            Optional<QuestionBank> found = questionBankRepository.findBySlug(slug);
-            if (found.isEmpty() || (existingId != null && found.get().getId().equals(existingId))) {
-                return slug;
-            }
-            slug = base + "-" + counter++;
-        }
+    private QuestionBank findById(String id) {
+        return questionBankRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Question Bank not found: " + id));
     }
 
     private QuestionBankSummaryResponse mapToSummary(QuestionBank bank) {
         return QuestionBankSummaryResponse.builder()
                 .id(bank.getId())
-                .slug(bank.getSlug())
                 .title(bank.getTitle())
                 .description(bank.getDescription())
                 .category(bank.getCategory())

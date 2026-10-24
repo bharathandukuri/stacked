@@ -31,8 +31,8 @@ export const mcqKeys = {
   questions: () => [...mcqKeys.all, "questions"] as const,
   questionList: (filters: McqFilterParams) =>
     [...mcqKeys.questions(), "list", filters] as const,
-  questionDetail: (idOrSlug: string) =>
-    [...mcqKeys.questions(), "detail", idOrSlug] as const,
+  questionDetail: (id: string) =>
+    [...mcqKeys.questions(), "detail", id] as const,
   stats: () => [...mcqKeys.all, "stats"] as const,
   topics: () => [...mcqKeys.all, "topics"] as const,
 }
@@ -51,11 +51,22 @@ export function useMcqQuestions(filters: McqFilterParams = {}) {
 /**
  * Hook to retrieve a single MCQ question
  */
-export function useMcqQuestion(idOrSlug?: string) {
+export function useMcqQuestion(id?: string) {
   return useQuery<McqQuestionDetail>({
-    queryKey: mcqKeys.questionDetail(idOrSlug || ""),
-    queryFn: () => mcqService.getQuestion(idOrSlug!),
-    enabled: Boolean(idOrSlug),
+    queryKey: mcqKeys.questionDetail(id || ""),
+    queryFn: () => mcqService.getQuestion(id!),
+    enabled: Boolean(id),
+  })
+}
+
+/**
+ * Hook to check if an MCQ question is in use
+ */
+export function useMcqInUse(id?: string) {
+  return useQuery<boolean>({
+    queryKey: [...mcqKeys.questions(), "in-use", id],
+    queryFn: () => mcqService.isInUse(id!),
+    enabled: Boolean(id),
   })
 }
 
@@ -95,12 +106,12 @@ export function useUpdateMcqQuestion() {
 
   return useMutation({
     mutationFn: ({
-      idOrSlug,
+      id,
       payload,
     }: {
-      idOrSlug: string
+      id: string
       payload: UpdateMcqPayload
-    }) => mcqService.updateQuestion(idOrSlug, payload),
+    }) => mcqService.updateQuestion(id, payload),
     onSuccess: (updated) => {
       toast.add({
         title: "MCQ Updated",
@@ -109,7 +120,6 @@ export function useUpdateMcqQuestion() {
       })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questions() })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.id) })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.slug) })
       queryClient.invalidateQueries({ queryKey: mcqKeys.stats() })
       queryClient.invalidateQueries({ queryKey: mcqKeys.topics() })
     },
@@ -130,7 +140,7 @@ export function useDeleteMcqQuestion() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (idOrSlug: string) => mcqService.deleteQuestion(idOrSlug),
+    mutationFn: (id: string) => mcqService.deleteQuestion(id),
     onSuccess: () => {
       toast.add({
         title: "MCQ Deleted",
@@ -159,12 +169,12 @@ export function useUpdateMcqStatus() {
 
   return useMutation({
     mutationFn: ({
-      idOrSlug,
+      id,
       status,
     }: {
-      idOrSlug: string
+      id: string
       status: McqStatus
-    }) => mcqService.updateStatus(idOrSlug, status),
+    }) => mcqService.updateStatus(id, status),
     onSuccess: (updated) => {
       toast.add({
         title: "Status Updated",
@@ -173,7 +183,6 @@ export function useUpdateMcqStatus() {
       })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questions() })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.id) })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.slug) })
       queryClient.invalidateQueries({ queryKey: mcqKeys.stats() })
     },
     onError: (error: unknown) => {
@@ -193,7 +202,7 @@ export function usePublishMcq() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (idOrSlug: string) => mcqService.publishQuestion(idOrSlug),
+    mutationFn: (id: string) => mcqService.publishQuestion(id),
     onSuccess: (updated) => {
       toast.add({
         title: "MCQ Published",
@@ -202,7 +211,6 @@ export function usePublishMcq() {
       })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questions() })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.id) })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.slug) })
       queryClient.invalidateQueries({ queryKey: mcqKeys.stats() })
     },
     onError: (error: unknown) => {
@@ -222,7 +230,7 @@ export function useUnpublishMcq() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (idOrSlug: string) => mcqService.unpublishQuestion(idOrSlug),
+    mutationFn: (id: string) => mcqService.unpublishQuestion(id),
     onSuccess: (updated) => {
       toast.add({
         title: "MCQ Unpublished",
@@ -231,7 +239,6 @@ export function useUnpublishMcq() {
       })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questions() })
       queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.id) })
-      queryClient.invalidateQueries({ queryKey: mcqKeys.questionDetail(updated.slug) })
       queryClient.invalidateQueries({ queryKey: mcqKeys.stats() })
     },
     onError: (error: unknown) => {
