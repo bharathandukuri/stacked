@@ -1,32 +1,43 @@
-import { useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import {
+  LayoutDashboard,
   GraduationCap,
-  Users,
-  CheckCircle2,
+  FileCode2,
   Clock,
-  ShieldCheck,
-  Server,
-  Database,
-  Lock,
   Loader2,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react"
+import { format, subDays } from "date-fns"
 
 import { AdminSidebar } from "@/components/admin/sidebar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import {
-  useAdmin,
   useIsAuthenticated,
   useIsInitialized,
 } from "@/stores/auth-store"
 import { initializeAuthSession } from "@/hooks/use-auth"
+
+import {
+  AnalyticsHeader,
+  type DateRangeDays,
+} from "@/components/admin/analytics/analytics-header"
+import { KpiMetricCards } from "@/components/admin/analytics/kpi-metric-cards"
+import { OverviewTab } from "@/components/admin/analytics/tabs/overview-tab"
+import { AssessmentFunnelTab } from "@/components/admin/analytics/tabs/assessment-funnel-tab"
+import { SubmissionsTab } from "@/components/admin/analytics/tabs/submissions-tab"
+import { TimelineTab } from "@/components/admin/analytics/tabs/timeline-tab"
+
+import {
+  useAssessmentAnalyticsQuery,
+  useContentAnalyticsQuery,
+  useOperationalAnalyticsQuery,
+  usePlatformOverviewQuery,
+  useSubmissionAnalyticsQuery,
+} from "@/hooks/use-analytics"
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboardPage,
@@ -36,7 +47,28 @@ export function AdminDashboardPage() {
   const navigate = useNavigate()
   const isAuthenticated = useIsAuthenticated()
   const isInitialized = useIsInitialized()
-  const admin = useAdmin()
+
+  // State: Filter Days and Active Tab
+  const [days, setDays] = useState<DateRangeDays>(30)
+  const [activeTab, setActiveTab] = useState("overview")
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date())
+
+  // Calculate ISO YYYY-MM-DD date range
+  const dateRange = useMemo(() => {
+    const end = new Date()
+    const start = subDays(end, days)
+    return {
+      startDate: format(start, "yyyy-MM-dd"),
+      endDate: format(end, "yyyy-MM-dd"),
+    }
+  }, [days])
+
+  // Queries
+  const overviewQuery = usePlatformOverviewQuery()
+  const contentQuery = useContentAnalyticsQuery(dateRange)
+  const assessmentsQuery = useAssessmentAnalyticsQuery(dateRange)
+  const submissionsQuery = useSubmissionAnalyticsQuery(dateRange)
+  const operationalQuery = useOperationalAnalyticsQuery()
 
   // Session verification and initialization gate
   useEffect(() => {
@@ -60,7 +92,31 @@ export function AdminDashboardPage() {
     }
   }, [isInitialized, isAuthenticated, navigate])
 
-  // Display clean loading state while verifying the session
+  const handleRefresh = async () => {
+    setLastRefreshedAt(new Date())
+    await Promise.all([
+      overviewQuery.refetch(),
+      contentQuery.refetch(),
+      assessmentsQuery.refetch(),
+      submissionsQuery.refetch(),
+      operationalQuery.refetch(),
+    ])
+  }
+
+  const isRefreshing =
+    overviewQuery.isFetching ||
+    contentQuery.isFetching ||
+    assessmentsQuery.isFetching ||
+    submissionsQuery.isFetching ||
+    operationalQuery.isFetching
+
+  const hasAnyError =
+    overviewQuery.isError ||
+    contentQuery.isError ||
+    assessmentsQuery.isError ||
+    submissionsQuery.isError
+
+  // Display clean loading state while verifying session
   if (!isInitialized) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
@@ -78,259 +134,105 @@ export function AdminDashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
       {/* Admin Sidebar */}
       <AdminSidebar currentPath="/admin" />
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
-        {/* Top Header Bar */}
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-background/80 px-8 backdrop-blur-md">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-foreground">
-              Dashboard Overview
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Platform administration & active session status
-            </p>
-          </div>
+        <div className="mx-auto max-w-7xl space-y-6 p-6 sm:p-8">
+          {/* Header & Date Range Controls */}
+          <AnalyticsHeader
+            days={days}
+            onDaysChange={setDays}
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            lastUpdated={lastRefreshedAt}
+          />
 
-          <div className="flex items-center gap-3">
-            <Badge
-              variant="outline"
-              className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-            >
-              <CheckCircle2 className="size-3" /> Live Production Mode
-            </Badge>
-          </div>
-        </header>
+          {/* Error Banner with Retry */}
+          {hasAnyError && (
+            <Alert variant="destructive" className="border-destructive/40 bg-destructive/10">
+              <AlertCircle className="size-4" />
+              <AlertTitle className="text-sm font-semibold">
+                Unable to synchronize complete telemetry
+              </AlertTitle>
+              <AlertDescription className="flex items-center justify-between text-xs mt-1">
+                <span>
+                  Some analytics streams failed to respond. Metrics might show cached or incomplete data.
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  className="h-7 gap-1 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
+                >
+                  <RefreshCw className="size-3" /> Retry
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {/* Dashboard Body */}
-        <div className="space-y-6 p-8">
-          {/* Welcome Banner */}
-          <div className="rounded-xl border border-border bg-linear-to-r from-primary/10 via-background to-background p-6 shadow-sm">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold tracking-wider text-primary uppercase">
-                Administrator Portal
-              </span>
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                Welcome back, {admin?.name || "Administrator"}!
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Logged in as{" "}
-                <span className="font-medium text-foreground">
-                  {admin?.email}
-                </span>{" "}
-                with <span className="font-semibold text-primary">ADMIN</span>{" "}
-                privileges.
-              </p>
-            </div>
-          </div>
+          {/* Top KPI Metrics Row */}
+          <KpiMetricCards
+            overview={overviewQuery.data}
+            operational={operationalQuery.data}
+            isLoading={overviewQuery.isLoading || operationalQuery.isLoading}
+          />
 
-          {/* Metric Cards Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="border-border">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Active Assessments
-                </CardTitle>
-                <GraduationCap className="size-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">12</div>
-                <p className="text-xs text-muted-foreground">
-                  +2 scheduled for this week
-                </p>
-              </CardContent>
-            </Card>
+          {/* Tabbed Visualizations & Feeds */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="bg-muted/60 p-1 border border-border/60">
+              <TabsTrigger value="overview" className="gap-2 text-xs">
+                <LayoutDashboard className="size-3.5" />
+                Overview & Infrastructure
+              </TabsTrigger>
+              <TabsTrigger value="funnel" className="gap-2 text-xs">
+                <GraduationCap className="size-3.5" />
+                Assessment Funnel & Modes
+              </TabsTrigger>
+              <TabsTrigger value="submissions" className="gap-2 text-xs">
+                <FileCode2 className="size-3.5" />
+                Submissions & Judging
+              </TabsTrigger>
+              <TabsTrigger value="timeline" className="gap-2 text-xs">
+                <Clock className="size-3.5" />
+                Activity Timeline Feed
+              </TabsTrigger>
+            </TabsList>
 
-            <Card className="border-border">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Candidates
-                </CardTitle>
-                <Users className="size-4 text-blue-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">1,482</div>
-                <p className="text-xs text-muted-foreground">
-                  Across 8 test batches
-                </p>
-              </CardContent>
-            </Card>
+            {/* TAB 1: OVERVIEW & INFRASTRUCTURE */}
+            <TabsContent value="overview">
+              <OverviewTab
+                overview={overviewQuery.data}
+                content={contentQuery.data}
+                assessments={assessmentsQuery.data}
+                operational={operationalQuery.data}
+                isLoading={contentQuery.isLoading || assessmentsQuery.isLoading}
+              />
+            </TabsContent>
 
-            <Card className="border-border">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Avg. Completion Time
-                </CardTitle>
-                <Clock className="size-4 text-amber-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">42m 18s</div>
-                <p className="text-xs text-muted-foreground">
-                  94.2% completion rate
-                </p>
-              </CardContent>
-            </Card>
+            {/* TAB 2: ASSESSMENT FUNNEL & MODES */}
+            <TabsContent value="funnel">
+              <AssessmentFunnelTab
+                assessments={assessmentsQuery.data}
+                isLoading={assessmentsQuery.isLoading}
+              />
+            </TabsContent>
 
-            <Card className="border-border">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Active Sessions
-                </CardTitle>
-                <ShieldCheck className="size-4 text-emerald-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">1 Active</div>
-                <p className="text-xs text-muted-foreground">
-                  Protected with RTR & Redis
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+            {/* TAB 3: SUBMISSIONS & JUDGING */}
+            <TabsContent value="submissions">
+              <SubmissionsTab
+                submissions={submissionsQuery.data}
+                isLoading={submissionsQuery.isLoading}
+              />
+            </TabsContent>
 
-          {/* Security & Infrastructure Status Panel */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="border-border">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Lock className="size-4 text-primary" />
-                  <CardTitle className="text-base">
-                    Security & Session Hardening
-                  </CardTitle>
-                </div>
-                <CardDescription>
-                  Enterprise authentication protections enabled for admin
-                  accounts
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between rounded-lg border border-border/70 p-3 text-sm">
-                  <div>
-                    <span className="font-medium">
-                      Refresh Token Rotation (RTR)
-                    </span>
-                    <p className="text-xs text-muted-foreground">
-                      Each token refresh issues a new rotated token and
-                      invalidates the previous
-                    </p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-500/30 text-emerald-500"
-                  >
-                    Active
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border border-border/70 p-3 text-sm">
-                  <div>
-                    <span className="font-medium">HTTP-Only Secure Cookie</span>
-                    <p className="text-xs text-muted-foreground">
-                      Tokens isolated from client-side script access
-                    </p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-500/30 text-emerald-500"
-                  >
-                    Configured
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border border-border/70 p-3 text-sm">
-                  <div>
-                    <span className="font-medium">
-                      Timing Attack Mitigation
-                    </span>
-                    <p className="text-xs text-muted-foreground">
-                      Constant-time dummy hash verification on invalid email
-                      attempts
-                    </p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-500/30 text-emerald-500"
-                  >
-                    Active
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Server className="size-4 text-primary" />
-                  <CardTitle className="text-base">
-                    Backend Infrastructure
-                  </CardTitle>
-                </div>
-                <CardDescription>
-                  State of connected persistent stores and Spring Security layer
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between rounded-lg border border-border/70 p-3 text-sm">
-                  <div className="flex items-center gap-3">
-                    <Database className="size-4 text-emerald-500" />
-                    <div>
-                      <span className="font-medium">MongoDB Database</span>
-                      <p className="text-xs text-muted-foreground">
-                        Document storage for admin users & audit metadata
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-500/30 text-emerald-500"
-                  >
-                    Connected
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border border-border/70 p-3 text-sm">
-                  <div className="flex items-center gap-3">
-                    <Server className="size-4 text-red-500" />
-                    <div>
-                      <span className="font-medium">Redis Session Cache</span>
-                      <p className="text-xs text-muted-foreground">
-                        Lettuce pooled connection for session storage & token
-                        revocation
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-500/30 text-emerald-500"
-                  >
-                    Connected
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border border-border/70 p-3 text-sm">
-                  <div className="flex items-center gap-3">
-                    <ShieldCheck className="size-4 text-primary" />
-                    <div>
-                      <span className="font-medium">
-                        Spring Security 7 + Java 25
-                      </span>
-                      <p className="text-xs text-muted-foreground">
-                        Custom UserDetailsService & DaoAuthenticationProvider
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-500/30 text-emerald-500"
-                  >
-                    Enforced
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+            {/* TAB 4: ACTIVITY AUDIT TIMELINE */}
+            <TabsContent value="timeline">
+              <TimelineTab />
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>

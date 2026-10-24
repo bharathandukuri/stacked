@@ -40,6 +40,17 @@ import com.bharath.stacked.modules.question_bank.model.QuestionBankItem;
 import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
 import com.bharath.stacked.modules.security.model.User;
 import com.bharath.stacked.modules.security.repository.UserRepository;
+import com.bharath.stacked.common.cache.CacheInvalidationService;
+import com.bharath.stacked.common.cache.CacheKeys;
+import com.bharath.stacked.common.cache.StackedCacheService;
+import com.bharath.stacked.config.cache.CacheProperties;
+import tools.jackson.core.type.TypeReference;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsActorType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEntityType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEventType;
+import com.bharath.stacked.modules.analytics.model.AnalyticsEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ApplicationEventPublisherAware;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -64,7 +75,14 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AssessmentServiceImpl implements AssessmentService {
+public class AssessmentServiceImpl implements AssessmentService, ApplicationEventPublisherAware {
+
+    private ApplicationEventPublisher eventPublisher;
+
+    @Override
+    public void setApplicationEventPublisher(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
 
@@ -83,6 +101,13 @@ public class AssessmentServiceImpl implements AssessmentService {
     private final MongoTemplate mongoTemplate;
     private final AssessmentAuditEventRepository auditEventRepository;
     private final AssessmentWebSocketHandler webSocketHandler;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private StackedCacheService cacheService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CacheProperties cacheProperties;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CacheInvalidationService cacheInvalidationService;
 
     private void recordAuditEvent(String assessmentId, String attemptId, String candidateUserId, String candidateEmail,
                                   String questionId, AssessmentAuditEventType eventType, AssessmentAuditEventSource source,
@@ -182,6 +207,17 @@ public class AssessmentServiceImpl implements AssessmentService {
         }
 
         log.info("Created Assessment: [{}] (id: {}, slug: {}, status: {})", saved.getTitle(), saved.getId(), saved.getSlug(), saved.getStatus());
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessment(saved.getId(), saved.getSlug());
+        }
+        publishAnalytics(AnalyticsEventType.ASSESSMENT_CREATED,
+                saved.getId(),
+                AnalyticsEntityType.ASSESSMENT,
+                saved.getId(),
+                null,
+                AnalyticsActorType.ADMIN,
+                authorId,
+                assessmentAttributes(saved));
         return AssessmentSummaryResponse.fromModel(saved);
     }
 
@@ -381,6 +417,18 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     @Override
     public QuestionBankPreviewDto getQuestionBankPreview(String bankId) {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.assessmentBankPreview(bankId),
+                    QuestionBankPreviewDto.class,
+                    cacheProperties.detailsTtl(),
+                    () -> executeGetQuestionBankPreview(bankId)
+            );
+        }
+        return executeGetQuestionBankPreview(bankId);
+    }
+
+    private QuestionBankPreviewDto executeGetQuestionBankPreview(String bankId) {
         QuestionBank bank = questionBankRepository.findById(bankId)
                 .orElseThrow(() -> new ResourceNotFoundException("Question Bank not found with ID: " + bankId));
         List<AssessmentValidationError> errors = new ArrayList<>();
@@ -646,6 +694,20 @@ public class AssessmentServiceImpl implements AssessmentService {
             filter = new AssessmentFilterRequest();
         }
 
+        if (filter.isDefault() && cacheService != null && cacheProperties != null) {
+            final AssessmentFilterRequest effectiveFilter = filter;
+            return cacheService.getOrCompute(
+                    CacheKeys.assessmentDefaultPage(),
+                    new TypeReference<PageResponse<AssessmentSummaryResponse>>() {},
+                    cacheProperties.catalogPageTtl(),
+                    () -> executeGetAssessments(effectiveFilter)
+            );
+        }
+
+        return executeGetAssessments(filter);
+    }
+
+    private PageResponse<AssessmentSummaryResponse> executeGetAssessments(AssessmentFilterRequest filter) {
         Query query = new Query();
         List<Criteria> criteriaList = new ArrayList<>();
 
@@ -711,6 +773,18 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     @Override
     public AssessmentDetailResponse getAssessment(String idOrSlug) {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.assessmentDetail(idOrSlug),
+                    AssessmentDetailResponse.class,
+                    cacheProperties.detailsTtl(),
+                    () -> executeGetAssessment(idOrSlug)
+            );
+        }
+        return executeGetAssessment(idOrSlug);
+    }
+
+    private AssessmentDetailResponse executeGetAssessment(String idOrSlug) {
         Assessment assessment = findByIdOrSlug(idOrSlug);
         return AssessmentDetailResponse.fromModel(assessment);
     }
@@ -733,6 +807,17 @@ public class AssessmentServiceImpl implements AssessmentService {
         assignmentRepository.deleteAll(assignments);
 
         assessmentRepository.delete(assessment);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessment(assessment.getId(), assessment.getSlug());
+        }
+        publishAnalytics(AnalyticsEventType.ASSESSMENT_DELETED,
+                assessment.getId(),
+                AnalyticsEntityType.ASSESSMENT,
+                assessment.getId(),
+                null,
+                AnalyticsActorType.ADMIN,
+                null,
+                assessmentAttributes(assessment));
         log.info("Deleted Assessment: [{}] (id: {})", assessment.getTitle(), assessment.getId());
     }
 
@@ -782,6 +867,19 @@ public class AssessmentServiceImpl implements AssessmentService {
         }
 
         log.info("Admin manually activated Assessment: [{}] (id: {}) at {}", saved.getTitle(), saved.getId(), now);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessment(saved.getId(), saved.getSlug());
+        }
+        Map<String, Object> actAttrs = assessmentAttributes(saved);
+        actAttrs.put("isManual", true);
+        publishAnalytics(AnalyticsEventType.ASSESSMENT_ACTIVATED,
+                saved.getId(),
+                AnalyticsEntityType.ASSESSMENT,
+                saved.getId(),
+                null,
+                AnalyticsActorType.ADMIN,
+                null,
+                actAttrs);
         return AssessmentDetailResponse.fromModel(saved);
     }
 
@@ -828,6 +926,19 @@ public class AssessmentServiceImpl implements AssessmentService {
         }
 
         log.info("Admin manually completed Assessment: [{}] (id: {}) at {}", saved.getTitle(), saved.getId(), now);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessment(saved.getId(), saved.getSlug());
+        }
+        Map<String, Object> compAttrs = assessmentAttributes(saved);
+        compAttrs.put("isManual", true);
+        publishAnalytics(AnalyticsEventType.ASSESSMENT_COMPLETED,
+                saved.getId(),
+                AnalyticsEntityType.ASSESSMENT,
+                saved.getId(),
+                null,
+                AnalyticsActorType.ADMIN,
+                null,
+                compAttrs);
         return AssessmentDetailResponse.fromModel(saved);
     }
 
@@ -888,6 +999,17 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         log.info("Bulk assigned candidates to assessment [{}]: {} new, {} skipped, {} invalid",
                 assessment.getTitle(), assignedEmails.size(), duplicatesSkipped, invalidEmails.size());
+
+        for (String email : assignedEmails) {
+            publishAnalytics(AnalyticsEventType.CANDIDATE_INVITED,
+                    assessment.getId() + ":" + email,
+                    AnalyticsEntityType.ASSESSMENT_ASSIGNMENT,
+                    assessment.getId(),
+                    email,
+                    AnalyticsActorType.ADMIN,
+                    null,
+                    Map.of("email", email));
+        }
 
         return BulkAssignCandidatesResponse.builder()
                 .totalProcessed(rawTokens.size())
@@ -951,6 +1073,9 @@ public class AssessmentServiceImpl implements AssessmentService {
         }
         assessment.setUpdatedAt(Instant.now());
         Assessment saved = assessmentRepository.save(assessment);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessment(saved.getId(), saved.getSlug());
+        }
         log.info("Generated new invitation code [{}] for assessment [{}]", code, saved.getId());
         return AssessmentDetailResponse.fromModel(saved);
     }
@@ -962,6 +1087,9 @@ public class AssessmentServiceImpl implements AssessmentService {
         assessment.setInvitationCodeEnabled(false);
         assessment.setUpdatedAt(Instant.now());
         Assessment saved = assessmentRepository.save(assessment);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessment(saved.getId(), saved.getSlug());
+        }
         log.info("Revoked invitation code for assessment [{}]", saved.getId());
         return AssessmentDetailResponse.fromModel(saved);
     }
@@ -1039,6 +1167,14 @@ public class AssessmentServiceImpl implements AssessmentService {
             assessment.setInvitationCodeUsedCount(assessment.getInvitationCodeUsedCount() + 1);
             assessment.setUpdatedAt(now);
             assessmentRepository.save(assessment);
+            publishAnalytics(AnalyticsEventType.CANDIDATE_ENROLLED,
+                    assignment.getId(),
+                    AnalyticsEntityType.ASSESSMENT_ASSIGNMENT,
+                    assessment.getId(),
+                    normalizedEmail,
+                    AnalyticsActorType.CANDIDATE,
+                    candidateUserId,
+                    Map.of("code", cleanCode, "email", normalizedEmail));
             log.info("Candidate [{}] successfully joined assessment [{}] via code [{}]",
                     candidateEmail, assessment.getTitle(), cleanCode);
         }
@@ -1223,6 +1359,15 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         AssessmentAttempt savedAttempt = attemptRepository.save(newAttempt);
 
+        publishAnalytics(AnalyticsEventType.ATTEMPT_STARTED,
+                savedAttempt.getId(),
+                AnalyticsEntityType.ASSESSMENT_ATTEMPT,
+                assessment.getId(),
+                assignment.getCandidateEmail(),
+                AnalyticsActorType.CANDIDATE,
+                candidateUserId,
+                Map.of("attemptNumber", nextAttemptNumber));
+
         recordAuditEvent(assessment.getId(), savedAttempt.getId(), candidateUserId, assignment.getCandidateEmail(),
                 null, AssessmentAuditEventType.SESSION_STARTED, AssessmentAuditEventSource.SERVER_VERIFIED,
                 Map.of("attemptNumber", nextAttemptNumber, "durationMinutes", assessment.getDurationMinutes()));
@@ -1363,6 +1508,20 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         AssessmentQuestionResponse saved = responseRepository.save(response);
 
+        publishAnalytics(AnalyticsEventType.ANSWER_SAVED,
+                saved.getId(),
+                AnalyticsEntityType.QUESTION_RESPONSE,
+                attempt.getAssessmentId(),
+                attempt.getCandidateEmail(),
+                AnalyticsActorType.CANDIDATE,
+                candidateUserId,
+                Map.of(
+                        "questionId", request.getQuestionId(),
+                        "questionType", "MCQ",
+                        "isCorrect", isCorrect,
+                        "awardedPoints", awardedPoints
+                ));
+
         recordAuditEvent(assessment.getId(), attempt.getId(), candidateUserId, attempt.getCandidateEmail(),
                 request.getQuestionId(), AssessmentAuditEventType.MCQ_ANSWER_CHANGED, AssessmentAuditEventSource.SERVER_VERIFIED,
                 Map.of("selectedCount", selected.size(), "isCorrect", isCorrect, "awardedPoints", awardedPoints));
@@ -1398,6 +1557,19 @@ public class AssessmentServiceImpl implements AssessmentService {
                 Map.of("languageId", request.getLanguageId(), "status", res.getOverallStatus() != null ? res.getOverallStatus() : "UNKNOWN",
                         "passed", res.getPassedTestcases() != null ? res.getPassedTestcases() : 0));
 
+        publishAnalytics(AnalyticsEventType.SAMPLE_RUN_EXECUTED,
+                attempt.getId(),
+                AnalyticsEntityType.ASSESSMENT_ATTEMPT,
+                attempt.getAssessmentId(),
+                attempt.getCandidateEmail(),
+                AnalyticsActorType.CANDIDATE,
+                candidateUserId,
+                Map.of(
+                        "questionId", request.getQuestionId(),
+                        "language", request.getLanguageId() != null ? request.getLanguageId() : "unknown",
+                        "status", res.getOverallStatus() != null ? res.getOverallStatus() : "UNKNOWN"
+                ));
+
         return res;
     }
 
@@ -1421,6 +1593,20 @@ public class AssessmentServiceImpl implements AssessmentService {
         recordAuditEvent(assessment.getId(), attempt.getId(), candidateUserId, attempt.getCandidateEmail(),
                 request.getQuestionId(), AssessmentAuditEventType.CODE_RUN_CUSTOM, AssessmentAuditEventSource.SERVER_VERIFIED,
                 Map.of("languageId", request.getLanguageId(), "status", res.getOverallStatus() != null ? res.getOverallStatus() : "UNKNOWN"));
+
+        publishAnalytics(AnalyticsEventType.SAMPLE_RUN_EXECUTED,
+                attempt.getId(),
+                AnalyticsEntityType.ASSESSMENT_ATTEMPT,
+                attempt.getAssessmentId(),
+                attempt.getCandidateEmail(),
+                AnalyticsActorType.CANDIDATE,
+                candidateUserId,
+                Map.of(
+                        "questionId", request.getQuestionId(),
+                        "language", request.getLanguageId() != null ? request.getLanguageId() : "unknown",
+                        "status", res.getOverallStatus() != null ? res.getOverallStatus() : "UNKNOWN",
+                        "customInput", true
+                ));
 
         return res;
     }
@@ -1453,6 +1639,19 @@ public class AssessmentServiceImpl implements AssessmentService {
         response.setUpdatedAt(Instant.now());
 
         AssessmentQuestionResponse saved = responseRepository.save(response);
+
+        publishAnalytics(AnalyticsEventType.ANSWER_SAVED,
+                saved.getId(),
+                AnalyticsEntityType.QUESTION_RESPONSE,
+                attempt.getAssessmentId(),
+                attempt.getCandidateEmail(),
+                AnalyticsActorType.CANDIDATE,
+                candidateUserId,
+                Map.of(
+                        "questionId", request.getQuestionId(),
+                        "questionType", "CODING",
+                        "languageId", request.getLanguageId() != null ? request.getLanguageId() : "unknown"
+                ));
 
         recordAuditEvent(assessment.getId(), attempt.getId(), candidateUserId, attempt.getCandidateEmail(),
                 request.getQuestionId(), AssessmentAuditEventType.CODE_SAVED, AssessmentAuditEventSource.SERVER_VERIFIED,
@@ -1519,6 +1718,26 @@ public class AssessmentServiceImpl implements AssessmentService {
         response.setUpdatedAt(Instant.now());
 
         AssessmentQuestionResponse saved = responseRepository.save(response);
+
+        String overallStatus = executionResult.getOverallStatus() != null ? executionResult.getOverallStatus() : "UNKNOWN";
+        long executionTimeMs = executionResult.getTotalExecutionTimeMs() != null ? executionResult.getTotalExecutionTimeMs() : 0L;
+
+        publishAnalytics(AnalyticsEventType.CODE_SUBMISSION_EVALUATED,
+                saved.getId(),
+                AnalyticsEntityType.QUESTION_RESPONSE,
+                attempt.getAssessmentId(),
+                attempt.getCandidateEmail(),
+                AnalyticsActorType.CANDIDATE,
+                candidateUserId,
+                Map.of(
+                        "questionId", request.getQuestionId(),
+                        "language", request.getLanguageId() != null ? request.getLanguageId() : "unknown",
+                        "verdict", overallStatus,
+                        "executionTimeMs", executionTimeMs,
+                        "allPassed", allPassed,
+                        "passedRatio", passedRatio,
+                        "awardedPoints", awardedPoints
+                ));
 
         recordAuditEvent(assessment.getId(), attempt.getId(), candidateUserId, attempt.getCandidateEmail(),
                 request.getQuestionId(), AssessmentAuditEventType.CODE_SUBMITTED, AssessmentAuditEventSource.SERVER_VERIFIED,
@@ -1603,6 +1822,23 @@ public class AssessmentServiceImpl implements AssessmentService {
         attempt.setPassed(passed);
         attempt.setUpdatedAt(now);
         attemptRepository.save(attempt);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessmentMetrics(assessment.getId());
+        }
+
+        long durationSeconds = attempt.getStartedAt() != null ? Duration.between(attempt.getStartedAt(), now).toSeconds() : 0;
+        publishAnalytics(AnalyticsEventType.ATTEMPT_SUBMITTED,
+                attempt.getId(),
+                AnalyticsEntityType.ASSESSMENT_ATTEMPT,
+                assessment.getId(),
+                attempt.getCandidateEmail(),
+                AnalyticsActorType.CANDIDATE,
+                candidateUserId,
+                Map.of(
+                        "durationSeconds", durationSeconds,
+                        "score", totalScore,
+                        "passed", passed
+                ));
 
         recordAuditEvent(assessment.getId(), attempt.getId(), candidateUserId, attempt.getCandidateEmail(),
                 null, AssessmentAuditEventType.FINAL_SUBMISSION, AssessmentAuditEventSource.SERVER_VERIFIED,
@@ -1692,6 +1928,23 @@ public class AssessmentServiceImpl implements AssessmentService {
         attempt.setPassed(passed);
         attempt.setUpdatedAt(now);
         attemptRepository.save(attempt);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateAssessmentMetrics(assessment.getId());
+        }
+
+        long durationSeconds = attempt.getStartedAt() != null ? Duration.between(attempt.getStartedAt(), now).toSeconds() : 0;
+        publishAnalytics(AnalyticsEventType.ATTEMPT_EXPIRED,
+                attempt.getId(),
+                AnalyticsEntityType.ASSESSMENT_ATTEMPT,
+                attempt.getAssessmentId(),
+                attempt.getCandidateEmail(),
+                AnalyticsActorType.SYSTEM,
+                null,
+                Map.of(
+                        "durationSeconds", durationSeconds,
+                        "score", totalScore,
+                        "passed", passed
+                ));
 
         assignmentRepository.findByAssessmentIdAndCandidateUserId(attempt.getAssessmentId(), attempt.getCandidateUserId()).ifPresent(as -> {
             as.setStatus(CandidateParticipationStatus.EXPIRED);
@@ -2172,6 +2425,18 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     @Override
     public AssessmentMetricsResponse getAssessmentMetrics(String idOrSlug) {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.assessmentMetrics(idOrSlug),
+                    AssessmentMetricsResponse.class,
+                    cacheProperties.metricsTtl(),
+                    () -> executeGetAssessmentMetrics(idOrSlug)
+            );
+        }
+        return executeGetAssessmentMetrics(idOrSlug);
+    }
+
+    private AssessmentMetricsResponse executeGetAssessmentMetrics(String idOrSlug) {
         Assessment assessment = findByIdOrSlug(idOrSlug);
         List<AssessmentAssignment> assignments = assignmentRepository.findAllByAssessmentId(assessment.getId());
         List<AssessmentAttempt> attempts = attemptRepository.findAllByAssessmentId(assessment.getId());
@@ -2394,5 +2659,44 @@ public class AssessmentServiceImpl implements AssessmentService {
                 .resultsVisible(resultsVisible)
                 .questionResults(questionSummaries)
                 .build();
+    }
+
+    private Map<String, Object> assessmentAttributes(Assessment assessment) {
+        Map<String, Object> attrs = new HashMap<>();
+        if (assessment != null) {
+            if (assessment.getTitle() != null) attrs.put("title", assessment.getTitle());
+            if (assessment.getSlug() != null) attrs.put("slug", assessment.getSlug());
+            if (assessment.getSelectionMode() != null) attrs.put("selectionMode", assessment.getSelectionMode().name());
+            attrs.put("totalQuestions", assessment.getTotalQuestions());
+            attrs.put("totalScore", assessment.getTotalScore());
+        }
+        return attrs;
+    }
+
+    private void publishAnalytics(AnalyticsEventType eventType,
+                                  String entityId,
+                                  AnalyticsEntityType entityType,
+                                  String assessmentId,
+                                  String candidateEmail,
+                                  AnalyticsActorType actorType,
+                                  String actorId,
+                                  Map<String, Object> attributes) {
+        if (eventPublisher != null) {
+            try {
+                AnalyticsEvent event = AnalyticsEvent.builder()
+                        .eventType(eventType)
+                        .entityType(entityType)
+                        .entityId(entityId)
+                        .assessmentId(assessmentId)
+                        .candidateEmail(candidateEmail)
+                        .actorType(actorType)
+                        .actorId(actorId)
+                        .attributes(attributes != null ? new HashMap<>(attributes) : new HashMap<>())
+                        .build();
+                eventPublisher.publishEvent(event);
+            } catch (Exception ex) {
+                log.warn("Failed to publish analytics event [{}]: {}", eventType, ex.getMessage());
+            }
+        }
     }
 }

@@ -32,6 +32,10 @@ public interface AssessmentAttemptRepository extends MongoRepository<AssessmentA
 
     long countByAssessmentIdAndStatus(String assessmentId, AttemptStatus status);
 
+    long countByStatus(AttemptStatus status);
+
+    List<AssessmentAttempt> findAllByStatus(AttemptStatus status);
+
     List<AssessmentAttempt> findAllByAssessmentIdAndStatus(String assessmentId, AttemptStatus status);
 
     List<AssessmentAttempt> findAllByStatusAndEffectiveDeadlineBefore(AttemptStatus status, Instant now);

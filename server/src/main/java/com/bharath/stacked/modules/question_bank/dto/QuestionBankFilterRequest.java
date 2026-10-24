@@ -18,5 +18,15 @@ public class QuestionBankFilterRequest {
     private Integer size;
     private String sortBy;
     private String sortDirection;
+
+    public boolean isDefault() {
+        return (search == null || search.isBlank()) &&
+                (category == null || category.isBlank()) &&
+                status == null &&
+                (page == null || page == 0) &&
+                (size == null || size == 20) &&
+                (sortBy == null || sortBy.equalsIgnoreCase("createdAt")) &&
+                (sortDirection == null || sortDirection.equalsIgnoreCase("DESC"));
+    }
 }
 

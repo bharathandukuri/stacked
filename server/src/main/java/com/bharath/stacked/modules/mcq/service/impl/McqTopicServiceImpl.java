@@ -10,6 +10,11 @@ import com.bharath.stacked.modules.mcq.model.McqTopic;
 import com.bharath.stacked.modules.mcq.repository.McqQuestionRepository;
 import com.bharath.stacked.modules.mcq.repository.McqTopicRepository;
 import com.bharath.stacked.modules.mcq.service.McqTopicService;
+import com.bharath.stacked.common.cache.CacheInvalidationService;
+import com.bharath.stacked.common.cache.CacheKeys;
+import com.bharath.stacked.common.cache.StackedCacheService;
+import com.bharath.stacked.config.cache.CacheProperties;
+import tools.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
@@ -26,16 +31,49 @@ import java.util.Locale;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class McqTopicServiceImpl implements McqTopicService {
 
     private final McqTopicRepository topicRepository;
     private final McqQuestionRepository questionRepository;
     private final MongoTemplate mongoTemplate;
 
+    private final StackedCacheService cacheService;
+    private final CacheProperties cacheProperties;
+    private final CacheInvalidationService cacheInvalidationService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public McqTopicServiceImpl(McqTopicRepository topicRepository,
+                               McqQuestionRepository questionRepository,
+                               MongoTemplate mongoTemplate,
+                               @org.springframework.beans.factory.annotation.Autowired(required = false)
+                               StackedCacheService cacheService,
+                               @org.springframework.beans.factory.annotation.Autowired(required = false)
+                               CacheProperties cacheProperties,
+                               @org.springframework.beans.factory.annotation.Autowired(required = false)
+                               CacheInvalidationService cacheInvalidationService) {
+        this.topicRepository = topicRepository;
+        this.questionRepository = questionRepository;
+        this.mongoTemplate = mongoTemplate;
+        this.cacheService = cacheService;
+        this.cacheProperties = cacheProperties;
+        this.cacheInvalidationService = cacheInvalidationService;
+    }
+
     @Override
     @NonNull
     public List<McqTopicResponse> listTopics() {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.mcqTopics(),
+                    new TypeReference<List<McqTopicResponse>>() {},
+                    cacheProperties.metadataTtl(),
+                    this::executeListTopics
+            );
+        }
+        return executeListTopics();
+    }
+
+    private List<McqTopicResponse> executeListTopics() {
         return topicRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))
                 .stream()
                 .map(McqTopicResponse::fromModel)
@@ -74,6 +112,9 @@ public class McqTopicServiceImpl implements McqTopicService {
                 .build();
 
         McqTopic saved = topicRepository.save(topic);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcqTopics();
+        }
         log.info("Created MCQ topic: [{}] (id: {})", saved.getName(), saved.getId());
         return McqTopicResponse.fromModel(saved);
     }
@@ -96,6 +137,9 @@ public class McqTopicServiceImpl implements McqTopicService {
         topic.setUpdatedAt(Instant.now());
 
         McqTopic updated = topicRepository.save(topic);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcqTopics();
+        }
         log.info("Updated MCQ topic: [{}] (id: {})", updated.getName(), updated.getId());
         return McqTopicResponse.fromModel(updated);
     }
@@ -112,6 +156,9 @@ public class McqTopicServiceImpl implements McqTopicService {
         }
 
         topicRepository.delete(topic);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcqTopics();
+        }
         log.info("Deleted MCQ topic: [{}] (id: {})", topic.getName(), id);
     }
 
@@ -125,6 +172,9 @@ public class McqTopicServiceImpl implements McqTopicService {
             Update update = new Update().inc("questionCount", 1).set("updatedAt", Instant.now());
             mongoTemplate.updateMulti(query, update, McqTopic.class);
         }
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcqTopics();
+        }
     }
 
     @Override
@@ -137,6 +187,9 @@ public class McqTopicServiceImpl implements McqTopicService {
                     Criteria.where("questionCount").gt(0)));
             Update update = new Update().inc("questionCount", -1).set("updatedAt", Instant.now());
             mongoTemplate.updateMulti(query, update, McqTopic.class);
+        }
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcqTopics();
         }
     }
 

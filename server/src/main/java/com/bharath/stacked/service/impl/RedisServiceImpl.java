@@ -71,6 +71,20 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
+    public <T> T getByType(String key, tools.jackson.core.type.TypeReference<T> typeReference) {
+        try {
+            Object value = redisTemplate.opsForValue().get(key);
+            if (value == null) {
+                return null;
+            }
+            return objectMapper.convertValue(value, typeReference);
+        } catch (Exception e) {
+            log.error("Failed to convert Redis key [{}] via TypeReference: {}", key, e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
     public boolean hasKey(String key) {
         try {
             return Boolean.TRUE.equals(redisTemplate.hasKey(key));
@@ -87,6 +101,20 @@ public class RedisServiceImpl implements RedisService {
         } catch (Exception e) {
             log.error("Failed to delete Redis key [{}]: {}", key, e.getMessage());
             return false;
+        }
+    }
+
+    @Override
+    public long delete(java.util.Collection<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return 0L;
+        }
+        try {
+            Long count = redisTemplate.delete(keys);
+            return count != null ? count : 0L;
+        } catch (Exception e) {
+            log.error("Failed to delete Redis keys [count={}]: {}", keys.size(), e.getMessage());
+            return 0L;
         }
     }
 

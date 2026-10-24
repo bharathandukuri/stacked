@@ -19,6 +19,11 @@ import com.bharath.stacked.modules.question_bank.model.QuestionBank;
 import com.bharath.stacked.modules.question_bank.model.QuestionBankItem;
 import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
 import com.bharath.stacked.modules.question_bank.service.QuestionBankService;
+import com.bharath.stacked.common.cache.CacheInvalidationService;
+import com.bharath.stacked.common.cache.CacheKeys;
+import com.bharath.stacked.common.cache.StackedCacheService;
+import com.bharath.stacked.config.cache.CacheProperties;
+import tools.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +32,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsActorType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEntityType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEventType;
+import com.bharath.stacked.modules.analytics.model.AnalyticsEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ApplicationEventPublisherAware;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -38,14 +49,46 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
-public class QuestionBankServiceImpl implements QuestionBankService {
+public class QuestionBankServiceImpl implements QuestionBankService, ApplicationEventPublisherAware {
 
     private final QuestionBankRepository questionBankRepository;
     private final CodingProblemRepository codingProblemRepository;
     private final McqQuestionRepository mcqQuestionRepository;
     private final AssessmentRepository assessmentRepository;
     private final MongoTemplate mongoTemplate;
+
+    private final StackedCacheService cacheService;
+    private final CacheProperties cacheProperties;
+    private final CacheInvalidationService cacheInvalidationService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public QuestionBankServiceImpl(QuestionBankRepository questionBankRepository,
+                                   CodingProblemRepository codingProblemRepository,
+                                   McqQuestionRepository mcqQuestionRepository,
+                                   AssessmentRepository assessmentRepository,
+                                   MongoTemplate mongoTemplate,
+                                   @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                   StackedCacheService cacheService,
+                                   @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                   CacheProperties cacheProperties,
+                                   @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                   CacheInvalidationService cacheInvalidationService) {
+        this.questionBankRepository = questionBankRepository;
+        this.codingProblemRepository = codingProblemRepository;
+        this.mcqQuestionRepository = mcqQuestionRepository;
+        this.assessmentRepository = assessmentRepository;
+        this.mongoTemplate = mongoTemplate;
+        this.cacheService = cacheService;
+        this.cacheProperties = cacheProperties;
+        this.cacheInvalidationService = cacheInvalidationService;
+    }
+
+    private ApplicationEventPublisher eventPublisher;
+
+    @Override
+    public void setApplicationEventPublisher(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
 
     private static final double DEFAULT_MCQ_POINTS = 1.0;
 
@@ -74,12 +117,34 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                 .build();
 
         QuestionBank saved = questionBankRepository.save(bank);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateQuestionBank(saved.getId());
+        }
+        publishAnalytics(AnalyticsEventType.QUESTION_BANK_CREATED, saved.getId(), bankAttributes(saved));
         log.info("Created Question Bank: [{}] (id: {})", saved.getTitle(), saved.getId());
         return mapToSummary(saved);
     }
 
     @Override
     public PageResponse<QuestionBankSummaryResponse> getQuestionBanks(QuestionBankFilterRequest filter) {
+        if (filter == null) {
+            filter = new QuestionBankFilterRequest();
+        }
+
+        if (filter.isDefault() && cacheService != null && cacheProperties != null) {
+            final QuestionBankFilterRequest effectiveFilter = filter;
+            return cacheService.getOrCompute(
+                    CacheKeys.questionBankDefaultPage(),
+                    new TypeReference<PageResponse<QuestionBankSummaryResponse>>() {},
+                    cacheProperties.catalogPageTtl(),
+                    () -> executeGetQuestionBanks(effectiveFilter)
+            );
+        }
+
+        return executeGetQuestionBanks(filter);
+    }
+
+    private PageResponse<QuestionBankSummaryResponse> executeGetQuestionBanks(QuestionBankFilterRequest filter) {
         Query query = new Query();
 
         if (StringUtils.hasText(filter.getSearch())) {
@@ -122,6 +187,18 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
     @Override
     public QuestionBankDetailResponse getQuestionBank(String id) {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.questionBankDetail(id),
+                    QuestionBankDetailResponse.class,
+                    cacheProperties.detailsTtl(),
+                    () -> executeGetQuestionBank(id)
+            );
+        }
+        return executeGetQuestionBank(id);
+    }
+
+    private QuestionBankDetailResponse executeGetQuestionBank(String id) {
         QuestionBank bank = findById(id);
         List<HydratedQuestionItemResponse> hydratedItems = hydrateItems(bank.getItems());
 
@@ -167,6 +244,10 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         existing.setUpdatedAt(Instant.now());
 
         QuestionBank updated = questionBankRepository.save(existing);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateQuestionBank(updated.getId());
+        }
+        publishAnalytics(AnalyticsEventType.QUESTION_BANK_UPDATED, updated.getId(), bankAttributes(updated));
         log.info("Updated Question Bank: [{}] (id: {})", updated.getTitle(), updated.getId());
         return mapToSummary(updated);
     }
@@ -214,6 +295,13 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         bank.setStatus(status);
         bank.setUpdatedAt(Instant.now());
         QuestionBank updated = questionBankRepository.save(bank);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateQuestionBank(updated.getId());
+        }
+        AnalyticsEventType eventType = updated.getStatus() == QuestionBankStatus.PUBLISHED
+                ? AnalyticsEventType.QUESTION_BANK_PUBLISHED
+                : AnalyticsEventType.QUESTION_BANK_UNPUBLISHED;
+        publishAnalytics(eventType, updated.getId(), bankAttributes(updated));
         log.info("Updated Question Bank status: [{}] -> {} (id: {})", updated.getTitle(), status, updated.getId());
         return mapToSummary(updated);
     }
@@ -241,6 +329,10 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         }
 
         questionBankRepository.delete(bank);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateQuestionBank(bank.getId());
+        }
+        publishAnalytics(AnalyticsEventType.QUESTION_BANK_DELETED, bank.getId(), bankAttributes(bank));
         log.info("Deleted Question Bank: [{}] (id: {})", bank.getTitle(), bank.getId());
     }
 
@@ -267,12 +359,32 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                 .build();
 
         QuestionBank saved = questionBankRepository.save(duplicate);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateQuestionBank(saved.getId());
+        }
+        Map<String, Object> dupAttrs = bankAttributes(saved);
+        if (source != null && source.getId() != null) {
+            dupAttrs.put("duplicatedFrom", source.getId());
+        }
+        publishAnalytics(AnalyticsEventType.QUESTION_BANK_CREATED, saved.getId(), dupAttrs);
         log.info("Duplicated Question Bank: [{}] -> [{}] (id: {})", source.getTitle(), saved.getTitle(), saved.getId());
         return mapToSummary(saved);
     }
 
     @Override
     public List<String> getDistinctCategories() {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.questionBankCategories(),
+                    new TypeReference<List<String>>() {},
+                    cacheProperties.metadataTtl(),
+                    this::executeGetDistinctCategories
+            );
+        }
+        return executeGetDistinctCategories();
+    }
+
+    private List<String> executeGetDistinctCategories() {
         return mongoTemplate.query(QuestionBank.class)
                 .distinct("category")
                 .as(String.class)
@@ -285,6 +397,18 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
     @Override
     public QuestionBankStatsResponse getStats() {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.questionBankStats(),
+                    QuestionBankStatsResponse.class,
+                    cacheProperties.metadataTtl(),
+                    this::executeGetStats
+            );
+        }
+        return executeGetStats();
+    }
+
+    private QuestionBankStatsResponse executeGetStats() {
         long totalBanks = questionBankRepository.count();
         long publishedBanks = questionBankRepository.countByStatus(QuestionBankStatus.PUBLISHED);
         long draftBanks = questionBankRepository.countByStatus(QuestionBankStatus.DRAFT);
@@ -628,5 +752,30 @@ public class QuestionBankServiceImpl implements QuestionBankService {
                 .createdAt(bank.getCreatedAt())
                 .updatedAt(bank.getUpdatedAt())
                 .build();
+    }
+
+    private Map<String, Object> bankAttributes(QuestionBank bank) {
+        Map<String, Object> attrs = new HashMap<>();
+        if (bank != null && bank.getTitle() != null) {
+            attrs.put("title", bank.getTitle());
+        }
+        return attrs;
+    }
+
+    private void publishAnalytics(AnalyticsEventType eventType, String entityId, Map<String, Object> attributes) {
+        if (eventPublisher != null) {
+            try {
+                AnalyticsEvent event = AnalyticsEvent.builder()
+                        .eventType(eventType)
+                        .entityType(AnalyticsEntityType.QUESTION_BANK)
+                        .entityId(entityId)
+                        .actorType(AnalyticsActorType.ADMIN)
+                        .attributes(attributes != null ? new HashMap<>(attributes) : new HashMap<>())
+                        .build();
+                eventPublisher.publishEvent(event);
+            } catch (Exception ex) {
+                log.warn("Failed to publish analytics event [{}]: {}", eventType, ex.getMessage());
+            }
+        }
     }
 }

@@ -25,6 +25,11 @@ public interface RedisService {
     <T> T get(String key, Class<T> targetClass);
 
     /**
+     * Retrieve a value from Redis deserialized to a target generic type via Jackson TypeReference.
+     */
+    <T> T getByType(String key, tools.jackson.core.type.TypeReference<T> typeReference);
+
+    /**
      * Check if a key exists in Redis.
      */
     boolean hasKey(String key);
@@ -33,6 +38,11 @@ public interface RedisService {
      * Delete a key from Redis.
      */
     boolean delete(String key);
+
+    /**
+     * Delete multiple keys from Redis in a single command.
+     */
+    long delete(java.util.Collection<String> keys);
 
     /**
      * Set or update expiration timeout on an existing key.

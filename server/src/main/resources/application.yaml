@@ -206,3 +206,17 @@ stacked:
       fail-closed: ${RATE_LIMIT_DEFAULT_FAIL_CLOSED:false}
       paths:
         - "/api/**"
+  analytics:
+    enabled: ${ANALYTICS_ENABLED:true}
+    retention-days: ${ANALYTICS_RETENTION_DAYS:90}
+    max-query-days: ${ANALYTICS_MAX_QUERY_DAYS:365}
+    async-workers: ${ANALYTICS_ASYNC_WORKERS:4}
+    queue-capacity: ${ANALYTICS_QUEUE_CAPACITY:1000}
+  cache:
+    enabled: ${CACHE_ENABLED:true}
+    default-ttl: ${CACHE_DEFAULT_TTL:PT5M}
+    analytics-ttl: ${CACHE_ANALYTICS_TTL:PT2M}
+    catalog-page-ttl: ${CACHE_CATALOG_PAGE_TTL:PT10M}
+    details-ttl: ${CACHE_DETAILS_TTL:PT30M}
+    metadata-ttl: ${CACHE_METADATA_TTL:PT1H}
+    metrics-ttl: ${CACHE_METRICS_TTL:PT5M}

@@ -1,7 +1,16 @@
 package com.bharath.stacked.modules.mcq.service.impl;
 
 import com.bharath.stacked.common.api.PageResponse;
+import com.bharath.stacked.common.cache.CacheInvalidationService;
+import com.bharath.stacked.common.cache.CacheKeys;
+import com.bharath.stacked.common.cache.StackedCacheService;
+import com.bharath.stacked.config.cache.CacheProperties;
+import tools.jackson.core.type.TypeReference;
 import com.bharath.stacked.common.event.QuestionDeletedEvent;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsActorType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEntityType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEventType;
+import com.bharath.stacked.modules.analytics.model.AnalyticsEvent;
 import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
@@ -30,6 +39,8 @@ import com.bharath.stacked.modules.question_bank.model.QuestionBank;
 import com.bharath.stacked.modules.question_bank.repository.QuestionBankRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import java.util.Map;
+import java.util.HashMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.context.ApplicationEventPublisher;
@@ -55,7 +66,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class McqQuestionServiceImpl implements McqQuestionService {
 
     private static final Pattern MARKDOWN_IMAGE_PATTERN =
@@ -71,6 +81,40 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     private final AssessmentRepository assessmentRepository;
     private final AssessmentQuestionResponseRepository assessmentQuestionResponseRepository;
 
+    private final StackedCacheService cacheService;
+    private final CacheProperties cacheProperties;
+    private final CacheInvalidationService cacheInvalidationService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public McqQuestionServiceImpl(McqQuestionRepository questionRepository,
+                                  McqTopicRepository topicRepository,
+                                  McqTopicService topicService,
+                                  FileService fileService,
+                                  MongoTemplate mongoTemplate,
+                                  ApplicationEventPublisher eventPublisher,
+                                  QuestionBankRepository questionBankRepository,
+                                  AssessmentRepository assessmentRepository,
+                                  AssessmentQuestionResponseRepository assessmentQuestionResponseRepository,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  StackedCacheService cacheService,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  CacheProperties cacheProperties,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  CacheInvalidationService cacheInvalidationService) {
+        this.questionRepository = questionRepository;
+        this.topicRepository = topicRepository;
+        this.topicService = topicService;
+        this.fileService = fileService;
+        this.mongoTemplate = mongoTemplate;
+        this.eventPublisher = eventPublisher;
+        this.questionBankRepository = questionBankRepository;
+        this.assessmentRepository = assessmentRepository;
+        this.assessmentQuestionResponseRepository = assessmentQuestionResponseRepository;
+        this.cacheService = cacheService;
+        this.cacheProperties = cacheProperties;
+        this.cacheInvalidationService = cacheInvalidationService;
+    }
+
     @Override
     @NonNull
     public PageResponse<McqQuestionSummaryResponse> listQuestions(@Nullable McqFilterRequest filter) {
@@ -78,6 +122,20 @@ public class McqQuestionServiceImpl implements McqQuestionService {
             filter = new McqFilterRequest();
         }
 
+        if (filter.isDefault() && cacheService != null && cacheProperties != null) {
+            final McqFilterRequest effectiveFilter = filter;
+            return cacheService.getOrCompute(
+                    CacheKeys.mcqDefaultPage(),
+                    new TypeReference<PageResponse<McqQuestionSummaryResponse>>() {},
+                    cacheProperties.catalogPageTtl(),
+                    () -> executeListQuestions(effectiveFilter)
+            );
+        }
+
+        return executeListQuestions(filter);
+    }
+
+    private PageResponse<McqQuestionSummaryResponse> executeListQuestions(McqFilterRequest filter) {
         Query query = new Query();
         List<Criteria> criteriaList = new ArrayList<>();
 
@@ -135,6 +193,18 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     @Override
     @NonNull
     public McqQuestionDetailResponse getQuestionById(@NonNull String id) {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.mcqDetail(id),
+                    McqQuestionDetailResponse.class,
+                    cacheProperties.detailsTtl(),
+                    () -> executeGetQuestionById(id)
+            );
+        }
+        return executeGetQuestionById(id);
+    }
+
+    private McqQuestionDetailResponse executeGetQuestionById(String id) {
         McqQuestion question = findEntityById(id);
         return McqQuestionDetailResponse.fromModel(question);
     }
@@ -185,6 +255,12 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         McqQuestion saved = questionRepository.save(question);
         log.info("Created MCQ question: [{}] (id: {})", saved.getTitle(), saved.getId());
 
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcq(saved.getId());
+        }
+
+        publishAnalytics(AnalyticsEventType.MCQ_CREATED, saved.getId(), mcqAttributes(saved));
+
         topicService.incrementQuestionCounts(saved.getTopics());
 
         return McqQuestionDetailResponse.fromModel(saved);
@@ -229,6 +305,12 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         McqQuestion updated = questionRepository.save(existing);
         log.info("Updated MCQ question: [{}] (id: {})", updated.getTitle(), updated.getId());
 
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcq(updated.getId());
+        }
+
+        publishAnalytics(AnalyticsEventType.MCQ_UPDATED, updated.getId(), mcqAttributes(updated));
+
         return McqQuestionDetailResponse.fromModel(updated);
     }
 
@@ -272,7 +354,11 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         }
 
         questionRepository.delete(question);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcq(questionId);
+        }
         eventPublisher.publishEvent(new QuestionDeletedEvent(questionId));
+        publishAnalytics(AnalyticsEventType.MCQ_DELETED, questionId, mcqAttributes(question));
         log.info("Deleted MCQ question: [{}] (id: {})", question.getTitle(), questionId);
     }
 
@@ -322,7 +408,16 @@ public class McqQuestionServiceImpl implements McqQuestionService {
         question.setStatus(status);
         question.setUpdatedAt(Instant.now());
         McqQuestion saved = questionRepository.save(question);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateMcq(saved.getId());
+        }
         log.info("Updated MCQ status: [{}] -> {} (id: {})", question.getTitle(), status, question.getId());
+
+        AnalyticsEventType eventType = saved.getStatus() == McqStatus.PUBLISHED
+                ? AnalyticsEventType.MCQ_PUBLISHED
+                : AnalyticsEventType.MCQ_UNPUBLISHED;
+        publishAnalytics(eventType, saved.getId(), mcqAttributes(saved));
+
         return McqQuestionDetailResponse.fromModel(saved);
     }
 
@@ -341,6 +436,18 @@ public class McqQuestionServiceImpl implements McqQuestionService {
     @Override
     @NonNull
     public McqStatsResponse getStats() {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.mcqStats(),
+                    McqStatsResponse.class,
+                    cacheProperties.metadataTtl(),
+                    this::executeGetStats
+            );
+        }
+        return executeGetStats();
+    }
+
+    private McqStatsResponse executeGetStats() {
         long total = questionRepository.count();
         long published = questionRepository.countByStatus(McqStatus.PUBLISHED);
         long draft = questionRepository.countByStatus(McqStatus.DRAFT);
@@ -503,6 +610,31 @@ public class McqQuestionServiceImpl implements McqQuestionService {
                 .filter(s -> !s.isEmpty())
                 .distinct()
                 .toList();
+    }
+
+    private Map<String, Object> mcqAttributes(McqQuestion question) {
+        Map<String, Object> attrs = new HashMap<>();
+        if (question != null && question.getTitle() != null) {
+            attrs.put("title", question.getTitle());
+        }
+        return attrs;
+    }
+
+    private void publishAnalytics(AnalyticsEventType eventType, String entityId, java.util.Map<String, Object> attributes) {
+        if (eventPublisher != null) {
+            try {
+                AnalyticsEvent event = AnalyticsEvent.builder()
+                        .eventType(eventType)
+                        .entityType(AnalyticsEntityType.MCQ)
+                        .entityId(entityId)
+                        .actorType(AnalyticsActorType.ADMIN)
+                        .attributes(attributes != null ? new java.util.HashMap<>(attributes) : new java.util.HashMap<>())
+                        .build();
+                eventPublisher.publishEvent(event);
+            } catch (Exception ex) {
+                log.warn("Failed to publish analytics event [{}]: {}", eventType, ex.getMessage());
+            }
+        }
     }
 
     private record ValidatedOptions(List<McqOption> options, List<String> correctOptionIds) {}

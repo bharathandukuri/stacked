@@ -31,6 +31,17 @@ public class CodingProblemFilterRequest {
         this.sortDirection = sortDirection != null ? sortDirection : "DESC";
     }
 
+    public boolean isDefault() {
+        return (search == null || search.isBlank()) &&
+                status == null &&
+                problemType == null &&
+                difficulty == null &&
+                page == 0 &&
+                size == 20 &&
+                (sortBy == null || sortBy.equalsIgnoreCase("createdAt")) &&
+                (sortDirection == null || sortDirection.equalsIgnoreCase("DESC"));
+    }
+
     public static Builder builder() {
         return new Builder();
     }

@@ -27,5 +27,14 @@ public class AssessmentFilterRequest {
 
     @Builder.Default
     private String sortDir = "desc";
+
+    public boolean isDefault() {
+        return (search == null || search.isBlank()) &&
+                status == null &&
+                page == 0 &&
+                size == 10 &&
+                (sortBy == null || sortBy.equalsIgnoreCase("createdAt")) &&
+                (sortDir == null || sortDir.equalsIgnoreCase("desc"));
+    }
 }
 

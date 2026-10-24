@@ -223,7 +223,7 @@ export function AdminQuestionsPage() {
   const isLast = banksPage?.isLast ?? true
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
       {/* Sidebar */}
       <AdminSidebar currentPath="/admin/questions" />
 

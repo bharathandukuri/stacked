@@ -28,7 +28,16 @@ import com.bharath.stacked.modules.coding_problem.repository.CodingProblemReposi
 import com.bharath.stacked.modules.coding_problem.service.CodingProblemService;
 import com.bharath.stacked.modules.execution.dto.CodeExecutionConstraints;
 import com.bharath.stacked.common.api.PageResponse;
+import com.bharath.stacked.common.cache.CacheInvalidationService;
+import com.bharath.stacked.common.cache.CacheKeys;
+import com.bharath.stacked.common.cache.StackedCacheService;
+import com.bharath.stacked.config.cache.CacheProperties;
+import tools.jackson.core.type.TypeReference;
 import com.bharath.stacked.common.event.QuestionDeletedEvent;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsActorType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEntityType;
+import com.bharath.stacked.modules.analytics.enums.AnalyticsEventType;
+import com.bharath.stacked.modules.analytics.model.AnalyticsEvent;
 import com.bharath.stacked.exception.BadRequestException;
 import com.bharath.stacked.exception.ConflictException;
 import com.bharath.stacked.exception.ResourceNotFoundException;
@@ -82,6 +91,12 @@ public class CodingProblemServiceImpl implements CodingProblemService {
     private final QuestionBankRepository questionBankRepository;
     private final AssessmentRepository assessmentRepository;
     private final AssessmentQuestionResponseRepository assessmentQuestionResponseRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private StackedCacheService cacheService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CacheProperties cacheProperties;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CacheInvalidationService cacheInvalidationService;
 
     public CodingProblemServiceImpl(CodingProblemRepository codingProblemRepository,
                                   MongoTemplate mongoTemplate,
@@ -94,7 +109,22 @@ public class CodingProblemServiceImpl implements CodingProblemService {
                                   AssessmentRepository assessmentRepository) {
         this(codingProblemRepository, mongoTemplate, languageRegistry, executionConstraintResolver,
                 codingProblemJudgeService, fileService, eventPublisher, questionBankRepository,
-                assessmentRepository, null);
+                assessmentRepository, null, null, null, null);
+    }
+
+    public CodingProblemServiceImpl(CodingProblemRepository codingProblemRepository,
+                                  MongoTemplate mongoTemplate,
+                                  LanguageRegistry languageRegistry,
+                                  ExecutionConstraintResolver executionConstraintResolver,
+                                  CodingProblemJudgeService codingProblemJudgeService,
+                                  FileService fileService,
+                                  ApplicationEventPublisher eventPublisher,
+                                  QuestionBankRepository questionBankRepository,
+                                  AssessmentRepository assessmentRepository,
+                                  AssessmentQuestionResponseRepository assessmentQuestionResponseRepository) {
+        this(codingProblemRepository, mongoTemplate, languageRegistry, executionConstraintResolver,
+                codingProblemJudgeService, fileService, eventPublisher, questionBankRepository,
+                assessmentRepository, assessmentQuestionResponseRepository, null, null, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -108,7 +138,13 @@ public class CodingProblemServiceImpl implements CodingProblemService {
                                   QuestionBankRepository questionBankRepository,
                                   AssessmentRepository assessmentRepository,
                                   @org.springframework.beans.factory.annotation.Autowired(required = false)
-                                  AssessmentQuestionResponseRepository assessmentQuestionResponseRepository) {
+                                  AssessmentQuestionResponseRepository assessmentQuestionResponseRepository,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  StackedCacheService cacheService,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  CacheProperties cacheProperties,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  CacheInvalidationService cacheInvalidationService) {
         this.codingProblemRepository = codingProblemRepository;
         this.mongoTemplate = mongoTemplate;
         this.languageRegistry = languageRegistry;
@@ -119,6 +155,9 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         this.questionBankRepository = questionBankRepository;
         this.assessmentRepository = assessmentRepository;
         this.assessmentQuestionResponseRepository = assessmentQuestionResponseRepository;
+        this.cacheService = cacheService;
+        this.cacheProperties = cacheProperties;
+        this.cacheInvalidationService = cacheInvalidationService;
     }
 
     @Override
@@ -127,6 +166,20 @@ public class CodingProblemServiceImpl implements CodingProblemService {
             filter = new CodingProblemFilterRequest();
         }
 
+        if (filter.isDefault() && cacheService != null && cacheProperties != null) {
+            final CodingProblemFilterRequest effectiveFilter = filter;
+            return cacheService.getOrCompute(
+                    CacheKeys.codingProblemDefaultPage(),
+                    new TypeReference<PageResponse<CodingProblemSummaryResponse>>() {},
+                    cacheProperties.catalogPageTtl(),
+                    () -> executeFindAll(effectiveFilter)
+            );
+        }
+
+        return executeFindAll(filter);
+    }
+
+    private PageResponse<CodingProblemSummaryResponse> executeFindAll(CodingProblemFilterRequest filter) {
         Query query = new Query();
         List<Criteria> criteriaList = new ArrayList<>();
 
@@ -182,6 +235,20 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         if (idOrSlug == null || idOrSlug.isBlank()) {
             throw new BadRequestException("Coding problem identifier cannot be empty.");
         }
+
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.codingProblemDetail(idOrSlug),
+                    CodingProblem.class,
+                    cacheProperties.detailsTtl(),
+                    () -> executeFindByIdOrSlug(idOrSlug)
+            );
+        }
+
+        return executeFindByIdOrSlug(idOrSlug);
+    }
+
+    private CodingProblem executeFindByIdOrSlug(String idOrSlug) {
         return codingProblemRepository.findById(idOrSlug)
                 .or(() -> codingProblemRepository.findBySlug(idOrSlug))
                 .orElseThrow(() -> new ResourceNotFoundException("CodingProblem", "id or slug", idOrSlug));
@@ -465,7 +532,12 @@ public class CodingProblemServiceImpl implements CodingProblemService {
                 .imageFileIds(new ArrayList<>(setup.imageFileIds()))
                 .build();
 
-        return codingProblemRepository.save(codingProblem);
+        CodingProblem saved = codingProblemRepository.save(codingProblem);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateCodingProblem(saved.getId(), saved.getSlug());
+        }
+        publishAnalytics(AnalyticsEventType.CODING_PROBLEM_CREATED, saved.getId(), problemAttributes(saved));
+        return saved;
     }
 
     @Transactional
@@ -530,7 +602,12 @@ public class CodingProblemServiceImpl implements CodingProblemService {
         existing.setGeneratorDelimiter(request.getGeneratorDelimiter());
         existing.setImageFileIds(new ArrayList<>(setup.imageFileIds()));
 
-        return codingProblemRepository.save(existing);
+        CodingProblem saved = codingProblemRepository.save(existing);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateCodingProblem(saved.getId(), saved.getSlug());
+        }
+        publishAnalytics(AnalyticsEventType.CODING_PROBLEM_UPDATED, saved.getId(), problemAttributes(saved));
+        return saved;
     }
 
     @Override
@@ -561,7 +638,11 @@ public class CodingProblemServiceImpl implements CodingProblemService {
 
         cleanRemovedImages(existing.getImageFileIds(), Collections.emptySet(), existing.getId());
         codingProblemRepository.delete(existing);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateCodingProblem(existing.getId(), existing.getSlug());
+        }
         eventPublisher.publishEvent(new QuestionDeletedEvent(existing.getId()));
+        publishAnalytics(AnalyticsEventType.CODING_PROBLEM_DELETED, existing.getId(), problemAttributes(existing));
         log.info("Deleted coding problem [{}] ({})", existing.getId(), existing.getSlug());
     }
 
@@ -972,7 +1053,15 @@ public class CodingProblemServiceImpl implements CodingProblemService {
 
         codingProblem.setStatus(status);
         codingProblem.setUpdatedAt(Instant.now());
-        return codingProblemRepository.save(codingProblem);
+        CodingProblem saved = codingProblemRepository.save(codingProblem);
+        if (cacheInvalidationService != null) {
+            cacheInvalidationService.invalidateCodingProblem(saved.getId(), saved.getSlug());
+        }
+        AnalyticsEventType eventType = saved.getStatus() == CodingProblemStatus.PUBLISHED
+                ? AnalyticsEventType.CODING_PROBLEM_PUBLISHED
+                : AnalyticsEventType.CODING_PROBLEM_UNPUBLISHED;
+        publishAnalytics(eventType, saved.getId(), problemAttributes(saved));
+        return saved;
     }
 
     @Override
@@ -1008,6 +1097,18 @@ public class CodingProblemServiceImpl implements CodingProblemService {
 
     @Override
     public List<SupportedLanguageResponse> getSupportedLanguages(CodingProblemType problemType) {
+        if (cacheService != null && cacheProperties != null) {
+            return cacheService.getOrCompute(
+                    CacheKeys.codingProblemSupportedLanguages(problemType),
+                    new TypeReference<List<SupportedLanguageResponse>>() {},
+                    cacheProperties.metadataTtl(),
+                    () -> executeGetSupportedLanguages(problemType)
+            );
+        }
+        return executeGetSupportedLanguages(problemType);
+    }
+
+    private List<SupportedLanguageResponse> executeGetSupportedLanguages(CodingProblemType problemType) {
         List<Language> languages = languageRegistry.getAll();
 
         return languages.stream()
@@ -1033,5 +1134,31 @@ public class CodingProblemServiceImpl implements CodingProblemService {
                         executionConstraintResolver.resolveMemoryLimitKb(lang, null, null)
                 ))
                 .toList();
+    }
+
+    private Map<String, Object> problemAttributes(CodingProblem problem) {
+        Map<String, Object> attrs = new HashMap<>();
+        if (problem != null) {
+            if (problem.getTitle() != null) attrs.put("title", problem.getTitle());
+            if (problem.getSlug() != null) attrs.put("slug", problem.getSlug());
+        }
+        return attrs;
+    }
+
+    private void publishAnalytics(AnalyticsEventType eventType, String entityId, Map<String, Object> attributes) {
+        if (eventPublisher != null) {
+            try {
+                AnalyticsEvent event = AnalyticsEvent.builder()
+                        .eventType(eventType)
+                        .entityType(AnalyticsEntityType.CODING_PROBLEM)
+                        .entityId(entityId)
+                        .actorType(AnalyticsActorType.ADMIN)
+                        .attributes(attributes != null ? new HashMap<>(attributes) : new HashMap<>())
+                        .build();
+                eventPublisher.publishEvent(event);
+            } catch (Exception ex) {
+                log.warn("Failed to publish analytics event [{}]: {}", eventType, ex.getMessage());
+            }
+        }
     }
 }

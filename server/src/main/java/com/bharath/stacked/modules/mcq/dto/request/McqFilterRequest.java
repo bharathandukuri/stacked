@@ -31,5 +31,17 @@ public class McqFilterRequest {
 
     @Builder.Default
     private String sortDirection = "DESC";
+
+    public boolean isDefault() {
+        return (search == null || search.isBlank()) &&
+                (topic == null || topic.isBlank()) &&
+                difficulty == null &&
+                type == null &&
+                status == null &&
+                page == 0 &&
+                size == 20 &&
+                (sortBy == null || sortBy.equalsIgnoreCase("createdAt")) &&
+                (sortDirection == null || sortDirection.equalsIgnoreCase("DESC"));
+    }
 }
 
