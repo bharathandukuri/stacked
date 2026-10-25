@@ -1,12 +1,16 @@
 package com.bharath.stacked.modules.coding_problem.dto.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CodingProblemTestcaseResultResponse {
     private String testCaseId;
     private Integer caseIndex;
@@ -24,8 +28,13 @@ public class CodingProblemTestcaseResultResponse {
     private Boolean isCustom;
     private Boolean isSample;
     private List<String> logs;
+    private Boolean passed;
 
-    public CodingProblemTestcaseResultResponse() {
+    public Boolean getPassed() {
+        if (passed != null) {
+            return passed;
+        }
+        return "PASSED".equalsIgnoreCase(status);
     }
 
     public CodingProblemTestcaseResultResponse(
@@ -46,21 +55,8 @@ public class CodingProblemTestcaseResultResponse {
             Boolean isSample,
             List<String> logs
     ) {
-        this.testCaseId = testCaseId;
-        this.caseIndex = caseIndex;
-        this.status = status;
-        this.stdin = stdin;
-        this.dbInit = dbInit;
-        this.actualOutput = actualOutput;
-        this.expectedOutput = expectedOutput;
-        this.stderr = stderr;
-        this.exitCode = exitCode;
-        this.executionTimeMs = executionTimeMs;
-        this.runtimeMs = runtimeMs;
-        this.memoryMb = memoryMb;
-        this.error = error;
-        this.isCustom = isCustom;
-        this.isSample = isSample;
-        this.logs = logs;
+        this(testCaseId, caseIndex, status, stdin, dbInit, actualOutput, expectedOutput, stderr,
+                exitCode, executionTimeMs, runtimeMs, memoryMb, error, isCustom, isSample, logs,
+                "PASSED".equalsIgnoreCase(status));
     }
 }

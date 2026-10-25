@@ -27,5 +27,14 @@ public class SavedQuestionResponseDto {
     private Boolean allTestcasesPassed;
     private boolean markedForReview;
     private Instant savedAt;
+
+    private Double awardedPoints;
+    private Double bestAwardedPoints;
+    private Double maxPoints;
+    private Integer passedTestcases;
+    private Integer totalTestcases;
+
+    @Builder.Default
+    private List<com.bharath.stacked.modules.assessment.model.CodingSubmissionRecord> submissions = new ArrayList<>();
 }
 

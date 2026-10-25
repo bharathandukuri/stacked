@@ -282,13 +282,22 @@ export const MonacoEditor = React.forwardRef<
     onMount?.(editor, monacoInstance)
   }
 
-  // Synchronize controlled value changes to the editor instance model
+  // Synchronize external value changes to the editor instance model without clobbering cursor
   React.useEffect(() => {
     const editor = editorRef.current
     if (editor && value !== undefined) {
       const model = editor.getModel()
       if (model && model.getValue() !== value) {
-        model.setValue(value)
+        // If the user has active text focus, they are typing — never replace the buffer
+        if (!editor.hasTextFocus()) {
+          const prevPosition = editor.getPosition()
+          const prevScrollTop = editor.getScrollTop()
+          model.setValue(value)
+          if (prevPosition) {
+            editor.setPosition(prevPosition)
+          }
+          editor.setScrollTop(prevScrollTop)
+        }
       }
     }
   }, [value])

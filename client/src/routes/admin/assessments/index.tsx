@@ -206,7 +206,7 @@ export function AssessmentsPage() {
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <AdminSidebar currentPath="/admin/assessments" />
 
-      <main className="flex flex-1 flex-col overflow-y-auto">
+      <main className="flex flex-1 flex-col min-w-0 overflow-y-auto">
         {/* Header */}
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card/70 px-8 backdrop-blur-md">
           <div className="flex items-center gap-3">
@@ -274,6 +274,49 @@ export function AssessmentsPage() {
                   <span>Reset</span>
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Summary Cards */}
+        <div className="grid grid-cols-2 gap-4 px-8 pt-6 sm:grid-cols-4">
+          <div className="rounded-xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Total Assessments</span>
+              <GraduationCap className="size-4 text-primary" />
+            </div>
+            <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+              {totalElements}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Active Sessions</span>
+              <Play className="size-4 text-emerald-500 fill-emerald-500" />
+            </div>
+            <div className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+              {assessments.filter((a) => a.status === "ACTIVE").length}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Completed</span>
+              <CheckCircle2 className="size-4 text-blue-500" />
+            </div>
+            <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+              {assessments.filter((a) => a.status === "COMPLETED").length}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Candidates Enrolled</span>
+              <Users className="size-4 text-purple-500" />
+            </div>
+            <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+              {assessments.reduce((acc, a) => acc + (a.assignedCandidateCount || 0), 0)}
             </div>
           </div>
         </div>

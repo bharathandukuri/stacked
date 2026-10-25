@@ -94,8 +94,10 @@ export function FormMarkdown(props: FormMarkdownProps) {
   const effectiveMinHeight =
     typeof minHeight === "number" ? `${minHeight}px` : minHeight
 
+  const { className: _omittedClassName, ...restProps } = props
+
   return (
-    <FormBase {...props} labelAction={props.labelAction ?? modeSwitcher}>
+    <FormBase {...restProps} labelAction={props.labelAction ?? modeSwitcher}>
       {viewMode === "edit" && (
         <div
           style={{
@@ -104,7 +106,7 @@ export function FormMarkdown(props: FormMarkdownProps) {
             maxHeight: effectiveHeight,
           }}
           className={cn(
-            "w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
+            "w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
             props.className
           )}
         >
@@ -132,7 +134,7 @@ export function FormMarkdown(props: FormMarkdownProps) {
             maxHeight: effectiveHeight,
           }}
           className={cn(
-            "w-full overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-xs",
+            "w-full min-w-0 max-w-full overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-xs",
             props.className
           )}
         >
@@ -148,7 +150,7 @@ export function FormMarkdown(props: FormMarkdownProps) {
             maxHeight: effectiveHeight,
           }}
           className={cn(
-            "w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
+            "w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
             props.className
           )}
         >

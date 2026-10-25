@@ -94,7 +94,7 @@ export function AdminSidebar({ currentPath = "/admin" }: SidebarProps) {
   ]
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 sticky top-0 flex-col border-r border-border bg-card/60 backdrop-blur-md">
+    <aside className="flex h-screen max-h-screen w-64 shrink-0 sticky top-0 z-20 flex-col border-r border-border bg-card/60 backdrop-blur-md">
       {/* Brand Header */}
       <div className="flex h-16 items-center gap-3 border-b border-border px-6">
         <Logo size={32} />

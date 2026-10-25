@@ -1206,10 +1206,19 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
             );
             if (activeAttempt.isPresent()) {
                 AssessmentAttempt att = activeAttempt.get();
-                hasActive = true;
-                activeAttemptId = att.getId();
-                effectiveDeadline = att.getEffectiveDeadline();
-                remainingSeconds = Math.max(0, Duration.between(now, att.getEffectiveDeadline()).toSeconds());
+                if (now.isAfter(att.getEffectiveDeadline())) {
+                    // Lazy on-demand expiration: evaluate and expire right now!
+                    expireAttempt(att, assessment, now);
+                    hasActive = false;
+                    activeAttemptId = null;
+                    effectiveDeadline = null;
+                    remainingSeconds = null;
+                } else {
+                    hasActive = true;
+                    activeAttemptId = att.getId();
+                    effectiveDeadline = att.getEffectiveDeadline();
+                    remainingSeconds = Math.max(0, Duration.between(now, att.getEffectiveDeadline()).toSeconds());
+                }
             }
         }
 
@@ -1434,6 +1443,12 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                     .allTestcasesPassed(resp.getAllTestcasesPassed())
                     .markedForReview(resp.isMarkedForReview())
                     .savedAt(resp.getSavedAt())
+                    .awardedPoints(resp.getAwardedPoints())
+                    .bestAwardedPoints(resp.getBestAwardedPoints())
+                    .maxPoints(resp.getMaxPoints())
+                    .passedTestcases(resp.getBestPassedTestcases())
+                    .totalTestcases(resp.getTotalTestcases())
+                    .submissions(resp.getSubmissions() != null ? resp.getSubmissions() : List.of())
                     .build());
         }
 
@@ -1550,7 +1565,7 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
         }
 
         QuestionSnapshot snap = item.getSnapshot();
-        CodingProblemExecutionResponse res = executeCandidateCodeOnJudge(snap, request.getLanguageId(), request.getCode(), request.getStdin(), true);
+        CodingProblemExecutionResponse res = executeCandidateCodeOnJudge(snap, request.getLanguageId(), request.getCode(), null, true);
 
         recordAuditEvent(assessment.getId(), attempt.getId(), candidateUserId, attempt.getCandidateEmail(),
                 request.getQuestionId(), AssessmentAuditEventType.CODE_RUN_SAMPLE, AssessmentAuditEventSource.SERVER_VERIFIED,
@@ -1666,6 +1681,12 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                 .allTestcasesPassed(saved.getAllTestcasesPassed())
                 .markedForReview(saved.isMarkedForReview())
                 .savedAt(saved.getSavedAt())
+                .awardedPoints(saved.getAwardedPoints())
+                .bestAwardedPoints(saved.getBestAwardedPoints())
+                .maxPoints(saved.getMaxPoints())
+                .passedTestcases(saved.getBestPassedTestcases())
+                .totalTestcases(saved.getTotalTestcases())
+                .submissions(saved.getSubmissions())
                 .build();
     }
 
@@ -1708,19 +1729,56 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                         .createdAt(Instant.now())
                         .build());
 
+        String overallStatus = executionResult.getOverallStatus() != null ? executionResult.getOverallStatus() : "UNKNOWN";
+        long executionTimeMs = executionResult.getTotalExecutionTimeMs() != null ? executionResult.getTotalExecutionTimeMs() : 0L;
+
+        com.bharath.stacked.modules.assessment.model.CodingSubmissionRecord submissionRecord =
+                com.bharath.stacked.modules.assessment.model.CodingSubmissionRecord.builder()
+                        .submissionId(java.util.UUID.randomUUID().toString())
+                        .submittedAt(Instant.now())
+                        .languageId(request.getLanguageId())
+                        .code(request.getCode())
+                        .status(overallStatus)
+                        .passedTestcases(passed)
+                        .totalTestcases(total)
+                        .awardedPoints(awardedPoints)
+                        .executionTimeMs(executionTimeMs)
+                        .build();
+
+        if (response.getSubmissions() == null) {
+            response.setSubmissions(new java.util.ArrayList<>());
+        }
+        response.getSubmissions().add(submissionRecord);
+
+        // Keep best awarded points across all submissions for this question
+        double currentBest = response.getBestAwardedPoints() != null ? response.getBestAwardedPoints() : response.getAwardedPoints();
+        if (awardedPoints >= currentBest) {
+            response.setBestAwardedPoints(awardedPoints);
+            response.setAwardedPoints(awardedPoints);
+            response.setBestPassedTestcases(passed);
+            response.setTotalTestcases(total);
+            response.setBestCode(request.getCode());
+            response.setBestLanguageId(request.getLanguageId());
+            response.setBestExecutionResult(executionResult);
+        } else {
+            response.setAwardedPoints(currentBest);
+        }
+
+        if (allPassed) {
+            response.setAllTestcasesPassed(true);
+        } else if (response.getAllTestcasesPassed() == null) {
+            response.setAllTestcasesPassed(false);
+        }
+
         response.setLanguageId(request.getLanguageId());
         response.setCode(request.getCode());
         response.setLastExecutionResult(executionResult);
-        response.setAllTestcasesPassed(allPassed);
-        response.setAwardedPoints(awardedPoints);
+        response.setTotalTestcases(total);
         response.setSavedAt(Instant.now());
         response.setEvaluatedAt(Instant.now());
         response.setUpdatedAt(Instant.now());
 
         AssessmentQuestionResponse saved = responseRepository.save(response);
-
-        String overallStatus = executionResult.getOverallStatus() != null ? executionResult.getOverallStatus() : "UNKNOWN";
-        long executionTimeMs = executionResult.getTotalExecutionTimeMs() != null ? executionResult.getTotalExecutionTimeMs() : 0L;
 
         publishAnalytics(AnalyticsEventType.CODE_SUBMISSION_EVALUATED,
                 saved.getId(),
@@ -1753,6 +1811,12 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                 .allTestcasesPassed(saved.getAllTestcasesPassed())
                 .markedForReview(saved.isMarkedForReview())
                 .savedAt(saved.getSavedAt())
+                .awardedPoints(saved.getAwardedPoints())
+                .bestAwardedPoints(saved.getBestAwardedPoints())
+                .maxPoints(saved.getMaxPoints())
+                .passedTestcases(saved.getBestPassedTestcases())
+                .totalTestcases(saved.getTotalTestcases())
+                .submissions(saved.getSubmissions())
                 .build();
     }
 
@@ -1814,12 +1878,13 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
             totalScore += resp.getAwardedPoints();
         }
 
-        boolean passed = assessment.getPassingScore() == null || totalScore >= assessment.getPassingScore();
+        boolean passed = assessment.getPassingScore() != null && totalScore >= assessment.getPassingScore();
+        Boolean passedStatus = assessment.getPassingScore() != null ? Boolean.valueOf(totalScore >= assessment.getPassingScore()) : null;
 
         attempt.setStatus(AttemptStatus.SUBMITTED);
         attempt.setSubmittedAt(now);
         attempt.setScore(totalScore);
-        attempt.setPassed(passed);
+        attempt.setPassed(passedStatus);
         attempt.setUpdatedAt(now);
         attemptRepository.save(attempt);
         if (cacheInvalidationService != null) {
@@ -1921,12 +1986,21 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
         if (assessment == null) {
             assessment = assessmentRepository.findById(attempt.getAssessmentId()).orElse(null);
         }
-        boolean passed = assessment != null && (assessment.getPassingScore() == null || totalScore >= assessment.getPassingScore());
+        Boolean passedStatus = assessment != null && assessment.getPassingScore() != null
+                ? Boolean.valueOf(totalScore >= assessment.getPassingScore())
+                : null;
+        boolean passed = Boolean.TRUE.equals(passedStatus);
 
         attempt.setStatus(AttemptStatus.EXPIRED);
         attempt.setScore(totalScore);
-        attempt.setPassed(passed);
+        attempt.setPassed(passedStatus);
         attempt.setUpdatedAt(now);
+        if (attempt.getSubmittedAt() == null) {
+            Instant effectiveEnd = attempt.getEffectiveDeadline() != null && attempt.getEffectiveDeadline().isBefore(now)
+                    ? attempt.getEffectiveDeadline()
+                    : now;
+            attempt.setSubmittedAt(effectiveEnd);
+        }
         attemptRepository.save(attempt);
         if (cacheInvalidationService != null) {
             cacheInvalidationService.invalidateAssessmentMetrics(assessment.getId());
@@ -1991,9 +2065,21 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                     assessment.getId(), candidateUserId, AttemptStatus.IN_PROGRESS
             );
             if (activeAttempt.isPresent()) {
-                activeAttemptId = activeAttempt.get().getId();
-                canStart = true;
-                cannotStartReason = null;
+                AssessmentAttempt att = activeAttempt.get();
+                if (now.isAfter(att.getEffectiveDeadline())) {
+                    // Lazy on-demand expiration: evaluate and expire right now without waiting for any cron!
+                    expireAttempt(att, assessment, now);
+                    assignment = assignmentRepository.findByAssessmentIdAndCandidateUserId(assessment.getId(), candidateUserId).orElse(assignment);
+                    partStatus = assignment != null ? assignment.getStatus() : CandidateParticipationStatus.EXPIRED;
+                    attemptsUsed = assignment != null ? assignment.getAttemptsCount() : attemptsUsed;
+                    activeAttemptId = null;
+                    canStart = false;
+                    cannotStartReason = "Assessment attempt time has expired.";
+                } else {
+                    activeAttemptId = att.getId();
+                    canStart = true;
+                    cannotStartReason = null;
+                }
             }
         }
 
@@ -2132,13 +2218,30 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                 throw new BadRequestException("Coding Problem '" + cp.getTitle() + "' is not published and cannot be added to assessment.");
             }
 
+            CodeExecutionConstraints constraints = null;
+            if (cp.getExecutionConstraints() != null && !cp.getExecutionConstraints().isEmpty()) {
+                String refLang = cp.getReferenceSolutionLanguage();
+                if (refLang != null) {
+                    constraints = cp.getExecutionConstraints().get(refLang);
+                    if (constraints == null) {
+                        constraints = cp.getExecutionConstraints().get(refLang.replace('.', '_'));
+                    }
+                    if (constraints == null) {
+                        constraints = cp.getExecutionConstraints().get(refLang.replace('_', '.'));
+                    }
+                }
+                if (constraints == null) {
+                    constraints = cp.getExecutionConstraints().values().iterator().next();
+                }
+            }
+
             return QuestionSnapshot.builder()
                     .title(cp.getTitle())
                     .codingStatement(cp.getStatement())
                     .codingProblemType(cp.getProblemType())
                     .supportedLanguageIds(cp.getSupportedLanguageIds())
                     .starterCode(cp.getStarterCode())
-                    .executionConstraints(cp.getExecutionConstraints() != null ? cp.getExecutionConstraints().get(cp.getReferenceSolutionLanguage()) : null)
+                    .executionConstraints(constraints)
                     .sampleTestCases(cp.getSampleTestCases() != null ? cp.getSampleTestCases() : List.of())
                     .hiddenTestCases(cp.getHiddenTestCases() != null ? cp.getHiddenTestCases() : List.of())
                     .referenceSolutionLanguage(cp.getReferenceSolutionLanguage())
@@ -2271,8 +2374,8 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
         int caseIdx = 1;
 
         if (isSampleOnly) {
-            if (StringUtils.hasText(customStdin)) {
-                testcaseItems.add(new CandidateTestcaseItem("custom-1", 1, customStdin, null, null, true, true));
+            if (customStdin != null) {
+                testcaseItems.add(new CandidateTestcaseItem("custom-1", 1, customStdin, null, null, true, false));
             } else if (snapshot.getSampleTestCases() != null) {
                 for (TestCase tc : snapshot.getSampleTestCases()) {
                     testcaseItems.add(new CandidateTestcaseItem(
@@ -2320,6 +2423,18 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
         long candMemLimit = executionConstraintResolver.resolveMemoryLimitKb(candLanguage, snapshot.getExecutionConstraints(), null);
         CodeExecutionConstraints candConstraints = new CodeExecutionConstraints(candTimeLimit, candMemLimit);
 
+        CodeExecutionConstraints refConstraints = refLanguage != null
+                ? new CodeExecutionConstraints(
+                        executionConstraintResolver.resolveTimeLimitMs(refLanguage, snapshot.getExecutionConstraints(), null),
+                        executionConstraintResolver.resolveMemoryLimitKb(refLanguage, snapshot.getExecutionConstraints(), null))
+                : (snapshot.getExecutionConstraints() != null ? snapshot.getExecutionConstraints() : candConstraints);
+
+        CodeExecutionConstraints verConstraints = verLanguage != null
+                ? new CodeExecutionConstraints(
+                        executionConstraintResolver.resolveTimeLimitMs(verLanguage, snapshot.getExecutionConstraints(), null),
+                        executionConstraintResolver.resolveMemoryLimitKb(verLanguage, snapshot.getExecutionConstraints(), null))
+                : null;
+
         JudgeCandidateExecutionRequest judgeRequest = new JudgeCandidateExecutionRequest(
                 snapshot.getCodingProblemType(),
                 candLanguage,
@@ -2327,11 +2442,11 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                 candConstraints,
                 refLanguage,
                 snapshot.getReferenceSolution(),
-                snapshot.getExecutionConstraints(),
+                refConstraints,
                 snapshot.isRequireVerificationScript(),
                 verLanguage,
                 snapshot.getVerificationScript(),
-                null,
+                verConstraints,
                 testcaseItems
         );
 
@@ -2403,6 +2518,11 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                 throw new ResourceNotFoundException("No assessment attempt found for candidate.");
             }
             attempt = attempts.get(attempts.size() - 1);
+        }
+
+        if (attempt.getStatus() == AttemptStatus.IN_PROGRESS && Instant.now().isAfter(attempt.getEffectiveDeadline())) {
+            expireAttempt(attempt, assessment, Instant.now());
+            attempt = attemptRepository.findById(attempt.getId()).orElse(attempt);
         }
 
         return buildResultResponse(assessment, attempt, true);
@@ -2512,11 +2632,11 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
             int qCorrect = 0;
             double qScoreSum = 0.0;
             for (AssessmentQuestionResponse qr : qResponses) {
+                boolean isAns = isQuestionAnswered(qr, item.getSnapshot(), item.getQuestionType());
+                if (isAns) qAnswered++;
                 if (item.getQuestionType() == BankQuestionType.MCQ) {
-                    if (qr.getSelectedOptionIds() != null && !qr.getSelectedOptionIds().isEmpty()) qAnswered++;
                     if (Boolean.TRUE.equals(qr.getIsCorrect())) qCorrect++;
                 } else {
-                    if (StringUtils.hasText(qr.getCode())) qAnswered++;
                     if (Boolean.TRUE.equals(qr.getAllTestcasesPassed())) qCorrect++;
                 }
                 qScoreSum += qr.getAwardedPoints();
@@ -2569,6 +2689,7 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
         List<QuestionResultSummaryDto> questionSummaries = new ArrayList<>();
         int answeredCount = 0;
         int markedCount = 0;
+        int correctCount = 0;
         double totalAwarded = 0.0;
 
         int idx = 0;
@@ -2579,25 +2700,28 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
             boolean marked = false;
             double pointsAwarded = 0.0;
             Boolean isCorrect = null;
+            QuestionSnapshot snap = item.getSnapshot();
 
             if (resp != null) {
                 marked = resp.isMarkedForReview();
                 pointsAwarded = resp.getAwardedPoints();
                 totalAwarded += pointsAwarded;
+                isAnswered = isQuestionAnswered(resp, snap, item.getQuestionType());
 
                 if (item.getQuestionType() == BankQuestionType.MCQ) {
-                    isAnswered = resp.getSelectedOptionIds() != null && !resp.getSelectedOptionIds().isEmpty();
                     isCorrect = resp.getIsCorrect();
                 } else {
-                    isAnswered = StringUtils.hasText(resp.getCode());
                     isCorrect = resp.getAllTestcasesPassed();
                 }
             }
 
-            if (isAnswered) answeredCount++;
+            if (isAnswered) {
+                answeredCount++;
+                if (Boolean.TRUE.equals(isCorrect)) {
+                    correctCount++;
+                }
+            }
             if (marked) markedCount++;
-
-            QuestionSnapshot snap = item.getSnapshot();
 
             questionSummaries.add(QuestionResultSummaryDto.builder()
                     .questionId(item.getQuestionId())
@@ -2617,6 +2741,10 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                     .code(resp != null ? resp.getCode() : null)
                     .lastExecutionResult(resp != null ? resp.getLastExecutionResult() : null)
                     .allTestcasesPassed(resp != null ? resp.getAllTestcasesPassed() : null)
+                    .bestAwardedPoints(resp != null ? resp.getBestAwardedPoints() : null)
+                    .bestPassedTestcases(resp != null ? resp.getBestPassedTestcases() : null)
+                    .totalTestcases(resp != null ? resp.getTotalTestcases() : null)
+                    .submissions(resp != null && resp.getSubmissions() != null ? resp.getSubmissions() : java.util.List.of())
                     .build());
         }
 
@@ -2626,12 +2754,26 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
         double score = attempt.getScore() != null ? attempt.getScore() : totalAwarded;
         double maxScore = assessment.getTotalScore();
         double percentage = maxScore > 0 ? Math.round((score / maxScore) * 1000.0) / 10.0 : 0.0;
-        double accuracy = maxScore > 0 ? Math.round((score / maxScore) * 1000.0) / 10.0 : 0.0;
+        double accuracy = answeredCount > 0 ? Math.round(((double) correctCount / answeredCount) * 1000.0) / 10.0 : 0.0;
+        Boolean passed = assessment.getPassingScore() != null ? Boolean.valueOf(score >= assessment.getPassingScore()) : null;
 
         long timeSpentSec = 0;
         if (attempt.getStartedAt() != null) {
-            Instant end = attempt.getSubmittedAt() != null ? attempt.getSubmittedAt() : Instant.now();
-            timeSpentSec = Duration.between(attempt.getStartedAt(), end).getSeconds();
+            Instant end = attempt.getSubmittedAt();
+            if (end == null) {
+                if (attempt.getStatus() == AttemptStatus.EXPIRED) {
+                    end = attempt.getEffectiveDeadline() != null ? attempt.getEffectiveDeadline() : attempt.getUpdatedAt();
+                } else {
+                    end = Instant.now();
+                }
+            }
+            timeSpentSec = Math.max(0, Duration.between(attempt.getStartedAt(), end).getSeconds());
+        }
+
+        // Hard cap by assessment's maximum duration to prevent runaway timing bugs
+        if (assessment.getDurationMinutes() > 0) {
+            long maxAssessmentSec = assessment.getDurationMinutes() * 60L;
+            timeSpentSec = Math.min(timeSpentSec, maxAssessmentSec);
         }
 
         return CandidateAssessmentResultResponse.builder()
@@ -2648,7 +2790,7 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                 .maxPossibleScore(maxScore)
                 .percentage(percentage)
                 .passingScore(assessment.getPassingScore())
-                .passed(attempt.getPassed())
+                .passed(passed)
                 .accuracyPercentage(accuracy)
                 .totalQuestions(totalQuestions)
                 .answeredCount(answeredCount)
@@ -2698,5 +2840,45 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
                 log.warn("Failed to publish analytics event [{}]: {}", eventType, ex.getMessage());
             }
         }
+    }
+
+    private boolean isQuestionAnswered(AssessmentQuestionResponse resp, QuestionSnapshot snap, BankQuestionType questionType) {
+        if (resp == null) return false;
+        if (questionType == BankQuestionType.MCQ) {
+            return resp.getSelectedOptionIds() != null && !resp.getSelectedOptionIds().isEmpty();
+        }
+        // Coding question:
+        // 1. If candidate made any submissions or has execution result recorded
+        if ((resp.getSubmissions() != null && !resp.getSubmissions().isEmpty()) || resp.getLastExecutionResult() != null) {
+            return true;
+        }
+        // 2. If code is present and differs from starter code template
+        if (StringUtils.hasText(resp.getCode())) {
+            return !isStarterCode(resp.getCode(), snap, resp.getLanguageId());
+        }
+        return false;
+    }
+
+    private boolean isStarterCode(String code, QuestionSnapshot snap, String lang) {
+        if (snap == null || snap.getStarterCode() == null || snap.getStarterCode().isEmpty()) {
+            return false;
+        }
+        String starter = snap.getStarterCode().get(lang);
+        if (starter == null && lang != null) {
+            starter = snap.getStarterCode().get(lang.replace('.', '_'));
+        }
+        if (starter == null && lang != null) {
+            starter = snap.getStarterCode().get(lang.replace('_', '.'));
+        }
+        if (starter == null && !snap.getStarterCode().isEmpty()) {
+            starter = snap.getStarterCode().values().iterator().next();
+        }
+        if (starter == null) return false;
+        return normalizeCode(code).equals(normalizeCode(starter));
+    }
+
+    private String normalizeCode(String code) {
+        if (code == null) return "";
+        return code.replaceAll("\\s+", "").trim();
     }
 }

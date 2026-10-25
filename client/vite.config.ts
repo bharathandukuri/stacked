@@ -1,16 +1,16 @@
-import path from "path"
-import tailwindcss from "@tailwindcss/vite"
-import react from "@vitejs/plugin-react"
-import { defineConfig, loadEnv } from "vite"
+import path from "path";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig, loadEnv } from "vite";
 
-import { tanstackRouter } from "@tanstack/router-plugin/vite"
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "")
+  const env = loadEnv(mode, process.cwd(), "");
   const backendUrl =
-    env.VITE_BACKEND_URL || env.BACKEND_URL || "http://localhost:8080"
-  const port = Number(env.PORT || env.VITE_PORT || 3000)
+    env.VITE_BACKEND_URL || env.BACKEND_URL || "http://localhost:8080";
+  const port = Number(env.PORT || env.VITE_PORT || 3000);
 
   return {
     plugins: [tanstackRouter(), react(), tailwindcss()],
@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
       },
+      allowedHosts: ["2eed-103-193-77-227.ngrok-free.app"],
     },
-  }
-})
+  };
+});

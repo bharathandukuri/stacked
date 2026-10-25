@@ -280,7 +280,7 @@ function AdminUsersPage() {
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <AdminSidebar currentPath="/admin/users" />
 
-      <main className="flex flex-1 flex-col overflow-y-auto">
+      <main className="flex flex-1 flex-col min-w-0 overflow-y-auto">
         {/* Header */}
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card/70 px-8 backdrop-blur-md">
           <div className="flex items-center gap-3">

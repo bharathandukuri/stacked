@@ -208,6 +208,18 @@ export interface StartAttemptResponse {
   remainingSeconds: number
 }
 
+export interface CodingSubmissionRecord {
+  submissionId: string
+  submittedAt: string
+  languageId: string
+  code: string
+  status: string
+  passedTestcases: number
+  totalTestcases: number
+  awardedPoints: number
+  executionTimeMs: number
+}
+
 export interface SavedQuestionResponse {
   questionId: string
   questionType: BankQuestionType
@@ -218,6 +230,12 @@ export interface SavedQuestionResponse {
   allTestcasesPassed?: boolean
   markedForReview?: boolean
   pointsAwarded?: number
+  awardedPoints?: number
+  bestAwardedPoints?: number
+  maxPoints?: number
+  passedTestcases?: number
+  totalTestcases?: number
+  submissions?: CodingSubmissionRecord[]
   savedAt?: string
 }
 
@@ -354,6 +372,8 @@ export interface AttemptReport {
 export interface SampleTestcaseResult {
   testCaseId?: string
   status: string
+  stdin?: string
+  dbInit?: string
   stdout?: string
   stderr?: string
   exitCode?: number
@@ -362,7 +382,10 @@ export interface SampleTestcaseResult {
   memoryMb?: number
   expectedOutput?: string
   actualOutput?: string
-  passed: boolean
+  passed?: boolean
+  isCustom?: boolean
+  isSample?: boolean
+  error?: string
 }
 
 export interface CodingProblemExecutionResponse {
@@ -454,6 +477,11 @@ export interface QuestionResultSummary {
   code?: string
   lastExecutionResult?: CodingProblemExecutionResponse
   allTestcasesPassed?: boolean | null
+
+  bestAwardedPoints?: number
+  bestPassedTestcases?: number
+  totalTestcases?: number
+  submissions?: CodingSubmissionRecord[]
 }
 
 export interface CandidateAssessmentResultResponse {

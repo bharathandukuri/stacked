@@ -20,6 +20,7 @@ import {
   LayoutGrid,
   FileCode,
   Terminal,
+  History,
 } from "lucide-react"
 
 import { Logo } from "@/components/logo"
@@ -113,6 +114,7 @@ export function AssessmentExamPage() {
   // Code editor state
   const [currentLanguage, setCurrentLanguage] = useState<string>("java-21")
   const [currentCode, setCurrentCode] = useState<string>("")
+  const codeRef = useRef<string>("")
   const [activeBottomTab, setActiveBottomTab] = useState<"sample" | "custom" | "submit">("sample")
   const [selectedSampleIndex, setSelectedSampleIndex] = useState<number>(0)
   const [customInputText, setCustomInputText] = useState<string>("")
@@ -189,21 +191,25 @@ export function AssessmentExamPage() {
 
   const [manualInterventionModal, setManualInterventionModal] = useState<string | null>(null)
 
+  const handleManualCompletion = useCallback((message: string) => {
+    setManualInterventionModal(message)
+  }, [])
+
+  const handleManualActivation = useCallback((message: string) => {
+    toast.add({
+      title: "Assessment Active",
+      description: message,
+      type: "info",
+    })
+  }, [])
+
   // WebSocket Connection
   const wsStatus = useAssessmentWebSocket({
     assessmentId,
     attemptId: attempt?.attemptId || "",
     enabled: Boolean(attempt && attempt.status === "IN_PROGRESS"),
-    onManualCompletion: (message) => {
-      setManualInterventionModal(message)
-    },
-    onManualActivation: (message) => {
-      toast.add({
-        title: "Assessment Active",
-        description: message,
-        type: "info",
-      })
-    },
+    onManualCompletion: handleManualCompletion,
+    onManualActivation: handleManualActivation,
   })
 
   // Detect manual completion if reconnecting or reloading after completion
@@ -272,10 +278,16 @@ export function AssessmentExamPage() {
       const defaultStarter =
         resolvedStarter || `// Write your solution in ${selectedLang}\n`
 
-      setCurrentCode(savedCode !== undefined ? savedCode : defaultStarter)
+      const initialCode = savedCode !== undefined ? savedCode : defaultStarter
+      codeRef.current = initialCode
+      setCurrentCode(initialCode)
       setSampleResult(null)
       setCustomResult(null)
-      setSubmitResult(null)
+      setSubmitResult(
+        savedResp?.submissions?.length || savedResp?.lastExecutionResult
+          ? savedResp
+          : null
+      )
       setCustomInputText("")
       setSelectedSampleIndex(0)
     }
@@ -286,7 +298,7 @@ export function AssessmentExamPage() {
   const codeSaveTimeoutRef = useRef<number | null>(null)
 
   const handleCodeChange = (newCode: string) => {
-    setCurrentCode(newCode)
+    codeRef.current = newCode
     setSaveStatus("SAVING")
 
     if (codeSaveTimeoutRef.current) {
@@ -324,6 +336,7 @@ export function AssessmentExamPage() {
     const starter =
       resolveStarterCode(currentQuestion?.starterCode, lang) ||
       `// Write your solution in ${lang}\n`
+    codeRef.current = starter
     setCurrentCode(starter)
     handleCodeChange(starter)
   }
@@ -334,6 +347,7 @@ export function AssessmentExamPage() {
     const starter =
       resolveStarterCode(currentQuestion.starterCode, currentLanguage) ||
       `// Write your solution in ${currentLanguage}\n`
+    codeRef.current = starter
     setCurrentCode(starter)
     handleCodeChange(starter)
     toast.add({
@@ -459,7 +473,7 @@ export function AssessmentExamPage() {
       const res = await runSampleMutation.mutateAsync({
         questionId: currentQuestion.questionId,
         languageId: currentLanguage,
-        code: currentCode,
+        code: codeRef.current || currentCode,
       })
       setSampleResult(res)
       setSelectedSampleIndex(0)
@@ -476,12 +490,21 @@ export function AssessmentExamPage() {
       const res = await runCustomInputMutation.mutateAsync({
         questionId: currentQuestion.questionId,
         languageId: currentLanguage,
-        code: currentCode,
+        code: codeRef.current || currentCode,
         stdin: customInputText,
       })
       setCustomResult(res)
-    } catch {
-      // error handled by mutation
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string })?.message || "Execution error on custom input"
+        : err instanceof Error
+          ? err.message
+          : "Execution failed"
+      toast.add({
+        title: "Custom Input Failed",
+        description: msg,
+        type: "error",
+      })
     }
   }
 
@@ -493,7 +516,7 @@ export function AssessmentExamPage() {
       const res = await submitCodeMutation.mutateAsync({
         questionId: currentQuestion.questionId,
         languageId: currentLanguage,
-        code: currentCode,
+        code: codeRef.current || currentCode,
       })
       setSubmitResult(res)
       setLocalResponses((prev) => ({
@@ -547,19 +570,36 @@ export function AssessmentExamPage() {
   )
   const totalQuestionsCount = questionsList.length
 
-  const answeredCount = useMemo(() => {
-    return questionsList.filter((q) => {
-      const resp = localResponses[q.questionId]
+  // Answered checker helper: accurately distinguishes untouched starter code from answered coding problems
+  const isQuestionAnswered = useCallback(
+    (q: any, resp: any) => {
       if (!resp) return false
       if (q.questionType === "MCQ") {
         return (resp.selectedOptionIds?.length ?? 0) > 0
       }
       if (q.questionType === "CODING") {
-        return Boolean(resp.code && resp.code.trim().length > 0)
+        if ((resp.submissions?.length ?? 0) > 0 || resp.lastExecutionResult) {
+          return true
+        }
+        if (resp.code && resp.code.trim().length > 0) {
+          const starter = resolveStarterCode(q.starterCode, resp.languageId || currentLanguage)
+          if (!starter) return true
+          const normalize = (s: string) => s.replace(/\s+/g, "").trim()
+          return normalize(resp.code) !== normalize(starter)
+        }
+        return false
       }
       return false
+    },
+    [currentLanguage]
+  )
+
+  const answeredCount = useMemo(() => {
+    return questionsList.filter((q) => {
+      const resp = localResponses[q.questionId]
+      return isQuestionAnswered(q, resp)
     }).length
-  }, [questionsList, localResponses])
+  }, [questionsList, localResponses, isQuestionAnswered])
 
   const markedCount = useMemo(() => {
     return questionsList.filter((q) => {
@@ -775,10 +815,7 @@ export function AssessmentExamPage() {
           <div className="flex-1 w-full overflow-y-auto px-2 space-y-2 flex flex-col items-center">
             {questionsList.map((q, idx) => {
               const resp = localResponses[q.questionId]
-              const isAns =
-                q.questionType === "MCQ"
-                  ? (resp?.selectedOptionIds?.length ?? 0) > 0
-                  : Boolean(resp?.code && resp.code.trim().length > 0)
+              const isAns = isQuestionAnswered(q, resp)
               const isMarked = Boolean(resp?.markedForReview)
               const isCurrent = idx === currentIndex
 
@@ -1130,16 +1167,30 @@ export function AssessmentExamPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={runSampleMutation.isPending}
-                              onClick={handleRunSampleTests}
+                              disabled={
+                                activeBottomTab === "custom"
+                                  ? runCustomInputMutation.isPending
+                                  : runSampleMutation.isPending
+                              }
+                              onClick={
+                                activeBottomTab === "custom"
+                                  ? handleRunCustomInput
+                                  : handleRunSampleTests
+                              }
                               className="h-7 text-xs gap-1.5"
                             >
-                              {runSampleMutation.isPending ? (
+                              {(activeBottomTab === "custom"
+                                ? runCustomInputMutation.isPending
+                                : runSampleMutation.isPending) ? (
                                 <Loader2 className="size-3 animate-spin text-primary" />
                               ) : (
                                 <Play className="size-3 text-emerald-500 fill-emerald-500" />
                               )}
-                              <span>Run Tests</span>
+                              <span>
+                                {activeBottomTab === "custom"
+                                  ? "Run Custom Input"
+                                  : "Run Tests"}
+                              </span>
                             </Button>
 
                             <Button
@@ -1228,6 +1279,7 @@ export function AssessmentExamPage() {
 
                               <div className="flex-1 overflow-y-auto p-4 text-xs">
                                 {/* TAB 1: Sample Testcases with Case Selectors */}
+                                {/* TAB 1: Sample Test Cases */}
                                 {activeBottomTab === "sample" && (
                                   <div>
                                     {runSampleMutation.isPending ? (
@@ -1235,120 +1287,148 @@ export function AssessmentExamPage() {
                                         <Loader2 className="size-4 animate-spin text-primary" />
                                         <span>Executing code against sample test cases in sandbox...</span>
                                       </div>
-                                    ) : sampleResult ? (
-                                      <div className="space-y-4">
-                                        {/* Status Header */}
-                                        <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                                          <div className="flex items-center gap-2">
-                                            <Badge
-                                              variant={
-                                                sampleResult.overallStatus === "SUCCESS"
-                                                  ? "default"
-                                                  : "destructive"
-                                              }
-                                              className={cn(
-                                                "text-xs font-semibold",
-                                                sampleResult.overallStatus === "SUCCESS"
-                                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                  : "bg-destructive/15 text-destructive border-destructive/30"
-                                              )}
-                                            >
-                                              {sampleResult.overallStatus}
-                                            </Badge>
-                                            <span className="text-muted-foreground font-medium">
-                                              Passed {sampleResult.passedTestcases} / {sampleResult.totalTestcases} test cases
-                                            </span>
-                                          </div>
-                                          <span className="text-muted-foreground font-mono">
-                                            {sampleResult.totalExecutionTimeMs} ms
-                                          </span>
-                                        </div>
-
-                                        {/* Testcase Pill Selectors */}
-                                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                                          {sampleResult.results?.map((res, idx) => (
-                                            <button
-                                              key={idx}
-                                              type="button"
-                                              onClick={() => setSelectedSampleIndex(idx)}
-                                              className={cn(
-                                                "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
-                                                selectedSampleIndex === idx
-                                                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
-                                                  : "border-border/80 hover:bg-muted/40 text-muted-foreground"
-                                              )}
-                                            >
+                                    ) : sampleResult ? (() => {
+                                      const isOverallAccepted =
+                                        sampleResult.overallStatus?.toUpperCase() === "ACCEPTED" ||
+                                        sampleResult.overallStatus?.toUpperCase() === "SUCCESS"
+                                      return (
+                                        <div className="space-y-4">
+                                          {/* Status Header */}
+                                          <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                                            <div className="flex items-center gap-2">
                                               <span
                                                 className={cn(
-                                                  "size-2 rounded-full",
-                                                  res.passed ? "bg-emerald-500" : "bg-destructive"
+                                                  "inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border",
+                                                  isOverallAccepted
+                                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                    : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
                                                 )}
-                                              />
-                                              <span>Case {idx + 1}</span>
-                                            </button>
-                                          ))}
-                                        </div>
+                                              >
+                                                {sampleResult.overallStatus}
+                                              </span>
+                                              <span className="text-muted-foreground font-medium text-xs">
+                                                Passed {sampleResult.passedTestcases} / {sampleResult.totalTestcases} test cases
+                                              </span>
+                                            </div>
+                                            <span className="text-muted-foreground font-mono text-xs">
+                                              {sampleResult.totalExecutionTimeMs} ms
+                                            </span>
+                                          </div>
 
-                                        {/* Selected Case Detail */}
-                                        {sampleResult.results?.[selectedSampleIndex] && (() => {
-                                          const res = sampleResult.results[selectedSampleIndex]
-                                          return (
-                                            <div className="space-y-3 pt-2">
-                                              <div className="flex items-center justify-between">
-                                                <Badge
-                                                  variant={res.passed ? "default" : "destructive"}
+                                          {/* Testcase Pill Selectors */}
+                                          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                                            {sampleResult.results?.map((res, idx) => {
+                                              const isCasePassed =
+                                                res.passed === true ||
+                                                res.status?.toUpperCase() === "PASSED" ||
+                                                res.status?.toUpperCase() === "ACCEPTED" ||
+                                                res.status?.toUpperCase() === "SUCCESS"
+                                              return (
+                                                <button
+                                                  key={idx}
+                                                  type="button"
+                                                  onClick={() => setSelectedSampleIndex(idx)}
                                                   className={cn(
-                                                    "text-[11px]",
-                                                    res.passed
-                                                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                      : "bg-destructive/15 text-destructive border-destructive/30"
+                                                    "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
+                                                    selectedSampleIndex === idx
+                                                      ? isCasePassed
+                                                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/40"
+                                                        : "border-rose-500/60 bg-rose-500/10 text-rose-500 dark:text-rose-400 ring-1 ring-rose-500/40"
+                                                      : "border-border/80 hover:bg-muted/40 text-muted-foreground"
                                                   )}
                                                 >
-                                                  {res.status}
-                                                </Badge>
-                                                <span className="text-[11px] text-muted-foreground font-mono">
-                                                  {res.runtimeMs ?? res.executionTimeMs ?? 0} ms
-                                                </span>
+                                                  <span
+                                                    className={cn(
+                                                      "size-2 rounded-full",
+                                                      isCasePassed ? "bg-emerald-500" : "bg-rose-500"
+                                                    )}
+                                                  />
+                                                  <span>Case {idx + 1}</span>
+                                                </button>
+                                              )
+                                            })}
+                                          </div>
+
+                                          {/* Selected Case Detail: STACKED VERTICALLY ONE BELOW ANOTHER ONLY */}
+                                          {sampleResult.results?.[selectedSampleIndex] && (() => {
+                                            const res = sampleResult.results[selectedSampleIndex]
+                                            const isSelectedPassed =
+                                              res.passed === true ||
+                                              res.status?.toUpperCase() === "PASSED" ||
+                                              res.status?.toUpperCase() === "ACCEPTED" ||
+                                              res.status?.toUpperCase() === "SUCCESS"
+                                            const currentSample = currentQuestion?.sampleTestCases?.[selectedSampleIndex]
+                                            const inputContent = res.stdin ?? currentSample?.stdin
+                                            const expectedContent = res.expectedOutput ?? currentSample?.output
+
+                                            return (
+                                              <div className="space-y-3 pt-2">
+                                                <div className="flex items-center justify-between">
+                                                  <span
+                                                    className={cn(
+                                                      "inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border",
+                                                      isSelectedPassed
+                                                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                        : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
+                                                    )}
+                                                  >
+                                                    {res.status}
+                                                  </span>
+                                                  <span className="text-[11px] text-muted-foreground font-mono">
+                                                    {res.runtimeMs ?? res.executionTimeMs ?? 0} ms
+                                                  </span>
+                                                </div>
+
+                                                {/* Stacked Vertically: Input -> Your Output -> Expected Output */}
+                                                <div className="space-y-3">
+                                                  <div className="space-y-1">
+                                                    <span className="text-[11px] font-semibold text-muted-foreground">
+                                                      Input (stdin):
+                                                    </span>
+                                                    <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[38px]">
+                                                      {inputContent !== undefined && inputContent !== null && inputContent !== ""
+                                                        ? inputContent
+                                                        : "(no input)"}
+                                                    </pre>
+                                                  </div>
+
+                                                  <div className="space-y-1">
+                                                    <span className="text-[11px] font-semibold text-muted-foreground">
+                                                      Your Output:
+                                                    </span>
+                                                    <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
+                                                      {res.actualOutput || "(empty)"}
+                                                    </pre>
+                                                  </div>
+
+                                                  <div className="space-y-1">
+                                                    <span className="text-[11px] font-semibold text-muted-foreground">
+                                                      Expected Output:
+                                                    </span>
+                                                    <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
+                                                      {expectedContent || "(empty)"}
+                                                    </pre>
+                                                  </div>
+                                                </div>
+
+                                                {/* Stderr / Error Message Card */}
+                                                {res.stderr && (
+                                                  <div className="space-y-1 pt-1">
+                                                    <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+                                                      Error / Compiler / Stderr Output:
+                                                    </span>
+                                                    <pre className="font-mono p-2.5 bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/30 rounded-lg text-xs whitespace-pre-wrap">
+                                                      {res.stderr}
+                                                    </pre>
+                                                  </div>
+                                                )}
                                               </div>
-
-                                              {/* Formatted Diff Cards */}
-                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                <div className="space-y-1">
-                                                  <span className="text-[11px] font-semibold text-muted-foreground">
-                                                    Your Output:
-                                                  </span>
-                                                  <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[60px]">
-                                                    {res.actualOutput || "(empty)"}
-                                                  </pre>
-                                                </div>
-
-                                                <div className="space-y-1">
-                                                  <span className="text-[11px] font-semibold text-muted-foreground">
-                                                    Expected Output:
-                                                  </span>
-                                                  <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[60px]">
-                                                    {res.expectedOutput || "(empty)"}
-                                                  </pre>
-                                                </div>
-                                              </div>
-
-                                              {/* Stderr / Error Message Card */}
-                                              {res.stderr && (
-                                                <div className="space-y-1 pt-1">
-                                                  <span className="text-[11px] font-semibold text-destructive">
-                                                    Error / Compiler / Stderr Output:
-                                                  </span>
-                                                  <pre className="font-mono p-2.5 bg-destructive/10 text-destructive border border-destructive/30 rounded-lg text-xs whitespace-pre-wrap">
-                                                    {res.stderr}
-                                                  </pre>
-                                                </div>
-                                              )}
-                                            </div>
-                                          )
-                                        })()}
-                                      </div>
-                                    ) : (
-                                      <p className="text-muted-foreground py-6 text-center">
+                                            )
+                                          })()}
+                                        </div>
+                                      )
+                                    })() : (
+                                      <p className="text-muted-foreground py-6 text-center text-xs">
                                         Click "Run Tests" above to execute your solution against sample test cases.
                                       </p>
                                     )}
@@ -1393,43 +1473,75 @@ export function AssessmentExamPage() {
                                         <Loader2 className="size-4 animate-spin text-primary" />
                                         <span>Executing code with custom input in sandbox...</span>
                                       </div>
-                                    ) : customResult ? (
-                                      <div className="rounded-lg border p-3 bg-background space-y-3">
-                                        <div className="flex items-center justify-between pb-2 border-b">
-                                          <Badge
-                                            className={cn(
-                                              "text-[10px]",
-                                              customResult.overallStatus === "SUCCESS"
-                                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                : "bg-destructive/15 text-destructive border-destructive/30"
-                                            )}
-                                          >
-                                            {customResult.overallStatus}
-                                          </Badge>
-                                          <span className="text-muted-foreground font-mono">
-                                            {customResult.totalExecutionTimeMs} ms
-                                          </span>
+                                    ) : customResult ? (() => {
+                                      const isCustomSuccess =
+                                        customResult.overallStatus === "SUCCESS" ||
+                                        customResult.overallStatus === "ACCEPTED"
+                                      const customOut =
+                                        customResult.results?.[0]?.actualOutput ??
+                                        customResult.results?.[0]?.stdout
+                                      const customExpected =
+                                        customResult.results?.[0]?.expectedOutput
+                                      const customErr =
+                                        customResult.results?.[0]?.stderr ||
+                                        customResult.results?.[0]?.error
+
+                                      return (
+                                        <div className="rounded-lg border p-3 bg-background space-y-3">
+                                          <div className="flex items-center justify-between pb-2 border-b">
+                                            <span
+                                              className={cn(
+                                                "inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border",
+                                                isCustomSuccess
+                                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                  : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
+                                              )}
+                                            >
+                                              {customResult.overallStatus}
+                                            </span>
+                                            <span className="text-muted-foreground font-mono text-xs">
+                                              {customResult.totalExecutionTimeMs} ms
+                                            </span>
+                                          </div>
+
+                                          {/* Stacked Vertically: Your Output -> Expected Output -> Error */}
+                                          <div className="space-y-3">
+                                            <div className="space-y-1">
+                                              <span className="text-[11px] font-semibold text-muted-foreground">
+                                                Your Output:
+                                              </span>
+                                              <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
+                                                {customOut !== undefined && customOut !== ""
+                                                  ? customOut
+                                                  : "(empty output)"}
+                                              </pre>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                              <span className="text-[11px] font-semibold text-muted-foreground">
+                                                Expected Output:
+                                              </span>
+                                              <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
+                                                {customExpected !== undefined && customExpected !== ""
+                                                  ? customExpected
+                                                  : "(empty)"}
+                                              </pre>
+                                            </div>
+                                          </div>
+
+                                          {customErr && (
+                                            <div className="space-y-1 pt-1">
+                                              <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+                                                Error / Compiler / Stderr Output:
+                                              </span>
+                                              <pre className="font-mono p-2.5 bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/30 rounded-lg text-xs whitespace-pre-wrap">
+                                                {customErr}
+                                              </pre>
+                                            </div>
+                                          )}
                                         </div>
-
-                                        {customResult.results?.[0]?.stdout !== undefined && (
-                                          <div>
-                                            <span className="text-muted-foreground font-semibold">Standard Output:</span>
-                                            <pre className="font-mono p-2 bg-muted rounded-md text-xs mt-1 whitespace-pre-wrap">
-                                              {customResult.results[0].stdout || "(empty output)"}
-                                            </pre>
-                                          </div>
-                                        )}
-
-                                        {customResult.results?.[0]?.stderr && (
-                                          <div>
-                                            <span className="text-destructive font-semibold">Stderr / Runtime Error:</span>
-                                            <pre className="font-mono p-2 bg-destructive/10 text-destructive rounded-md text-xs mt-1 whitespace-pre-wrap">
-                                              {customResult.results[0].stderr}
-                                            </pre>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
+                                      )
+                                    })() : (
                                       <p className="text-muted-foreground py-3 text-xs">
                                         Provide standard input above and click "Run Custom Input".
                                       </p>
@@ -1437,7 +1549,7 @@ export function AssessmentExamPage() {
                                   </div>
                                 )}
 
-                                {/* TAB 3: Submission Output */}
+                                {/* TAB 3: Submission Output with Best Score & Submissions History */}
                                 {activeBottomTab === "submit" && (
                                   <div>
                                     {submitCodeMutation.isPending ? (
@@ -1445,29 +1557,184 @@ export function AssessmentExamPage() {
                                         <Loader2 className="size-4 animate-spin text-primary" />
                                         <span>Evaluating code against complete test suite...</span>
                                       </div>
-                                    ) : submitResult ? (
-                                      <div className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                          <Badge
-                                            className={cn(
-                                              "text-xs font-semibold py-1 px-2.5",
-                                              submitResult.allTestcasesPassed
-                                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                : "bg-destructive/15 text-destructive border-destructive/30"
-                                            )}
-                                          >
-                                            {submitResult.allTestcasesPassed
-                                              ? "PASSED ALL TEST CASES"
-                                              : "TEST CASES FAILED"}
-                                          </Badge>
+                                    ) : submitResult || (currentQuestion && localResponses[currentQuestion.questionId]?.submissions?.length) ? (() => {
+                                      const activeResp = submitResult ?? (currentQuestion ? localResponses[currentQuestion.questionId] : null)
+                                      const lastExec = activeResp?.lastExecutionResult
+                                      const status = lastExec?.overallStatus ?? (activeResp?.allTestcasesPassed ? "ACCEPTED" : "FAILED")
+                                      const isAccepted = status === "ACCEPTED" || status === "SUCCESS" || activeResp?.allTestcasesPassed === true
+                                      const passedCount = lastExec?.passedTestcases ?? activeResp?.passedTestcases ?? 0
+                                      const totalCount = lastExec?.totalTestcases ?? activeResp?.totalTestcases ?? 0
+                                      const execTime = lastExec?.totalExecutionTimeMs ?? 0
+                                      const bestPoints = activeResp?.bestAwardedPoints ?? activeResp?.awardedPoints ?? 0
+                                      const maxPts = activeResp?.maxPoints ?? currentQuestion?.points ?? 0
+                                      const submissionsList = activeResp?.submissions ?? []
+
+                                      return (
+                                        <div className="space-y-4">
+                                          {/* Top Verdict Banner */}
+                                          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border bg-card/60">
+                                            <div className="flex items-center gap-2.5">
+                                              <span
+                                                className={cn(
+                                                  "inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border",
+                                                  isAccepted
+                                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                    : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
+                                                )}
+                                              >
+                                                {status}
+                                              </span>
+                                              <span className="text-xs font-semibold text-foreground">
+                                                Passed {passedCount} / {totalCount} test cases
+                                                {!isAccepted && totalCount > 0 && (
+                                                  <span className="ml-1.5 text-xs text-rose-500 dark:text-rose-400 font-normal">
+                                                    ({totalCount - passedCount} failed)
+                                                  </span>
+                                                )}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                              {execTime > 0 && (
+                                                <span>
+                                                  Runtime: <strong className="font-mono text-foreground">{execTime} ms</strong>
+                                                </span>
+                                              )}
+                                              <span>
+                                                Best Score:{" "}
+                                                <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+                                                  {bestPoints.toFixed(1)} / {maxPts} pts
+                                                </strong>
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          {/* Helpful failure breakdown notification */}
+                                          {!isAccepted && totalCount > 0 && (
+                                            <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-500 dark:text-rose-400 space-y-1">
+                                              <div className="font-semibold flex items-center gap-1.5">
+                                                <AlertCircle className="size-4 shrink-0" />
+                                                <span>Test cases failed: Passed {passedCount} of {totalCount} cases.</span>
+                                              </div>
+                                              <p className="text-[11px] text-muted-foreground">
+                                                Your previous best score ({bestPoints.toFixed(1)} / {maxPts} pts) is safely preserved. Test edge cases with the custom runner and submit an updated solution.
+                                              </p>
+                                            </div>
+                                          )}
+
+                                          {/* Stderr / Compiler Output if failed */}
+                                          {(!isAccepted || lastExec?.logs) && lastExec?.logs && (
+                                            <div className="space-y-1">
+                                              <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+                                                Compilation / Stderr Output:
+                                              </span>
+                                              <pre className="font-mono p-2.5 bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/30 rounded-lg text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                                {lastExec.logs}
+                                              </pre>
+                                            </div>
+                                          )}
+
+                                          {/* Submission History Table */}
+                                          {submissionsList.length > 0 && (
+                                            <div className="space-y-2 pt-2 border-t">
+                                              <div className="flex items-center justify-between">
+                                                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                                  <History className="size-3.5 text-muted-foreground" />
+                                                  Submission History ({submissionsList.length})
+                                                </span>
+                                                <span className="text-[11px] text-muted-foreground">
+                                                  Best score is preserved
+                                                </span>
+                                              </div>
+                                              <div className="rounded-md border overflow-hidden">
+                                                <table className="w-full text-xs text-left">
+                                                  <thead className="bg-muted/50 text-muted-foreground font-medium border-b text-[11px]">
+                                                    <tr>
+                                                      <th className="px-3 py-2">#</th>
+                                                      <th className="px-3 py-2">Verdict</th>
+                                                      <th className="px-3 py-2">Test Cases</th>
+                                                      <th className="px-3 py-2">Score</th>
+                                                      <th className="px-3 py-2">Runtime</th>
+                                                      <th className="px-3 py-2 text-right">Submitted</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y divide-border/60">
+                                                    {submissionsList.map((sub, sIdx) => {
+                                                      const subAccepted =
+                                                        sub.status === "ACCEPTED" || sub.status === "SUCCESS"
+                                                      const isBest =
+                                                        sub.awardedPoints === bestPoints && bestPoints > 0
+                                                      return (
+                                                        <tr
+                                                          key={sub.submissionId || sIdx}
+                                                          className={cn(
+                                                            "hover:bg-muted/30 transition-colors",
+                                                            isBest && "bg-emerald-500/5"
+                                                          )}
+                                                        >
+                                                          <td className="px-3 py-2 text-muted-foreground font-mono">
+                                                            {sIdx + 1}
+                                                          </td>
+                                                          <td className="px-3 py-2">
+                                                            <span
+                                                              className={cn(
+                                                                "font-semibold inline-flex items-center gap-1",
+                                                                subAccepted
+                                                                  ? "text-emerald-600 dark:text-emerald-400"
+                                                                  : "text-rose-500 dark:text-rose-400"
+                                                              )}
+                                                            >
+                                                              {subAccepted ? (
+                                                                <Check className="size-3" />
+                                                              ) : (
+                                                                <AlertCircle className="size-3" />
+                                                              )}
+                                                              {sub.status}
+                                                            </span>
+                                                          </td>
+                                                          <td className="px-3 py-2 font-mono">
+                                                            {sub.passedTestcases} / {sub.totalTestcases}
+                                                          </td>
+                                                          <td className="px-3 py-2 font-mono">
+                                                            <span
+                                                              className={cn(
+                                                                isBest &&
+                                                                  "font-bold text-emerald-600 dark:text-emerald-400"
+                                                              )}
+                                                            >
+                                                              {sub.awardedPoints.toFixed(1)} pts
+                                                            </span>
+                                                            {isBest && (
+                                                              <Badge
+                                                                variant="outline"
+                                                                className="ml-1.5 text-[9px] px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                                              >
+                                                                Best
+                                                              </Badge>
+                                                            )}
+                                                          </td>
+                                                          <td className="px-3 py-2 font-mono text-muted-foreground">
+                                                            {sub.executionTimeMs} ms
+                                                          </td>
+                                                          <td className="px-3 py-2 text-right text-muted-foreground">
+                                                            {new Date(sub.submittedAt).toLocaleTimeString([], {
+                                                              hour: "2-digit",
+                                                              minute: "2-digit",
+                                                              second: "2-digit",
+                                                            })}
+                                                          </td>
+                                                        </tr>
+                                                      )
+                                                    })}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
-                                        <p className="text-muted-foreground text-xs leading-relaxed">
-                                          Your code solution has been compiled, evaluated, and securely recorded with your assessment attempt.
-                                        </p>
-                                      </div>
-                                    ) : (
-                                      <p className="text-muted-foreground py-6 text-center">
-                                        Click "Submit Code" to evaluate your solution against the judging suite.
+                                      )
+                                    })() : (
+                                      <p className="text-muted-foreground py-6 text-center text-xs">
+                                        Click "Submit Code" to evaluate your solution against all hidden and visible test cases.
                                       </p>
                                     )}
                                   </div>
@@ -1539,10 +1806,7 @@ export function AssessmentExamPage() {
             <div className="grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-60 overflow-y-auto p-1">
               {questionsList.map((q, idx) => {
                 const resp = localResponses[q.questionId]
-                const isAns =
-                  q.questionType === "MCQ"
-                    ? (resp?.selectedOptionIds?.length ?? 0) > 0
-                    : Boolean(resp?.code && resp.code.trim().length > 0)
+                const isAns = isQuestionAnswered(q, resp)
                 const isMarked = Boolean(resp?.markedForReview)
                 const isCurrent = idx === currentIndex
 

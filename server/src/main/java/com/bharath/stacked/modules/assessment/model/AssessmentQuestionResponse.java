@@ -56,6 +56,17 @@ public class AssessmentQuestionResponse {
     private CodingProblemExecutionResponse lastExecutionResult;
     private Boolean allTestcasesPassed;
 
+    // Best submission tracking
+    private Double bestAwardedPoints;
+    private Integer bestPassedTestcases;
+    private Integer totalTestcases;
+    private String bestLanguageId;
+    private String bestCode;
+    private CodingProblemExecutionResponse bestExecutionResult;
+
+    @Builder.Default
+    private List<CodingSubmissionRecord> submissions = new ArrayList<>();
+
     private double awardedPoints;
     private double maxPoints;
 

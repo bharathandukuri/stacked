@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import axios from "axios"
 import { useNavigate } from "@tanstack/react-router"
 import {
@@ -102,7 +102,7 @@ export function AssessmentStudio() {
   } = useQuestionBankPreview(selectedQuestionBankId)
 
   const createMutation = useCreateAssessment()
-  const validateMutation = useValidateAssessment()
+  const { mutate: validateAssessment, isPending: isValidating } = useValidateAssessment()
 
   // Track validation response for Step 4
   const [validationResult, setValidationResult] = useState<AssessmentValidationResponse | null>(null)
@@ -193,10 +193,16 @@ export function AssessmentStudio() {
     invitationCodeMaxUses,
   ])
 
+  // Keep latest buildPayload reference for validation without re-triggering effects
+  const buildPayloadRef = useRef(buildPayload)
+  useEffect(() => {
+    buildPayloadRef.current = buildPayload
+  })
+
   // Run pre-creation validation when entering Step 4
   const runPreCreationValidation = useCallback(() => {
-    const payload = buildPayload()
-    validateMutation.mutate(payload, {
+    const payload = buildPayloadRef.current()
+    validateAssessment(payload, {
       onSuccess: (data) => {
         setValidationResult(data)
       },
@@ -215,7 +221,7 @@ export function AssessmentStudio() {
         })
       },
     })
-  }, [buildPayload, validateMutation])
+  }, [validateAssessment])
 
   useEffect(() => {
     if (currentStep === 4) {
@@ -279,7 +285,6 @@ export function AssessmentStudio() {
   }
 
   const isSaving = createMutation.isPending
-  const isValidating = validateMutation.isPending
 
   // Map validation error field to step number
   const getStepForField = (field: string): number => {

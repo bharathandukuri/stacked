@@ -891,24 +891,47 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
         // 1. Check if reference solution outputs are needed:
         // - Always needed if verification script is required (as fallback expected output on failure).
         // - Needed for any testcase where expectedOutput is null (e.g. custom testcases).
-        boolean needsRefRun = request.requireVerificationScript()
-                || request.testcases().stream().anyMatch(tc -> tc.expectedOutput() == null);
+        boolean hasRef = request.referenceLanguage() != null && StringUtils.hasText(request.referenceSolution());
+        boolean needsRefRun = hasRef && (request.requireVerificationScript()
+                || request.testcases().stream().anyMatch(tc -> tc.expectedOutput() == null));
 
         List<String> referenceOutputs = new ArrayList<>(count);
         if (needsRefRun) {
             String refFileName = languageFileNameRegistry.resolveReferenceSolutionFileName(request.referenceLanguage());
-            List<String> refStdins = new ArrayList<>(count);
+            List<BatchExecutionItem> refItems = new ArrayList<>(count);
             for (CandidateTestcaseItem tc : request.testcases()) {
-                refStdins.add(tc.stdin() != null ? tc.stdin() : "");
+                refItems.add(BatchExecutionItem.builder()
+                        .executablePath(refFileName)
+                        .stdin(tc.stdin() != null ? tc.stdin() : "")
+                        .constraints(request.referenceConstraints())
+                        .build());
             }
-            referenceOutputs = executeGenericBatch(
-                    "Reference solution",
-                    request.referenceLanguage(),
-                    refFileName,
-                    request.referenceSolution(),
-                    request.referenceConstraints(),
-                    refStdins
-            );
+
+            BatchCodeExecutionRequest refBatchRequest = BatchCodeExecutionRequest.builder()
+                    .language(request.referenceLanguage())
+                    .files(Map.of(refFileName, request.referenceSolution()))
+                    .constraints(request.referenceConstraints())
+                    .executions(refItems)
+                    .build();
+
+            BatchCodeExecutionResult refBatchResult = codeExecutionService.run(refBatchRequest);
+            if (refBatchResult != null && refBatchResult.results() != null) {
+                for (int i = 0; i < count; i++) {
+                    if (i < refBatchResult.results().size()) {
+                        SimpleCodeExecutionResult r = refBatchResult.results().get(i);
+                        if (r != null && r.executionStatus() == CodeExecutionStatus.SUCCESS && (r.exitCode() == null || r.exitCode() == 0L)) {
+                            referenceOutputs.add(r.stdout());
+                        } else {
+                            String err = r != null && r.stderr() != null && !r.stderr().isBlank()
+                                    ? r.stderr().strip()
+                                    : (r != null ? "Process exited with code " + r.exitCode() : "Execution failed");
+                            referenceOutputs.add("(Reference solution error: " + err + ")");
+                        }
+                    } else {
+                        referenceOutputs.add(null);
+                    }
+                }
+            }
         }
 
         // 2. Run candidate code in batch across all testcases
@@ -1106,7 +1129,30 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
             }
 
             // Candidate execution had exit code 0
-            if (!request.requireVerificationScript()) {
+            if (tc.isCustom()) {
+                boolean match = expectedOut != null && compareOutputs(candRes.stdout(), expectedOut);
+                String status = match ? "PASSED" : (expectedOut != null ? "WRONG_ANSWER" : "SUCCESS");
+                passedCount++;
+
+                results.add(CodingProblemTestcaseResultResponse.builder()
+                        .testCaseId(tc.id())
+                        .caseIndex(tc.caseIndex())
+                        .status(status)
+                        .passed(match || expectedOut == null)
+                        .stdin(tc.stdin())
+                        .dbInit(tc.dbInit())
+                        .actualOutput(candRes.stdout())
+                        .expectedOutput(expectedOut)
+                        .stderr(candRes.stderr())
+                        .exitCode(candRes.exitCode())
+                        .executionTimeMs(execTime)
+                        .runtimeMs(execTime)
+                        .memoryMb(memoryMb)
+                        .isCustom(true)
+                        .isSample(false)
+                        .logs(candRes.logs())
+                        .build());
+            } else if (!request.requireVerificationScript()) {
                 // Direct comparison
                 boolean match = compareOutputs(candRes.stdout(), expectedOut);
                 String status = match ? "PASSED" : "WRONG_ANSWER";
@@ -1120,6 +1166,7 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
                         .testCaseId(tc.id())
                         .caseIndex(tc.caseIndex())
                         .status(status)
+                        .passed(match)
                         .stdin(tc.stdin())
                         .dbInit(tc.dbInit())
                         .actualOutput(candRes.stdout())
@@ -1146,6 +1193,7 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
                             .testCaseId(tc.id())
                             .caseIndex(tc.caseIndex())
                             .status("PASSED")
+                            .passed(true)
                             .stdin(tc.stdin())
                             .dbInit(tc.dbInit())
                             .actualOutput(candRes.stdout())
@@ -1437,6 +1485,7 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
                             .testCaseId(tc.id())
                             .caseIndex(tc.caseIndex())
                             .status("PASSED")
+                            .passed(true)
                             .stdin(tc.stdin())
                             .dbInit(tc.dbInit())
                             .actualOutput(displayActual)

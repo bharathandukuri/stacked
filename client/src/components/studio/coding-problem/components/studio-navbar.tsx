@@ -4,8 +4,11 @@ import {
   ChevronRight,
   FlaskConical,
   ClipboardCheck,
+  ArrowLeft,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export interface StudioNavbarProps {
@@ -36,6 +39,17 @@ export function StudioNavbar({
     >
       {/* Left: Title & Mode Indicator */}
       <div className="flex min-w-0 items-center gap-3">
+        <Link to="/admin/coding-problem">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-foreground"
+            title="Back to Problems"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
+        </Link>
+        <div className="h-4 w-px bg-border hidden sm:block" />
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-2 shrink-0 animate-pulse rounded-full bg-primary" />
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">

@@ -139,7 +139,7 @@ export function AdminDashboardPage() {
       <AdminSidebar currentPath="/admin" />
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 min-w-0 overflow-y-auto">
         <div className="mx-auto max-w-7xl space-y-6 p-6 sm:p-8">
           {/* Header & Date Range Controls */}
           <AnalyticsHeader

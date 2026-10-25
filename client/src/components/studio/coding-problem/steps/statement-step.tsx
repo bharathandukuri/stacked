@@ -643,7 +643,7 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
           />
 
           {/* 6. Statement */}
-          <FieldSet className="gap-2">
+          <FieldSet className="gap-2 min-w-0 max-w-full">
             <form.AppField
               name="statement"
               children={() => (
@@ -652,6 +652,7 @@ export function StatementStep({ className, onNext }: StatementStepProps) {
                   placeholder="## Description&#10;&#10;Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.&#10;&#10;### Examples&#10;&#10;**Input:** nums = [2,7,11,15], target = 9&#10;**Output:** [0,1]&#10;&#10;### Constraints&#10;&#10;- $2 \le \text{nums.length} \le 10^4$&#10;- $-10^9 \le \text{nums}[i] \le 10^9$"
                   height={560}
                   showSessionImages={false}
+                  className="min-w-0 max-w-full"
                   required
                 />
               )}

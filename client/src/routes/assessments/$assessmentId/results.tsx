@@ -66,23 +66,26 @@ export function AssessmentResultsPage() {
     [results?.questionResults]
   )
 
+  const isQAnswered = (q: any) => Boolean(q.isAnswered ?? q.answered)
+  const isQCorrect = (q: any) => q.isCorrect === true || q.correct === true
+
   const correctCount = useMemo(() => {
-    return questionList.filter((q) => q.isCorrect === true).length
+    return questionList.filter((q) => isQCorrect(q)).length
   }, [questionList])
 
   const incorrectCount = useMemo(() => {
-    return questionList.filter((q) => q.isAnswered && q.isCorrect === false).length
+    return questionList.filter((q) => isQAnswered(q) && !isQCorrect(q)).length
   }, [questionList])
 
   const unansweredCount = useMemo(() => {
-    return questionList.filter((q) => !q.isAnswered).length
+    return questionList.filter((q) => !isQAnswered(q)).length
   }, [questionList])
 
   const filteredQuestions = useMemo(() => {
     return questionList.filter((q) => {
-      if (activeFilter === "CORRECT") return q.isCorrect === true
-      if (activeFilter === "INCORRECT") return q.isAnswered && q.isCorrect === false
-      if (activeFilter === "UNANSWERED") return !q.isAnswered
+      if (activeFilter === "CORRECT") return isQCorrect(q)
+      if (activeFilter === "INCORRECT") return isQAnswered(q) && !isQCorrect(q)
+      if (activeFilter === "UNANSWERED") return !isQAnswered(q)
       return true
     })
   }, [questionList, activeFilter])
@@ -222,14 +225,14 @@ export function AssessmentResultsPage() {
                 <Badge
                   className={cn(
                     "text-xs font-semibold px-2.5 py-0.5",
-                    results.passed
-                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                      : results.passingScore !== undefined
-                        ? "bg-destructive/15 text-destructive border-destructive/30"
-                        : "bg-primary/10 text-primary border-primary/20"
+                    results.passingScore != null && results.passed != null
+                      ? results.passed
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                        : "bg-destructive/15 text-destructive border-destructive/30"
+                      : "bg-primary/10 text-primary border-primary/20"
                   )}
                 >
-                  {results.passed !== undefined
+                  {results.passingScore != null && results.passed != null
                     ? results.passed
                       ? "PASSED"
                       : "DID NOT PASS"
@@ -433,12 +436,12 @@ export function AssessmentResultsPage() {
                       </span>
 
                       {/* Status Outcome Badge */}
-                      {q.isCorrect === true ? (
+                      {isQCorrect(q) ? (
                         <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[11px] gap-1">
                           <CheckCircle2 className="size-3" />
                           <span>Correct</span>
                         </Badge>
-                      ) : q.isAnswered ? (
+                      ) : isQAnswered(q) ? (
                         <Badge className="bg-destructive/15 text-destructive border-destructive/30 text-[11px] gap-1">
                           <XCircle className="size-3" />
                           <span>Incorrect</span>
@@ -572,82 +575,217 @@ export function AssessmentResultsPage() {
                           </div>
 
                           {/* Execution Results */}
-                          {q.lastExecutionResult && (
-                            <div className="space-y-3 pt-2 border-t border-border">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Badge
-                                    className={cn(
-                                      "text-xs font-semibold",
-                                      q.lastExecutionResult.overallStatus === "SUCCESS"
-                                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                        : "bg-destructive/15 text-destructive border-destructive/30"
-                                    )}
-                                  >
-                                    {q.lastExecutionResult.overallStatus}
-                                  </Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    Passed {q.lastExecutionResult.passedTestcases} /{" "}
-                                    {q.lastExecutionResult.totalTestcases} test cases
-                                  </span>
-                                </div>
-                                <span className="text-xs font-mono text-muted-foreground">
-                                  {q.lastExecutionResult.totalExecutionTimeMs} ms
-                                </span>
-                              </div>
-
-                              {/* Testcase Result Cards */}
-                              <div className="space-y-2">
-                                {q.lastExecutionResult.results?.map((res, tcIdx) => (
-                                  <div
-                                    key={tcIdx}
-                                    className="p-3 rounded-lg border bg-muted/20 text-xs space-y-2"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-semibold text-foreground">
-                                        Test Case #{tcIdx + 1}
+                          {q.lastExecutionResult && (() => {
+                            const isOverallAccepted =
+                              q.lastExecutionResult.overallStatus === "ACCEPTED" ||
+                              q.lastExecutionResult.overallStatus === "SUCCESS" ||
+                              q.allTestcasesPassed === true
+                            return (
+                              <div className="space-y-4 pt-2 border-t border-border">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Badge
+                                      className={cn(
+                                        "text-xs font-semibold",
+                                        isOverallAccepted
+                                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                          : "bg-destructive/15 text-destructive border-destructive/30"
+                                      )}
+                                    >
+                                      {q.lastExecutionResult.overallStatus}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      Passed {q.lastExecutionResult.passedTestcases} /{" "}
+                                      {q.lastExecutionResult.totalTestcases} test cases
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span className="font-mono">
+                                      {q.lastExecutionResult.totalExecutionTimeMs} ms
+                                    </span>
+                                    {q.bestAwardedPoints !== undefined && (
+                                      <span>
+                                        Best Score:{" "}
+                                        <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+                                          {q.bestAwardedPoints.toFixed(1)} / {q.maxPoints} pts
+                                        </strong>
                                       </span>
-                                      <Badge
-                                        variant={res.passed ? "default" : "destructive"}
-                                        className="text-[10px]"
-                                      >
-                                        {res.status}
-                                      </Badge>
-                                    </div>
-
-                                    {res.actualOutput && (
-                                      <div>
-                                        <span className="text-muted-foreground text-[11px]">Output:</span>
-                                        <pre className="font-mono p-2 bg-background border rounded text-[11px] mt-0.5 whitespace-pre-wrap">
-                                          {res.actualOutput}
-                                        </pre>
-                                      </div>
-                                    )}
-
-                                    {res.expectedOutput && (
-                                      <div>
-                                        <span className="text-muted-foreground text-[11px]">Expected:</span>
-                                        <pre className="font-mono p-2 bg-background border rounded text-[11px] mt-0.5 whitespace-pre-wrap">
-                                          {res.expectedOutput}
-                                        </pre>
-                                      </div>
-                                    )}
-
-                                    {res.stderr && (
-                                      <div>
-                                        <span className="text-destructive font-semibold text-[11px]">
-                                          Stderr / Error:
-                                        </span>
-                                        <pre className="font-mono p-2 bg-destructive/10 text-destructive border border-destructive/30 rounded text-[11px] mt-0.5 whitespace-pre-wrap">
-                                          {res.stderr}
-                                        </pre>
-                                      </div>
                                     )}
                                   </div>
-                                ))}
+                                </div>
+
+                                {/* Testcase Result Cards */}
+                                <div className="space-y-2">
+                                  {q.lastExecutionResult.results?.map((res, tcIdx) => {
+                                    const isPassed =
+                                      res.passed === true ||
+                                      res.status === "PASSED" ||
+                                      res.status === "ACCEPTED"
+                                    return (
+                                      <div
+                                        key={tcIdx}
+                                        className="p-3 rounded-lg border bg-muted/20 text-xs space-y-2"
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-semibold text-foreground">
+                                            Test Case #{tcIdx + 1}
+                                          </span>
+                                          <Badge
+                                            className={cn(
+                                              "text-[10px]",
+                                              isPassed
+                                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                : "bg-destructive/15 text-destructive border-destructive/30"
+                                            )}
+                                          >
+                                            {res.status}
+                                          </Badge>
+                                        </div>
+
+                                        {res.stdin && (
+                                          <div>
+                                            <span className="text-muted-foreground text-[11px] font-semibold">
+                                              Input:
+                                            </span>
+                                            <pre className="font-mono p-2 bg-background border rounded text-[11px] mt-0.5 whitespace-pre-wrap">
+                                              {res.stdin}
+                                            </pre>
+                                          </div>
+                                        )}
+
+                                        {res.actualOutput && (
+                                          <div>
+                                            <span className="text-muted-foreground text-[11px] font-semibold">
+                                              Your Output:
+                                            </span>
+                                            <pre className="font-mono p-2 bg-background border rounded text-[11px] mt-0.5 whitespace-pre-wrap">
+                                              {res.actualOutput}
+                                            </pre>
+                                          </div>
+                                        )}
+
+                                        {res.expectedOutput && (
+                                          <div>
+                                            <span className="text-muted-foreground text-[11px] font-semibold">
+                                              Expected Output:
+                                            </span>
+                                            <pre className="font-mono p-2 bg-background border rounded text-[11px] mt-0.5 whitespace-pre-wrap">
+                                              {res.expectedOutput}
+                                            </pre>
+                                          </div>
+                                        )}
+
+                                        {res.stderr && (
+                                          <div>
+                                            <span className="text-destructive font-semibold text-[11px]">
+                                              Stderr / Error:
+                                            </span>
+                                            <pre className="font-mono p-2 bg-destructive/10 text-destructive border border-destructive/30 rounded text-[11px] mt-0.5 whitespace-pre-wrap">
+                                              {res.stderr}
+                                            </pre>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+
+                                {/* Submission History Table */}
+                                {q.submissions && q.submissions.length > 0 && (
+                                  <div className="space-y-2 pt-3 border-t border-border">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-semibold text-foreground">
+                                        Candidate Submission History ({q.submissions.length})
+                                      </span>
+                                      <span className="text-[11px] text-muted-foreground">
+                                        Best submission points awarded
+                                      </span>
+                                    </div>
+                                    <div className="rounded-md border overflow-hidden">
+                                      <table className="w-full text-xs text-left">
+                                        <thead className="bg-muted/50 text-muted-foreground font-medium border-b text-[11px]">
+                                          <tr>
+                                            <th className="px-3 py-2">#</th>
+                                            <th className="px-3 py-2">Verdict</th>
+                                            <th className="px-3 py-2">Test Cases</th>
+                                            <th className="px-3 py-2">Score</th>
+                                            <th className="px-3 py-2">Runtime</th>
+                                            <th className="px-3 py-2 text-right">Submitted</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-border/60">
+                                          {q.submissions.map((sub, sIdx) => {
+                                            const subAccepted =
+                                              sub.status === "ACCEPTED" || sub.status === "SUCCESS"
+                                            const isBest =
+                                              q.bestAwardedPoints !== undefined &&
+                                              sub.awardedPoints === q.bestAwardedPoints &&
+                                              q.bestAwardedPoints > 0
+                                            return (
+                                              <tr
+                                                key={sub.submissionId || sIdx}
+                                                className={cn(
+                                                  "hover:bg-muted/30 transition-colors",
+                                                  isBest && "bg-emerald-500/5"
+                                                )}
+                                              >
+                                                <td className="px-3 py-2 text-muted-foreground font-mono">
+                                                  {sIdx + 1}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                  <span
+                                                    className={cn(
+                                                      "font-semibold",
+                                                      subAccepted
+                                                        ? "text-emerald-600 dark:text-emerald-400"
+                                                        : "text-destructive"
+                                                    )}
+                                                  >
+                                                    {sub.status}
+                                                  </span>
+                                                </td>
+                                                <td className="px-3 py-2 font-mono">
+                                                  {sub.passedTestcases} / {sub.totalTestcases}
+                                                </td>
+                                                <td className="px-3 py-2 font-mono">
+                                                  <span
+                                                    className={cn(
+                                                      isBest &&
+                                                        "font-bold text-emerald-600 dark:text-emerald-400"
+                                                    )}
+                                                  >
+                                                    {sub.awardedPoints.toFixed(1)} pts
+                                                  </span>
+                                                  {isBest && (
+                                                    <Badge
+                                                      variant="outline"
+                                                      className="ml-1.5 text-[9px] px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                                    >
+                                                      Best
+                                                    </Badge>
+                                                  )}
+                                                </td>
+                                                <td className="px-3 py-2 font-mono text-muted-foreground">
+                                                  {sub.executionTimeMs} ms
+                                                </td>
+                                                <td className="px-3 py-2 text-right text-muted-foreground">
+                                                  {new Date(sub.submittedAt).toLocaleTimeString([], {
+                                                    hour: "2-digit",
+                                                    minute: "2-digit",
+                                                    second: "2-digit",
+                                                  })}
+                                                </td>
+                                              </tr>
+                                            )
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          )}
+                            )
+                          })()}
                         </div>
                       )}
                     </div>

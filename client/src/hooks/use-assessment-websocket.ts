@@ -39,12 +39,24 @@ export function useAssessmentWebSocket({
     connectionId: null,
   })
 
+  // Store latest callbacks in refs to avoid reconnection loops on parent re-renders
+  const onSupersededRef = useRef(onSuperseded)
+  const onManualActivationRef = useRef(onManualActivation)
+  const onManualCompletionRef = useRef(onManualCompletion)
+
+  useEffect(() => {
+    onSupersededRef.current = onSuperseded
+    onManualActivationRef.current = onManualActivation
+    onManualCompletionRef.current = onManualCompletion
+  })
+
   const wsRef = useRef<WebSocket | null>(null)
   const heartbeatTimerRef = useRef<number | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttemptsRef = useRef(0)
+  const isSupersededRef = useRef(false)
   const unmountedRef = useRef(false)
-  const connectRef = useRef<() => void>(() => {})
+  const activeParamsRef = useRef<string | null>(null)
 
   const clearTimers = useCallback(() => {
     if (heartbeatTimerRef.current) {
@@ -58,11 +70,43 @@ export function useAssessmentWebSocket({
   }, [])
 
   const connect = useCallback(() => {
-    if (!enabled || !accessToken || !assessmentId || !attemptId || unmountedRef.current) {
+    if (
+      !enabled ||
+      !accessToken ||
+      !assessmentId ||
+      !attemptId ||
+      unmountedRef.current ||
+      isSupersededRef.current
+    ) {
+      return
+    }
+
+    const connectionKey = `${assessmentId}:${attemptId}:${accessToken}`
+
+    // If socket is already open or connecting to this exact session, do not duplicate
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING) &&
+      activeParamsRef.current === connectionKey
+    ) {
       return
     }
 
     clearTimers()
+
+    // Close any previous socket before creating a new one
+    if (wsRef.current) {
+      const prevWs = wsRef.current
+      wsRef.current = null
+      try {
+        prevWs.close(1000, "Opening new connection")
+      } catch {
+        // ignore close errors
+      }
+    }
+
+    activeParamsRef.current = connectionKey
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
     const host = window.location.host
@@ -79,8 +123,8 @@ export function useAssessmentWebSocket({
       wsRef.current = ws
 
       ws.onopen = () => {
-        if (unmountedRef.current) {
-          ws.close()
+        if (unmountedRef.current || isSupersededRef.current) {
+          ws.close(1000, "Unmounted or superseded")
           return
         }
         reconnectAttemptsRef.current = 0
@@ -114,16 +158,19 @@ export function useAssessmentWebSocket({
               lastHeartbeatTime: new Date(),
             }))
           } else if (payload.type === "SESSION_SUPERSEDED") {
+            isSupersededRef.current = true
+            clearTimers()
             const msg =
               payload.message ||
               "Your test session was opened in another window or tab. This session is now inactive."
             setStatus((prev) => ({
               ...prev,
               isConnected: false,
+              isConnecting: false,
               isSuperseded: true,
               supersededMessage: msg,
             }))
-            onSuperseded?.(msg)
+            onSupersededRef.current?.(msg)
           } else if (payload.type === "ASSESSMENT_MANUALLY_ACTIVATED") {
             const msg =
               payload.message ||
@@ -132,7 +179,7 @@ export function useAssessmentWebSocket({
               ...prev,
               manualInterventionMessage: msg,
             }))
-            onManualActivation?.(msg)
+            onManualActivationRef.current?.(msg)
           } else if (payload.type === "ASSESSMENT_MANUALLY_COMPLETED") {
             const msg =
               payload.message ||
@@ -141,7 +188,7 @@ export function useAssessmentWebSocket({
               ...prev,
               manualInterventionMessage: msg,
             }))
-            onManualCompletion?.(msg)
+            onManualCompletionRef.current?.(msg)
           }
         } catch {
           // ignore non-json messages
@@ -150,9 +197,17 @@ export function useAssessmentWebSocket({
 
       ws.onclose = (event) => {
         clearTimers()
+        if (wsRef.current === ws) {
+          wsRef.current = null
+        }
+
         if (unmountedRef.current) return
 
-        const wasSuperseded = event.code === 4009
+        const wasSuperseded = event.code === 4009 || isSupersededRef.current
+        if (wasSuperseded) {
+          isSupersededRef.current = true
+        }
+
         setStatus((prev) => ({
           ...prev,
           isConnected: false,
@@ -160,42 +215,52 @@ export function useAssessmentWebSocket({
           isSuperseded: wasSuperseded || prev.isSuperseded,
         }))
 
-        // Attempt automatic reconnection if not normal close and not superseded
-        if (!wasSuperseded && event.code !== 1000 && reconnectAttemptsRef.current < 5) {
+        // Do not auto-reconnect if normal close (1000), going away (1001), or superseded (4009)
+        const isCleanClose =
+          event.code === 1000 || event.code === 1001 || wasSuperseded
+
+        if (!isCleanClose && reconnectAttemptsRef.current < 5) {
           const delay = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 10000)
           reconnectAttemptsRef.current += 1
           reconnectTimeoutRef.current = window.setTimeout(() => {
-            connectRef.current()
+            if (!unmountedRef.current && !isSupersededRef.current) {
+              connect()
+            }
           }, delay)
         }
       }
 
       ws.onerror = () => {
-        // ws.onclose will fire after onerror
+        // onclose will handle cleanup and status
       }
     } catch {
       setStatus((prev) => ({ ...prev, isConnecting: false, isConnected: false }))
     }
-  }, [accessToken, assessmentId, attemptId, enabled, onSuperseded, onManualActivation, onManualCompletion, clearTimers])
-
-  useEffect(() => {
-    connectRef.current = connect
-  }, [connect])
+  }, [accessToken, assessmentId, attemptId, enabled, clearTimers])
 
   useEffect(() => {
     unmountedRef.current = false
-    connect()
+    isSupersededRef.current = false
+
+    if (enabled && accessToken && assessmentId && attemptId) {
+      connect()
+    }
 
     return () => {
       unmountedRef.current = true
       clearTimers()
       if (wsRef.current) {
-        wsRef.current.close(1000, "Component unmounted")
+        const ws = wsRef.current
         wsRef.current = null
+        try {
+          ws.close(1000, "Component unmounted")
+        } catch {
+          // ignore close error
+        }
       }
+      activeParamsRef.current = null
     }
-  }, [connect, clearTimers])
+  }, [enabled, accessToken, assessmentId, attemptId, connect, clearTimers])
 
   return status
 }
-

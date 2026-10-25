@@ -18,6 +18,9 @@ import {
   RefreshCw,
   XCircle,
   Check,
+  FileText,
+  Award,
+  Hourglass,
 } from "lucide-react"
 
 import { Logo } from "@/components/logo"
@@ -67,6 +70,7 @@ function CandidateAssessmentLobbyPage() {
   const [wsReachable, setWsReachable] = useState<boolean | null>(null)
   const [screenValid, setScreenValid] = useState<boolean | null>(null)
   const [isEvaluatingChecks, setIsEvaluatingChecks] = useState(true)
+  const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null)
 
   // Auth Initialization
   useEffect(() => {
@@ -90,6 +94,39 @@ function CandidateAssessmentLobbyPage() {
   })
 
   const startMutation = useStartAttempt(assessmentId)
+
+  // Sync remaining countdown seconds for active attempts
+  useEffect(() => {
+    if (readiness?.hasActiveAttempt && readiness.remainingSeconds !== undefined && readiness.remainingSeconds !== null) {
+      setCountdownSeconds(readiness.remainingSeconds)
+    }
+  }, [readiness?.hasActiveAttempt, readiness?.remainingSeconds])
+
+  // Active countdown timer interval
+  useEffect(() => {
+    if (countdownSeconds === null || countdownSeconds <= 0) return
+    const timer = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          refetchReadiness()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [countdownSeconds, refetchReadiness])
+
+  const formatTimer = (totalSec?: number | null) => {
+    if (!totalSec || totalSec <= 0) return "00:00"
+    const hours = Math.floor(totalSec / 3600)
+    const minutes = Math.floor((totalSec % 3600) / 60)
+    const seconds = totalSec % 60
+    if (hours > 0) {
+      return `${hours}h ${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`
+    }
+    return `${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`
+  }
 
   // Diagnostic Checks
   const runDiagnostics = useCallback(async () => {
@@ -123,16 +160,6 @@ function CandidateAssessmentLobbyPage() {
     }
   }, [isInitialized, isAuthenticated, runDiagnostics])
 
-  useEffect(() => {
-    if (readiness?.participationStatus === "SUBMITTED") {
-      navigate({
-        to: "/assessments/$assessmentId/results",
-        params: { assessmentId },
-        replace: true,
-      })
-    }
-  }, [readiness?.participationStatus, assessmentId, navigate])
-
   const handleConfirmStart = async () => {
     try {
       await startMutation.mutateAsync()
@@ -142,7 +169,7 @@ function CandidateAssessmentLobbyPage() {
         params: { assessmentId },
       })
     } catch {
-      // handled by toast
+      // handled by mutation toast
     }
   }
 
@@ -219,22 +246,6 @@ function CandidateAssessmentLobbyPage() {
     )
   }
 
-  if (readiness?.participationStatus === "SUBMITTED") {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="size-8 animate-spin text-emerald-500" />
-          <p className="text-xs font-medium">Assessment completed. Redirecting to your results...</p>
-          <Link to="/assessments/$assessmentId/results" params={{ assessmentId }}>
-            <Button variant="outline" size="sm" className="mt-2 text-xs">
-              Go to Results Now
-            </Button>
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
   if (isReadinessError || !readiness) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
@@ -286,16 +297,16 @@ function CandidateAssessmentLobbyPage() {
   const checks: CheckItem[] = [
     {
       id: "auth",
-      name: "Identity Verification",
-      description: "Candidate profile authenticated.",
+      name: "Candidate Profile",
+      description: "Candidate account authenticated.",
       icon: UserCheck,
       status: readiness.authenticated ? "PASSED" : "FAILED",
       detail: readiness.candidateEmail || undefined,
     },
     {
       id: "network",
-      name: "Network & Latency",
-      description: "Roundtrip connection to execution servers.",
+      name: "Server Latency",
+      description: "Roundtrip connection to execution clusters.",
       icon: Wifi,
       status:
         latencyMs === null
@@ -309,67 +320,83 @@ function CandidateAssessmentLobbyPage() {
     },
     {
       id: "screen",
-      name: "Display & Viewport",
-      description: "Desktop viewport verification.",
+      name: "Viewport & Display",
+      description: "Full desktop resolution verified.",
       icon: Monitor,
       status: screenValid === null ? "CHECKING" : screenValid ? "PASSED" : "WARNING",
       detail: `${window.innerWidth}×${window.innerHeight}px`,
     },
     {
       id: "ws",
-      name: "Real-time Presence",
-      description: "Live connection for session tracking.",
+      name: "Real-time Connectivity",
+      description: "WebSocket connection for continuous sync.",
       icon: Terminal,
       status: wsReachable === null ? "CHECKING" : wsReachable ? "PASSED" : "FAILED",
-      detail: wsReachable ? "Active" : "Checking...",
+      detail: wsReachable ? "Connected" : "Checking...",
     },
     {
       id: "schedule",
       name: "Eligibility & Window",
-      description: "Assessment window and attempt limits.",
+      description: "Assessment window and attempt validation.",
       icon: CalendarCheck,
       status:
-        readiness.canStart || readiness.hasActiveAttempt
+        readiness.canStart || readiness.hasActiveAttempt || readiness.participationStatus === "SUBMITTED" || readiness.participationStatus === "EXPIRED"
           ? "PASSED"
           : "FAILED",
       detail:
-        readiness.canStart || readiness.hasActiveAttempt
-          ? `Attempt ${readiness.attemptsUsed + 1}${readiness.maxAttempts ? ` of ${readiness.maxAttempts}` : ""}`
-          : readiness.cannotStartReason || "Closed",
+        readiness.hasActiveAttempt
+          ? `Attempt in progress`
+          : readiness.canStart
+            ? `Attempt ${readiness.attemptsUsed + 1}${readiness.maxAttempts ? ` of ${readiness.maxAttempts}` : ""}`
+            : readiness.cannotStartReason || readiness.participationStatus,
     },
   ]
 
   const allPassed = checks.every((c) => c.status === "PASSED" || c.status === "WARNING")
   const canStartAssessment = (readiness.canStart || readiness.hasActiveAttempt) && allPassed
+  const isConcluded = readiness.participationStatus === "SUBMITTED" || readiness.participationStatus === "EXPIRED"
 
   return (
     <div className="min-h-screen w-full bg-background flex flex-col justify-between font-sans">
       {/* Top Header */}
-      <header className="border-b border-border bg-card/60 backdrop-blur-md px-6 py-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
+      <header className="border-b border-border bg-card/60 backdrop-blur-md px-6 py-4 sticky top-0 z-20">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
           <Link to="/dashboard" className="flex items-center gap-2.5">
             <Logo size={26} />
             <span className="text-sm font-bold tracking-tight text-foreground">Stacked</span>
           </Link>
-          <Link to="/dashboard">
-            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground">
-              Exit Lobby
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            {readiness.candidateEmail && (
+              <span className="text-xs text-muted-foreground hidden sm:inline-block font-mono">
+                {readiness.candidateEmail}
+              </span>
+            )}
+            <Link to="/dashboard">
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
+                Exit to Dashboard
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 space-y-6">
-        {/* Title & Metadata Header */}
-        <div className="space-y-2">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 space-y-6">
+        {/* Title & Metadata Hero Header */}
+        <div className="space-y-3 pb-2 border-b border-border/60">
           <div className="flex flex-wrap items-center gap-2">
             {getStatusBadge(readiness.participationStatus)}
-            <Badge variant="outline" className="text-xs">
-              {readiness.totalQuestions} Questions • {readiness.totalScore} Points
+            <Badge variant="outline" className="text-xs gap-1">
+              <FileText className="size-3 text-primary" />
+              <span>{readiness.totalQuestions} Questions</span>
             </Badge>
-            <Badge variant="outline" className="text-xs">
-              {readiness.durationMinutes} Minutes
+            <Badge variant="outline" className="text-xs gap-1">
+              <Award className="size-3 text-emerald-500" />
+              <span>{readiness.totalScore} Points</span>
+            </Badge>
+            <Badge variant="outline" className="text-xs gap-1">
+              <Clock className="size-3 text-amber-500" />
+              <span>{readiness.durationMinutes} Minutes</span>
             </Badge>
             {readiness.maxAttempts ? (
               <Badge variant="outline" className="text-xs">
@@ -377,15 +404,55 @@ function CandidateAssessmentLobbyPage() {
               </Badge>
             ) : null}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             {readiness.title}
           </h1>
+
           {readiness.description && (
-            <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-3xl">
               {readiness.description}
             </p>
           )}
         </div>
+
+        {/* State Banner 1: Active In-Progress Session (Candidate returned before deadline) */}
+        {readiness.hasActiveAttempt && (
+          <Card className="border-amber-500/50 bg-amber-500/10 shadow-sm animate-in fade-in duration-200">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-base font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <Clock className="size-5 animate-pulse" />
+                    <span>Active Assessment Session in Progress</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs text-foreground/80">
+                    You have an existing attempt running. Your previous answers and code solutions are automatically saved.
+                  </CardDescription>
+                </div>
+                {countdownSeconds !== null && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-300 font-mono text-sm font-bold shrink-0">
+                    <Hourglass className="size-4 animate-spin text-amber-500" />
+                    <span>{formatTimer(countdownSeconds)} remaining</span>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardFooter className="pt-0">
+              <Link
+                to="/assessments/$assessmentId/take"
+                params={{ assessmentId }}
+                className="w-full sm:w-auto"
+              >
+                <Button size="sm" className="w-full sm:w-auto gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-sm">
+                  <span>Resume Assessment Now</span>
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+
 
         {/* Manual Administrator Intervention Banner */}
         {readiness.manualInterventionMessage && (
@@ -402,164 +469,242 @@ function CandidateAssessmentLobbyPage() {
           </Card>
         )}
 
-        {/* Active Attempt Banner */}
-        {readiness.hasActiveAttempt && (
-          <Card className="border-amber-500/40 bg-amber-500/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                <Clock className="size-4" />
-                <span>Active Attempt in Progress</span>
-              </CardTitle>
-              <CardDescription className="text-xs">
-                You have a running attempt. Resume to continue your answers.
-              </CardDescription>
-            </CardHeader>
-            <CardFooter>
-              <Link
-                to="/assessments/$assessmentId/take"
-                params={{ assessmentId }}
-              >
-                <Button size="sm" className="gap-2 bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs">
-                  <span>Resume Assessment</span>
-                  <ArrowRight className="size-3.5" />
+        {isConcluded ? (
+          <Card className="border-border bg-card shadow-sm p-6 sm:p-8 space-y-6 text-center max-w-2xl mx-auto">
+            <div className="size-16 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
+              {readiness.participationStatus === "SUBMITTED" ? (
+                <CheckCircle2 className="size-8 text-emerald-500" />
+              ) : (
+                <Clock className="size-8 text-amber-500" />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-foreground">
+                {readiness.participationStatus === "SUBMITTED"
+                  ? "Assessment Successfully Submitted"
+                  : "Assessment Time Limit Concluded"}
+              </h2>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+                {readiness.participationStatus === "SUBMITTED"
+                  ? "Your assessment has been officially submitted and evaluated. You can review your score and detailed question breakdown below."
+                  : "The allotted duration for this assessment has ended. All MCQ responses and code evaluations completed prior to the deadline were automatically saved and evaluated."}
+              </p>
+            </div>
+
+            {/* Assessment Quick Stats */}
+            <div className="flex flex-wrap items-center justify-center gap-4 py-3 border-y border-border/60 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <span>Questions:</span>
+                <strong className="text-foreground font-mono">{readiness.totalQuestions}</strong>
+              </div>
+              <span>•</span>
+              <div className="flex items-center gap-1.5">
+                <span>Total Points:</span>
+                <strong className="text-foreground font-mono">{readiness.totalScore} pts</strong>
+              </div>
+              <span>•</span>
+              <div className="flex items-center gap-1.5">
+                <span>Allotted Time:</span>
+                <strong className="text-foreground font-mono">{readiness.durationMinutes} min</strong>
+              </div>
+              <span>•</span>
+              <div className="flex items-center gap-1.5">
+                <span>Attempts:</span>
+                <strong className="text-foreground font-mono">{readiness.attemptsUsed} / {readiness.maxAttempts || 1}</strong>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link to="/assessments/$assessmentId/results" params={{ assessmentId }} className="w-full sm:w-auto">
+                <Button size="default" className="w-full sm:w-auto gap-2 font-semibold text-xs px-6">
+                  <span>View Assessment Results</span>
+                  <ArrowRight className="size-4" />
                 </Button>
               </Link>
-            </CardFooter>
-          </Card>
-        )}
-
-        {/* Diagnostic Readiness */}
-        <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">System Checks</h3>
-              <p className="text-xs text-muted-foreground">Pre-test environment verification</p>
+              <Link to="/dashboard" className="w-full sm:w-auto">
+                <Button variant="outline" size="default" className="w-full sm:w-auto text-xs px-4">
+                  Return to Dashboard
+                </Button>
+              </Link>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                refetchReadiness()
-                runDiagnostics()
-              }}
-              disabled={isEvaluatingChecks}
-              className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-            >
-              <RefreshCw className={cn("size-3", isEvaluatingChecks ? "animate-spin" : "")} />
-              <span>Re-check</span>
-            </Button>
+          </Card>
+        ) : (
+        /* Two-Column Grid: Left Diagnostics, Right Rules & Begin */
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          {/* Left: System Diagnostics (3 cols) */}
+          <div className="md:col-span-3 space-y-4">
+            <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Pre-Test System Diagnostics</h3>
+                  <p className="text-xs text-muted-foreground">Verification of browser environment and server connectivity</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    refetchReadiness()
+                    runDiagnostics()
+                  }}
+                  disabled={isEvaluatingChecks}
+                  className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                >
+                  <RefreshCw className={cn("size-3", isEvaluatingChecks ? "animate-spin" : "")} />
+                  <span>Re-check</span>
+                </Button>
+              </div>
+
+              <div className="divide-y divide-border rounded-lg border border-border/60 overflow-hidden">
+                {checks.map((check) => {
+                  const Icon = check.icon
+                  return (
+                    <div
+                      key={check.id}
+                      className="flex items-center justify-between p-3 gap-3 bg-card hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-1.5 rounded-md bg-muted text-muted-foreground shrink-0">
+                          <Icon className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-foreground truncate">
+                            {check.name}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {check.detail || check.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {check.status === "CHECKING" && (
+                          <Badge variant="outline" className="gap-1 text-[11px] py-0">
+                            <Loader2 className="size-2.5 animate-spin" />
+                            <span>Checking</span>
+                          </Badge>
+                        )}
+                        {check.status === "PASSED" && (
+                          <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1 text-[11px] py-0">
+                            <Check className="size-2.5" />
+                            <span>Ready</span>
+                          </Badge>
+                        )}
+                        {check.status === "WARNING" && (
+                          <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1 text-[11px] py-0">
+                            <AlertCircle className="size-2.5" />
+                            <span>Warning</span>
+                          </Badge>
+                        )}
+                        {check.status === "FAILED" && (
+                          <Badge variant="destructive" className="gap-1 text-[11px] py-0">
+                            <XCircle className="size-2.5" />
+                            <span>Failed</span>
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
 
-          <div className="divide-y divide-border rounded-lg border border-border/60 overflow-hidden">
-            {checks.map((check) => {
-              const Icon = check.icon
-              return (
-                <div
-                  key={check.id}
-                  className="flex items-center justify-between p-3 gap-3 bg-card hover:bg-muted/30 transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-1.5 rounded-md bg-muted text-muted-foreground shrink-0">
-                      <Icon className="size-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold text-foreground truncate">
-                        {check.name}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {check.detail || check.description}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0">
-                    {check.status === "CHECKING" && (
-                      <Badge variant="outline" className="gap-1 text-[11px] py-0">
-                        <Loader2 className="size-2.5 animate-spin" />
-                        <span>Checking</span>
-                      </Badge>
-                    )}
-                    {check.status === "PASSED" && (
-                      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1 text-[11px] py-0">
-                        <Check className="size-2.5" />
-                        <span>Ready</span>
-                      </Badge>
-                    )}
-                    {check.status === "WARNING" && (
-                      <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1 text-[11px] py-0">
-                        <AlertCircle className="size-2.5" />
-                        <span>Warning</span>
-                      </Badge>
-                    )}
-                    {check.status === "FAILED" && (
-                      <Badge variant="destructive" className="gap-1 text-[11px] py-0">
-                        <XCircle className="size-2.5" />
-                        <span>Failed</span>
-                      </Badge>
-                    )}
+          {/* Right: Guidelines & Start Action Card (2 cols) */}
+          <div className="md:col-span-2 space-y-4">
+            <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+              <h3 className="text-sm font-semibold text-foreground">Assessment Rules</h3>
+              <div className="space-y-3 text-xs text-muted-foreground">
+                <div className="flex items-start gap-2.5">
+                  <Clock className="size-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-foreground">Strict Countdown</p>
+                    <p className="text-[11px] leading-relaxed">
+                      Timer runs continuously from the moment you begin. Closing the tab will not pause the timer.
+                    </p>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        </div>
 
-        {/* Essential Rules */}
-        <div className="rounded-xl border border-border bg-card p-5 space-y-3 shadow-sm">
-          <h3 className="text-sm font-semibold text-foreground">Guidelines</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-muted-foreground">
-            <div className="flex items-start gap-2">
-              <Clock className="size-4 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-foreground">Timer Continues</p>
-                <p className="text-[11px]">Countdown starts immediately upon confirmation.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <ShieldAlert className="size-4 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-foreground">Single Tab</p>
-                <p className="text-[11px]">Multiple tabs will invalidate the session.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <Terminal className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-foreground">Auto Saved</p>
-                <p className="text-[11px]">Answers and code runs are persisted continuously.</p>
-              </div>
-            </div>
-          </div>
+                <div className="flex items-start gap-2.5">
+                  <Terminal className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-foreground">Real-time Auto-save</p>
+                    <p className="text-[11px] leading-relaxed">
+                      Every code revision and option selection is saved automatically. If disconnected, you can safely resume.
+                    </p>
+                  </div>
+                </div>
 
-          {/* Action Row */}
-          {readiness.participationStatus === "INVITED" && (
-            <div className="border-t border-border pt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-xs">
-                {readiness.canStart ? (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
-                    <CheckCircle2 className="size-3.5" />
-                    Eligibility verified. You may begin.
-                  </span>
-                ) : (
-                  <span className="text-destructive font-medium flex items-center gap-1.5">
-                    <AlertCircle className="size-3.5" />
-                    {readiness.cannotStartReason || "Assessment is currently closed."}
-                  </span>
+                <div className="flex items-start gap-2.5">
+                  <ShieldAlert className="size-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-foreground">Single Tab Session</p>
+                    <p className="text-[11px] leading-relaxed">
+                      Only one active browser tab is permitted. Opening elsewhere will deactivate the previous session.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <Award className="size-4 text-purple-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-foreground">Best Score Retained</p>
+                    <p className="text-[11px] leading-relaxed">
+                      For coding challenges, your highest scoring submission is preserved even if subsequent runs fail.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Button Row */}
+              <div className="border-t border-border pt-4">
+                {readiness.participationStatus === "INVITED" && (
+                  <div className="space-y-2">
+                    {readiness.canStart ? (
+                      <Button
+                        size="sm"
+                        disabled={!canStartAssessment || startMutation.isPending}
+                        onClick={() => setConfirmOpen(true)}
+                        className="w-full gap-2 font-semibold text-xs shadow-sm h-9"
+                      >
+                        <Play className="size-3.5 fill-current" />
+                        <span>Begin Assessment</span>
+                      </Button>
+                    ) : (
+                      <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-xs">
+                        <p className="font-semibold flex items-center gap-1.5">
+                          <AlertCircle className="size-3.5 shrink-0" />
+                          <span>Cannot Start</span>
+                        </p>
+                        <p className="text-[11px] mt-0.5">
+                          {readiness.cannotStartReason || "Assessment is currently closed."}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </div>
 
-              <Button
-                size="sm"
-                disabled={!canStartAssessment || startMutation.isPending}
-                onClick={() => setConfirmOpen(true)}
-                className="w-full sm:w-auto gap-2 px-6 font-semibold text-xs shadow-sm"
-              >
-                <Play className="size-3.5 fill-current" />
-                <span>Begin Assessment</span>
-              </Button>
+                {readiness.hasActiveAttempt && (
+                  <Link
+                    to="/assessments/$assessmentId/take"
+                    params={{ assessmentId }}
+                    className="block w-full"
+                  >
+                    <Button
+                      size="sm"
+                      className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-sm h-9"
+                    >
+                      <Play className="size-3.5 fill-current" />
+                      <span>Resume Active Attempt</span>
+                    </Button>
+                  </Link>
+                )}
+
+              </div>
             </div>
-          )}
+          </div>
         </div>
+        )}
       </main>
 
       {/* Confirmation Dialog */}
@@ -575,12 +720,22 @@ function CandidateAssessmentLobbyPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-2 space-y-1.5 text-xs text-muted-foreground">
-            <p>• {readiness.totalQuestions} Questions ({readiness.totalScore} Points)</p>
-            <p>• Single active browser session allowed</p>
+          <div className="py-2 space-y-2 text-xs text-muted-foreground border-y my-1">
+            <div className="flex items-center justify-between">
+              <span>Total Questions:</span>
+              <strong className="text-foreground">{readiness.totalQuestions}</strong>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Maximum Points:</span>
+              <strong className="text-foreground">{readiness.totalScore} pts</strong>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Allocated Time:</span>
+              <strong className="text-foreground">{readiness.durationMinutes} minutes</strong>
+            </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
             <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} className="text-xs">
               Cancel
             </Button>
@@ -604,3 +759,4 @@ function CandidateAssessmentLobbyPage() {
     </div>
   )
 }
+export default CandidateAssessmentLobbyPage

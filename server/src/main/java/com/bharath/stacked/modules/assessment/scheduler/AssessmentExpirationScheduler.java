@@ -56,6 +56,12 @@ public class AssessmentExpirationScheduler {
             attempt.setScore(totalScore);
             attempt.setPassed(passed);
             attempt.setUpdatedAt(now);
+            if (attempt.getSubmittedAt() == null) {
+                Instant effectiveEnd = attempt.getEffectiveDeadline() != null && attempt.getEffectiveDeadline().isBefore(now)
+                        ? attempt.getEffectiveDeadline()
+                        : now;
+                attempt.setSubmittedAt(effectiveEnd);
+            }
             attemptRepository.save(attempt);
 
             assignmentRepository.findById(attempt.getAssignmentId()).ifPresent(assignment -> {
