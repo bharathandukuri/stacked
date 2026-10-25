@@ -51,12 +51,13 @@ export function SubmissionsTab({
   isLoading,
 }: SubmissionsTabProps) {
   // Format verdict distribution for Donut / Pie chart
+  const verdictDistribution = submissions?.verdictDistribution
   const verdictChartData = useMemo(() => {
-    if (!submissions?.verdictDistribution) return []
-    const total = Object.values(submissions.verdictDistribution).reduce((a, b) => a + b, 0)
+    if (!verdictDistribution) return []
+    const total = Object.values(verdictDistribution).reduce((a, b) => a + b, 0)
     if (total === 0) return []
 
-    return Object.entries(submissions.verdictDistribution)
+    return Object.entries(verdictDistribution)
       .map(([verdict, count]) => {
         const percentage = Math.round((count / total) * 1000) / 10
         return {
@@ -68,18 +69,19 @@ export function SubmissionsTab({
         }
       })
       .sort((a, b) => b.value - a.value)
-  }, [submissions?.verdictDistribution])
+  }, [verdictDistribution])
 
   // Format language distribution for Bar chart
+  const languageDistribution = submissions?.languageDistribution
   const languageChartData = useMemo(() => {
-    if (!submissions?.languageDistribution) return []
-    return Object.entries(submissions.languageDistribution)
+    if (!languageDistribution) return []
+    return Object.entries(languageDistribution)
       .map(([lang, count]) => ({
         language: lang.toUpperCase(),
         submissions: count,
       }))
       .sort((a, b) => b.submissions - a.submissions)
-  }, [submissions?.languageDistribution])
+  }, [languageDistribution])
 
   if (isLoading) {
     return (

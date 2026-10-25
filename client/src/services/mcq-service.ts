@@ -25,6 +25,7 @@ export const mcqService = {
 
     if (params.search?.trim()) cleanParams.search = params.search.trim()
     if (params.topic?.trim()) cleanParams.topic = params.topic.trim()
+    if (params.tag?.trim()) cleanParams.tag = params.tag.trim()
     if (params.difficulty) cleanParams.difficulty = params.difficulty
     if (params.type) cleanParams.type = params.type
     if (params.status) cleanParams.status = params.status

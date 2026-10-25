@@ -94,10 +94,14 @@ export function FormMarkdown(props: FormMarkdownProps) {
   const effectiveMinHeight =
     typeof minHeight === "number" ? `${minHeight}px` : minHeight
 
-  const { className: _omittedClassName, ...restProps } = props
+  const { className, ...restProps } = props
 
   return (
-    <FormBase {...restProps} labelAction={props.labelAction ?? modeSwitcher}>
+    <FormBase
+      {...restProps}
+      labelAction={props.labelAction ?? modeSwitcher}
+      className={cn("min-w-0 max-w-full w-full", className)}
+    >
       {viewMode === "edit" && (
         <div
           style={{
@@ -107,7 +111,7 @@ export function FormMarkdown(props: FormMarkdownProps) {
           }}
           className={cn(
             "w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
-            props.className
+            className
           )}
         >
           <MarkdownEditor
@@ -135,7 +139,7 @@ export function FormMarkdown(props: FormMarkdownProps) {
           }}
           className={cn(
             "w-full min-w-0 max-w-full overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-xs",
-            props.className
+            className
           )}
         >
           <MarkdownPreview content={content} />
@@ -151,7 +155,7 @@ export function FormMarkdown(props: FormMarkdownProps) {
           }}
           className={cn(
             "w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs",
-            props.className
+            className
           )}
         >
           <SplitView

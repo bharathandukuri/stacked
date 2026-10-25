@@ -2848,11 +2848,18 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
             return resp.getSelectedOptionIds() != null && !resp.getSelectedOptionIds().isEmpty();
         }
         // Coding question:
-        // 1. If candidate made any submissions or has execution result recorded
+        if (Boolean.TRUE.equals(resp.getAllTestcasesPassed())) {
+            return true;
+        }
+        if (resp.getAwardedPoints() > 0.0 || (resp.getBestAwardedPoints() != null && resp.getBestAwardedPoints() > 0.0)) {
+            return true;
+        }
         if ((resp.getSubmissions() != null && !resp.getSubmissions().isEmpty()) || resp.getLastExecutionResult() != null) {
             return true;
         }
-        // 2. If code is present and differs from starter code template
+        if (resp.getBestPassedTestcases() != null && resp.getBestPassedTestcases() > 0) {
+            return true;
+        }
         if (StringUtils.hasText(resp.getCode())) {
             return !isStarterCode(resp.getCode(), snap, resp.getLanguageId());
         }
@@ -2860,8 +2867,13 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
     }
 
     private boolean isStarterCode(String code, QuestionSnapshot snap, String lang) {
+        String normalized = normalizeCode(code);
+        if (normalized.isEmpty() || normalized.equals("classSolution{}")) {
+            return true;
+        }
         if (snap == null || snap.getStarterCode() == null || snap.getStarterCode().isEmpty()) {
-            return false;
+            // No starter code recorded in snapshot: check if code is merely empty boilerplate
+            return normalized.length() < 30;
         }
         String starter = snap.getStarterCode().get(lang);
         if (starter == null && lang != null) {
@@ -2873,8 +2885,8 @@ public class AssessmentServiceImpl implements AssessmentService, ApplicationEven
         if (starter == null && !snap.getStarterCode().isEmpty()) {
             starter = snap.getStarterCode().values().iterator().next();
         }
-        if (starter == null) return false;
-        return normalizeCode(code).equals(normalizeCode(starter));
+        if (starter == null) return normalized.length() < 30;
+        return normalized.equals(normalizeCode(starter));
     }
 
     private String normalizeCode(String code) {

@@ -16,6 +16,7 @@ public class McqFilterRequest {
 
     private String search;
     private String topic;
+    private String tag;
     private McqDifficulty difficulty;
     private McqType type;
     private McqStatus status;
@@ -35,6 +36,7 @@ public class McqFilterRequest {
     public boolean isDefault() {
         return (search == null || search.isBlank()) &&
                 (topic == null || topic.isBlank()) &&
+                (tag == null || tag.isBlank()) &&
                 difficulty == null &&
                 type == null &&
                 status == null &&

@@ -32,16 +32,6 @@ public class QuestionResultSummaryDto {
 
     private boolean markedForReview;
 
-    @JsonProperty("isAnswered")
-    public boolean isAnswered() {
-        return isAnswered;
-    }
-
-    @JsonProperty("answered")
-    public boolean getAnswered() {
-        return isAnswered;
-    }
-
     // Content for review
     private String mcqStatement;
     private String codingStatement;

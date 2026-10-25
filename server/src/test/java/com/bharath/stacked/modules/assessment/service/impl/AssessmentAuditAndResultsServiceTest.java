@@ -176,7 +176,7 @@ class AssessmentAuditAndResultsServiceTest {
 
     @Test
     @DisplayName("getCandidateResults returns accurate score, completion, and question outcomes")
-    void getCandidateResults_ShouldReturnComprehensiveResults() {
+    void getCandidateResults_ShouldReturnComprehensiveResults() throws Exception {
         when(assessmentRepository.findById("ass-1")).thenReturn(Optional.of(assessment));
         when(assignmentRepository.findByAssessmentIdAndCandidateUserId("ass-1", "user-42")).thenReturn(Optional.of(assignment));
         when(attemptRepository.findById("att-101")).thenReturn(Optional.of(attempt));

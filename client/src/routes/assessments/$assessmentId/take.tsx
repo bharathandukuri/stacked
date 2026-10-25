@@ -1,44 +1,12 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react"
-import axios from "axios"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import {
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Play,
-  Send,
-  RotateCcw,
-  Code2,
-  CheckSquare,
-  ChevronLeft,
-  ChevronRight,
-  ShieldAlert,
-  Loader2,
-  Check,
-  Bookmark,
-  BookmarkCheck,
-  LayoutGrid,
-  FileCode,
-  Terminal,
-  History,
-} from "lucide-react"
+import axios from "axios"
 
-import { Logo } from "@/components/logo"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable"
-import { MonacoEditor } from "@/components/monaco-editor"
-import { MarkdownPreview } from "@/components/markdown-preview/markdown-preview"
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable"
 import { useAssessmentWebSocket } from "@/hooks/use-assessment-websocket"
 import {
   useActiveAttempt,
@@ -49,17 +17,31 @@ import {
   useSaveCodeResponse,
   useSaveMcqResponse,
   useSubmitCodeResponse,
-  useRecordTelemetry,
 } from "@/hooks/use-assessments"
-import { getLanguageById } from "@/config/languages"
-import { resolveMonacoLanguage, resolveStarterCode } from "@/lib/monaco-languages"
+import { resolveStarterCode } from "@/lib/monaco-languages"
 import { toast } from "@/components/ui/toast"
-import { cn } from "@/lib/utils"
+import { PageLoadingState } from "@/components/common/page-loading-state"
+import { PageErrorState } from "@/components/common/page-error-state"
+
+import { useExamTelemetry } from "@/components/assessment-exam/hooks/use-exam-telemetry"
+import { ExamHeader } from "@/components/assessment-exam/exam-header"
+import { ExamSidebar } from "@/components/assessment-exam/exam-sidebar"
+import { ExamStatement } from "@/components/assessment-exam/exam-statement"
+import { ExamMcqPanel } from "@/components/assessment-exam/exam-mcq-panel"
+import { ExamCodeWorkspace } from "@/components/assessment-exam/exam-code-workspace"
+import { ExamBottomTabs } from "@/components/assessment-exam/exam-bottom-tabs"
+import { ExamNavigationFooter } from "@/components/assessment-exam/exam-navigation-footer"
+import { ExamOverviewDialog } from "@/components/assessment-exam/dialogs/exam-overview-dialog"
+import { ExamSubmitDialog } from "@/components/assessment-exam/dialogs/exam-submit-dialog"
+import {
+  ExamExpiredDialog,
+  ExamManualCompletionDialog,
+} from "@/components/assessment-exam/dialogs/exam-alert-dialogs"
+
 import type {
   AssessmentItemResponse,
   CodingProblemExecutionResponse,
   SavedQuestionResponse,
-  ClientTelemetryEventDto,
 } from "@/types/assessment"
 
 export const Route = createFileRoute("/assessments/$assessmentId/take")({
@@ -76,7 +58,7 @@ export function AssessmentExamPage() {
     isLoading,
     isError,
     error,
-    refetch: refetchAttempt,
+    refetch,
   } = useActiveAttempt(assessmentId)
 
   const saveMcqMutation = useSaveMcqResponse(assessmentId)
@@ -86,32 +68,19 @@ export function AssessmentExamPage() {
   const submitCodeMutation = useSubmitCodeResponse(assessmentId)
   const markForReviewMutation = useMarkQuestionForReview(assessmentId)
   const finalSubmitMutation = useFinalSubmitAssessment(assessmentId)
-  const recordTelemetryMutation = useRecordTelemetry(assessmentId)
 
-  // Current Question Pointer
+  // Question navigation state
   const [currentIndex, setCurrentIndex] = useState(0)
+  const questionsList = useMemo(() => attempt?.questions ?? [], [attempt?.questions])
+  const totalQuestionsCount = questionsList.length
+  const currentQuestion: AssessmentItemResponse | undefined = questionsList[currentIndex]
 
-  // Current question object
-  const currentQuestion: AssessmentItemResponse | undefined = useMemo(() => {
-    return attempt?.questions?.[currentIndex]
-  }, [attempt?.questions, currentIndex])
-
-  // Local response stores (keyed by questionId)
+  // Local responses & save status
   const [localResponses, setLocalResponses] = useState<Record<string, SavedQuestionResponse>>({})
   const [saveStatus, setSaveStatus] = useState<"SAVED" | "SAVING" | "UNSAVED">("SAVED")
-
-  // Initialize local responses once per attempt
   const loadedAttemptIdRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (attempt && attempt.attemptId !== loadedAttemptIdRef.current) {
-      loadedAttemptIdRef.current = attempt.attemptId
-      if (attempt.responses) {
-        setLocalResponses(attempt.responses)
-      }
-    }
-  }, [attempt])
 
-  // Code editor state
+  // Code workspace state
   const [currentLanguage, setCurrentLanguage] = useState<string>("java-21")
   const [currentCode, setCurrentCode] = useState<string>("")
   const codeRef = useRef<string>("")
@@ -122,75 +91,22 @@ export function AssessmentExamPage() {
   const [customResult, setCustomResult] = useState<CodingProblemExecutionResponse | null>(null)
   const [submitResult, setSubmitResult] = useState<SavedQuestionResponse | null>(null)
 
-  // Modals
+  // Dialog states
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   const [overviewModalOpen, setOverviewModalOpen] = useState(false)
   const [timeExpiredModalOpen, setTimeExpiredModalOpen] = useState(false)
-
-  // Countdown Timer
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
-
-  // Telemetry buffer
-  const telemetryBufferRef = useRef<ClientTelemetryEventDto[]>([])
-
-  const flushTelemetry = useCallback(() => {
-    if (telemetryBufferRef.current.length === 0) return
-    const batch = [...telemetryBufferRef.current]
-    telemetryBufferRef.current = []
-    recordTelemetryMutation.mutate(batch)
-  }, [recordTelemetryMutation])
-
-  const recordEvent = useCallback(
-    (type: ClientTelemetryEventDto["eventType"], metadata?: Record<string, unknown>) => {
-      const event: ClientTelemetryEventDto = {
-        eventType: type,
-        questionId: currentQuestion?.questionId,
-        metadata,
-        clientTimestamp: new Date().toISOString(),
-      }
-      telemetryBufferRef.current.push(event)
-      if (telemetryBufferRef.current.length >= 5) {
-        flushTelemetry()
-      }
-    },
-    [currentQuestion?.questionId, flushTelemetry]
-  )
-
-  // Periodic telemetry flush & window focus/blur tracking
-  useEffect(() => {
-    const handleBlur = () => {
-      recordEvent("WINDOW_BLUR", { reason: "window_blur" })
-      flushTelemetry()
-    }
-
-    const handleFocus = () => {
-      recordEvent("WINDOW_FOCUS", { reason: "window_focus" })
-      flushTelemetry()
-    }
-
-    window.addEventListener("blur", handleBlur)
-    window.addEventListener("focus", handleFocus)
-
-    const interval = setInterval(flushTelemetry, 15000)
-
-    return () => {
-      window.removeEventListener("blur", handleBlur)
-      window.removeEventListener("focus", handleFocus)
-      clearInterval(interval)
-    }
-  }, [recordEvent, flushTelemetry])
-
-  // Track question navigation in telemetry
-  const lastNavigatedIndexRef = useRef<number>(-1)
-  useEffect(() => {
-    if (currentIndex !== lastNavigatedIndexRef.current && currentQuestion?.questionId) {
-      lastNavigatedIndexRef.current = currentIndex
-      recordEvent("NAVIGATE_QUESTION", { questionIndex: currentIndex + 1 })
-    }
-  }, [currentIndex, currentQuestion?.questionId, recordEvent])
-
   const [manualInterventionModal, setManualInterventionModal] = useState<string | null>(null)
 
+  // Telemetry Hook
+  const { recordEvent } = useExamTelemetry({
+    assessmentId,
+    attemptId: attempt?.attemptId,
+    currentQuestionId: currentQuestion?.questionId,
+    enabled: Boolean(attempt && attempt.status === "IN_PROGRESS"),
+  })
+
+  // WebSocket for real-time proctoring / remote admin completion
   const handleManualCompletion = useCallback((message: string) => {
     setManualInterventionModal(message)
   }, [])
@@ -203,8 +119,7 @@ export function AssessmentExamPage() {
     })
   }, [])
 
-  // WebSocket Connection
-  const wsStatus = useAssessmentWebSocket({
+  useAssessmentWebSocket({
     assessmentId,
     attemptId: attempt?.attemptId || "",
     enabled: Boolean(attempt && attempt.status === "IN_PROGRESS"),
@@ -212,18 +127,22 @@ export function AssessmentExamPage() {
     onManualActivation: handleManualActivation,
   })
 
-  // Detect manual completion if reconnecting or reloading after completion
+  // Detect manual completion if reconnecting after completion
   useEffect(() => {
     if (attempt?.manuallyCompleted && !manualInterventionModal) {
       setManualInterventionModal(
-        attempt.manualInterventionMessage || "The administrator has manually completed this assessment."
+        attempt.manualInterventionMessage ||
+          "The administrator has manually completed this assessment."
       )
     }
   }, [attempt?.manuallyCompleted, attempt?.manualInterventionMessage, manualInterventionModal])
 
-  // If already submitted or expired, navigate to results (unless showing manual completion modal)
+  // If already submitted or expired, navigate to results
   useEffect(() => {
-    if (!manualInterventionModal && (attempt?.status === "SUBMITTED" || attempt?.status === "EXPIRED")) {
+    if (
+      !manualInterventionModal &&
+      (attempt?.status === "SUBMITTED" || attempt?.status === "EXPIRED")
+    ) {
       navigate({
         to: "/assessments/$assessmentId/results",
         params: { assessmentId },
@@ -233,48 +152,66 @@ export function AssessmentExamPage() {
 
   // Timer Tick
   useEffect(() => {
-    if (!attempt?.effectiveDeadline) return
-
-    const deadlineTime = new Date(attempt.effectiveDeadline).getTime()
-
-    const updateTimer = () => {
-      const now = Date.now()
-      const diffSec = Math.max(0, Math.floor((deadlineTime - now) / 1000))
-      setRemainingSeconds(diffSec)
-
-      if (diffSec <= 0 && attempt.status === "IN_PROGRESS") {
-        setTimeExpiredModalOpen(true)
-      }
+    if (attempt?.remainingSeconds !== undefined && attempt.remainingSeconds !== null) {
+      setRemainingSeconds(attempt.remainingSeconds)
     }
-
-    updateTimer()
-    const interval = setInterval(updateTimer, 1000)
-    return () => clearInterval(interval)
-  }, [attempt?.effectiveDeadline, attempt?.status])
-
-  // Sync editor language & code when switching questions
-  const activeQuestionId = currentQuestion?.questionId
-  const loadedQuestionIdRef = useRef<string | null>(null)
+  }, [attempt?.remainingSeconds])
 
   useEffect(() => {
-    if (!currentQuestion || activeQuestionId === loadedQuestionIdRef.current) return
-    loadedQuestionIdRef.current = activeQuestionId ?? null
+    if (remainingSeconds === null || remainingSeconds <= 0) return
+
+    const timer = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev === null) return null
+        if (prev <= 1) {
+          clearInterval(timer)
+          setTimeExpiredModalOpen(true)
+          finalSubmitMutation.mutate(undefined, {
+            onSettled: () => {
+              navigate({
+                to: "/assessments/$assessmentId/results",
+                params: { assessmentId },
+              })
+            },
+          })
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [remainingSeconds, finalSubmitMutation, navigate, assessmentId])
+
+  // Populate attempt responses on first load
+  useEffect(() => {
+    if (attempt && attempt.attemptId !== loadedAttemptIdRef.current) {
+      loadedAttemptIdRef.current = attempt.attemptId
+      if (attempt.responses) {
+        setLocalResponses(attempt.responses)
+      }
+    }
+  }, [attempt])
+
+  // Reset editor state when switching questions
+  useEffect(() => {
+    if (!currentQuestion) return
 
     if (currentQuestion.questionType === "CODING") {
       const savedResp = localResponses[currentQuestion.questionId]
-      const availableLanguages =
-        currentQuestion.supportedLanguageIds && currentQuestion.supportedLanguageIds.length > 0
-          ? currentQuestion.supportedLanguageIds
-          : ["java-21"]
-      const selectedLang =
-        savedResp?.languageId && availableLanguages.includes(savedResp.languageId)
-          ? savedResp.languageId
-          : availableLanguages[0] || "java-21"
+      const savedLang = savedResp?.languageId
+      const savedCode = savedResp?.code
 
+      const selectedLang =
+        savedLang ||
+        currentQuestion.supportedLanguageIds?.[0] ||
+        "java-21"
       setCurrentLanguage(selectedLang)
 
-      const savedCode = savedResp?.code
-      const resolvedStarter = resolveStarterCode(currentQuestion.starterCode, selectedLang)
+      const resolvedStarter = resolveStarterCode(
+        currentQuestion.starterCode,
+        selectedLang
+      )
       const defaultStarter =
         resolvedStarter || `// Write your solution in ${selectedLang}\n`
 
@@ -291,8 +228,7 @@ export function AssessmentExamPage() {
       setCustomInputText("")
       setSelectedSampleIndex(0)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeQuestionId])
+  }, [currentIndex, currentQuestion, localResponses])
 
   // Debounced auto-save for code
   const codeSaveTimeoutRef = useRef<number | null>(null)
@@ -302,32 +238,26 @@ export function AssessmentExamPage() {
     setSaveStatus("SAVING")
 
     if (codeSaveTimeoutRef.current) {
-      clearTimeout(codeSaveTimeoutRef.current)
+      window.clearTimeout(codeSaveTimeoutRef.current)
     }
 
     codeSaveTimeoutRef.current = window.setTimeout(async () => {
       if (!currentQuestion) return
       try {
-        await saveCodeMutation.mutateAsync({
+        const saved = await saveCodeMutation.mutateAsync({
           questionId: currentQuestion.questionId,
           languageId: currentLanguage,
           code: newCode,
         })
         setLocalResponses((prev) => ({
           ...prev,
-          [currentQuestion.questionId]: {
-            ...prev[currentQuestion.questionId],
-            questionId: currentQuestion.questionId,
-            questionType: "CODING",
-            languageId: currentLanguage,
-            code: newCode,
-          },
+          [currentQuestion.questionId]: saved,
         }))
         setSaveStatus("SAVED")
       } catch {
         setSaveStatus("UNSAVED")
       }
-    }, 1200)
+    }, 1000)
   }
 
   // Language switch handler
@@ -341,8 +271,8 @@ export function AssessmentExamPage() {
     handleCodeChange(starter)
   }
 
-  // Reset to starter code
-  const handleResetStarterCode = () => {
+  // Reset starter code
+  const handleResetStarter = () => {
     if (!currentQuestion) return
     const starter =
       resolveStarterCode(currentQuestion.starterCode, currentLanguage) ||
@@ -351,22 +281,20 @@ export function AssessmentExamPage() {
     setCurrentCode(starter)
     handleCodeChange(starter)
     toast.add({
-      title: "Starter Code Reset",
-      description: "Code has been reset to default starter template.",
-      type: "success",
+      title: "Code Reset",
+      description: "Editor restored to initial starter template.",
+      type: "info",
     })
   }
 
-  // MCQ Selection Handler
-  const handleMcqOptionSelect = async (optionId: string) => {
+  // MCQ Selection handler
+  const handleOptionToggle = async (optionId: string) => {
     if (!currentQuestion) return
-
     const existingResp = localResponses[currentQuestion.questionId]
     const existingOptions = existingResp?.selectedOptionIds || []
-    const isMulti = currentQuestion.mcqType === "MULTIPLE_CHOICE"
 
-    let updatedOptions: string[] = []
-    if (isMulti) {
+    let updatedOptions: string[]
+    if (currentQuestion.mcqType === "MULTIPLE_CHOICE") {
       if (existingOptions.includes(optionId)) {
         updatedOptions = existingOptions.filter((id) => id !== optionId)
       } else {
@@ -376,60 +304,70 @@ export function AssessmentExamPage() {
       updatedOptions = [optionId]
     }
 
-    // Update locally
     setLocalResponses((prev) => ({
       ...prev,
       [currentQuestion.questionId]: {
         ...prev[currentQuestion.questionId],
         questionId: currentQuestion.questionId,
-        questionType: "MCQ",
         selectedOptionIds: updatedOptions,
+        savedAt: new Date().toISOString(),
       },
     }))
-    setSaveStatus("SAVING")
 
+    setSaveStatus("SAVING")
     try {
-      await saveMcqMutation.mutateAsync({
+      const saved = await saveMcqMutation.mutateAsync({
         questionId: currentQuestion.questionId,
         selectedOptionIds: updatedOptions,
       })
+      setLocalResponses((prev) => ({
+        ...prev,
+        [currentQuestion.questionId]: saved,
+      }))
+      setSaveStatus("SAVED")
+      recordEvent("MCQ_ANSWER_CHANGED", currentQuestion.questionId, {
+        optionIds: updatedOptions,
+      })
+    } catch {
+      setSaveStatus("UNSAVED")
+    }
+  }
+
+  // Clear MCQ options
+  const handleClearOptions = async () => {
+    if (!currentQuestion) return
+    setLocalResponses((prev) => ({
+      ...prev,
+      [currentQuestion.questionId]: {
+        ...prev[currentQuestion.questionId],
+        questionId: currentQuestion.questionId,
+        selectedOptionIds: [],
+        savedAt: new Date().toISOString(),
+      },
+    }))
+
+    setSaveStatus("SAVING")
+    try {
+      const saved = await saveMcqMutation.mutateAsync({
+        questionId: currentQuestion.questionId,
+        selectedOptionIds: [],
+      })
+      setLocalResponses((prev) => ({
+        ...prev,
+        [currentQuestion.questionId]: saved,
+      }))
       setSaveStatus("SAVED")
     } catch {
       setSaveStatus("UNSAVED")
     }
   }
 
-  // Clear MCQ selection
-  const handleClearMcqSelection = async () => {
+  // Mark for review toggle
+  const handleToggleMark = async () => {
     if (!currentQuestion) return
-
-    setLocalResponses((prev) => ({
-      ...prev,
-      [currentQuestion.questionId]: {
-        ...prev[currentQuestion.questionId],
-        questionId: currentQuestion.questionId,
-        questionType: "MCQ",
-        selectedOptionIds: [],
-      },
-    }))
-    setSaveStatus("SAVING")
-
-    try {
-      await saveMcqMutation.mutateAsync({
-        questionId: currentQuestion.questionId,
-        selectedOptionIds: [],
-      })
-      setSaveStatus("SAVED")
-    } catch {
-      setSaveStatus("UNSAVED")
-    }
-  }
-
-  // Toggle Mark For Review
-  const handleToggleMarkForReview = async () => {
-    if (!currentQuestion) return
-    const currentMarked =
-      localResponses[currentQuestion.questionId]?.markedForReview ?? false
+    const currentMarked = Boolean(
+      localResponses[currentQuestion.questionId]?.markedForReview
+    )
     const newMarked = !currentMarked
 
     setLocalResponses((prev) => ({
@@ -437,24 +375,22 @@ export function AssessmentExamPage() {
       [currentQuestion.questionId]: {
         ...prev[currentQuestion.questionId],
         questionId: currentQuestion.questionId,
-        questionType: currentQuestion.questionType,
         markedForReview: newMarked,
+        savedAt: new Date().toISOString(),
       },
     }))
 
     try {
-      await markForReviewMutation.mutateAsync({
+      const updated = await markForReviewMutation.mutateAsync({
         questionId: currentQuestion.questionId,
         markedForReview: newMarked,
       })
-      toast.add({
-        title: newMarked ? "Marked for Review" : "Removed Review Mark",
-        description: newMarked
-          ? `Question #${currentIndex + 1} marked for review.`
-          : `Question #${currentIndex + 1} unmarked.`,
-        type: "success",
-      })
+      setLocalResponses((prev) => ({
+        ...prev,
+        [currentQuestion.questionId]: updated,
+      }))
     } catch {
+      // rollback on error
       setLocalResponses((prev) => ({
         ...prev,
         [currentQuestion.questionId]: {
@@ -466,8 +402,13 @@ export function AssessmentExamPage() {
   }
 
   // Run Sample Tests
-  const handleRunSampleTests = async () => {
+  const handleRunTests = async () => {
     if (!currentQuestion) return
+    if (activeBottomTab === "custom") {
+      handleRunCustomInput()
+      return
+    }
+
     setActiveBottomTab("sample")
     try {
       const res = await runSampleMutation.mutateAsync({
@@ -478,7 +419,7 @@ export function AssessmentExamPage() {
       setSampleResult(res)
       setSelectedSampleIndex(0)
     } catch {
-      // error handled by mutation
+      // handled by mutation error
     }
   }
 
@@ -496,7 +437,8 @@ export function AssessmentExamPage() {
       setCustomResult(res)
     } catch (err: unknown) {
       const msg = axios.isAxiosError(err)
-        ? (err.response?.data as { message?: string })?.message || "Execution error on custom input"
+        ? (err.response?.data as { message?: string })?.message ||
+          "Execution error on custom input"
         : err instanceof Error
           ? err.message
           : "Execution failed"
@@ -521,20 +463,20 @@ export function AssessmentExamPage() {
       setSubmitResult(res)
       setLocalResponses((prev) => ({
         ...prev,
-        [currentQuestion.questionId]: {
-          ...prev[currentQuestion.questionId],
-          ...res,
-        },
+        [currentQuestion.questionId]: res,
       }))
+      recordEvent("CODE_SUBMITTED", currentQuestion.questionId, {
+        languageId: currentLanguage,
+        passed: res.allTestcasesPassed,
+      })
     } catch {
-      // error handled by mutation
+      // handled by mutation error
     }
   }
 
-  // Final Assessment Submission
+  // Final submit handler
   const handleConfirmFinalSubmit = async () => {
     try {
-      flushTelemetry()
       await finalSubmitMutation.mutateAsync()
       setSubmitModalOpen(false)
       navigate({
@@ -542,37 +484,13 @@ export function AssessmentExamPage() {
         params: { assessmentId },
       })
     } catch {
-      // error handled by mutation
+      // handled by mutation error
     }
   }
 
-  // Format seconds to HH:MM:SS
-  const formatTimer = (totalSec: number | null) => {
-    if (totalSec === null) return "--:--"
-    const hours = Math.floor(totalSec / 3600)
-    const minutes = Math.floor((totalSec % 3600) / 60)
-    const seconds = totalSec % 60
-
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, "0")}:${minutes
-        .toString()
-        .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-    }
-    return `${minutes.toString().padStart(2, "0")}:${seconds
-      .toString()
-      .padStart(2, "0")}`
-  }
-
-  // Stats calculation
-  const questionsList = useMemo(
-    () => attempt?.questions ?? [],
-    [attempt?.questions]
-  )
-  const totalQuestionsCount = questionsList.length
-
-  // Answered checker helper: accurately distinguishes untouched starter code from answered coding problems
+  // Answered checker helper
   const isQuestionAnswered = useCallback(
-    (q: any, resp: any) => {
+    (q: AssessmentItemResponse, resp: SavedQuestionResponse | undefined) => {
       if (!resp) return false
       if (q.questionType === "MCQ") {
         return (resp.selectedOptionIds?.length ?? 0) > 0
@@ -582,7 +500,10 @@ export function AssessmentExamPage() {
           return true
         }
         if (resp.code && resp.code.trim().length > 0) {
-          const starter = resolveStarterCode(q.starterCode, resp.languageId || currentLanguage)
+          const starter = resolveStarterCode(
+            q.starterCode,
+            resp.languageId || currentLanguage
+          )
           if (!starter) return true
           const normalize = (s: string) => s.replace(/\s+/g, "").trim()
           return normalize(resp.code) !== normalize(starter)
@@ -594,6 +515,7 @@ export function AssessmentExamPage() {
     [currentLanguage]
   )
 
+  // Stats calculation
   const answeredCount = useMemo(() => {
     return questionsList.filter((q) => {
       const resp = localResponses[q.questionId]
@@ -608,1381 +530,199 @@ export function AssessmentExamPage() {
   }, [questionsList, localResponses])
 
   const unansweredCount = Math.max(0, totalQuestionsCount - answeredCount)
-
   const isCurrentQuestionMarked = currentQuestion
     ? Boolean(localResponses[currentQuestion.questionId]?.markedForReview)
     : false
 
+  const formatTimer = (totalSec: number | null) => {
+    if (totalSec === null || totalSec < 0) return "--:--"
+    const hours = Math.floor(totalSec / 3600)
+    const minutes = Math.floor((totalSec % 3600) / 60)
+    const seconds = totalSec % 60
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`
+    }
+    return `${minutes.toString().padStart(2, "0")}:${seconds
+      .toString()
+      .padStart(2, "0")}`
+  }
+
+  // Loading & Error States
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="size-8 animate-spin text-primary" />
-          <p className="text-sm font-medium">Initializing secure assessment environment...</p>
-        </div>
-      </div>
-    )
+    return <PageLoadingState message="Initializing secure assessment environment..." />
   }
 
-  if (isError || !attempt) {
+  if (isError || !attempt || !currentQuestion) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
-        <div className="max-w-md text-center space-y-4">
-          <AlertCircle className="size-12 text-destructive mx-auto" />
-          <h2 className="text-2xl font-bold">Unable to Load Assessment Attempt</h2>
-          <p className="text-sm text-muted-foreground">
-            {axios.isAxiosError(error)
-              ? (error.response?.data as { message?: string } | undefined)?.message ||
-                "Your test session could not be established. Please check your network and try again."
-              : error instanceof Error
-                ? error.message
-                : "Your test session could not be established. Please check your network and try again."}
-          </p>
-          {axios.isAxiosError(error) && error.response?.status === 401 ? (
-            <div className="flex flex-col gap-2 pt-2">
-              <Button onClick={() => navigate({ to: "/login" })}>
-                Sign In to Continue
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  navigate({
-                    to: "/assessments/$assessmentId",
-                    params: { assessmentId },
-                  })
-                }
-              >
-                Back to Assessment Overview
-              </Button>
-            </div>
-          ) : (
-            <Button onClick={() => refetchAttempt()} variant="outline">
-              Try Again
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageErrorState
+        title="Unable to Load Assessment Session"
+        message={
+          axios.isAxiosError(error)
+            ? (error.response?.data as { message?: string })?.message ||
+              "Your attempt may have expired or is not active."
+            : error instanceof Error
+              ? error.message
+              : "Could not initialize examination workspace."
+        }
+        onRetry={() => refetch()}
+        returnTo="/dashboard"
+        returnLabel="Return to Dashboard"
+      />
     )
   }
-
-  // Timer urgency style
-  const isUrgent = remainingSeconds !== null && remainingSeconds < 300 // < 5 mins
-  const isCritical = remainingSeconds !== null && remainingSeconds < 60 // < 1 min
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background overflow-hidden text-foreground">
-      {/* Superseded Warning Banner if opened in another window */}
-      {wsStatus.isSuperseded && (
-        <div className="bg-destructive text-destructive-foreground px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2 shadow-md z-50">
-          <ShieldAlert className="size-4 shrink-0" />
-          <span>
-            {wsStatus.supersededMessage ||
-              "Assessment was opened in another window. This session is now inactive."}
-          </span>
-        </div>
-      )}
-
-      {/* Top Header Bar */}
-      <header className="h-14 border-b border-border bg-card/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shrink-0 z-30">
-        {/* Left: Brand + Assessment Title */}
-        <div className="flex items-center gap-3 min-w-0">
-          <Logo size={24} />
-          <div className="h-4 w-px bg-border hidden sm:block" />
-          <span className="text-sm font-semibold truncate max-w-xs sm:max-w-md">
-            {attempt.title}
-          </span>
-          <Badge variant="outline" className="text-[10px] hidden md:inline-flex">
-            Question {currentIndex + 1} of {totalQuestionsCount}
-          </Badge>
-        </div>
-
-        {/* Center: Live Authoritative Countdown Timer */}
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-mono font-bold transition-colors select-none",
-              isCritical
-                ? "bg-destructive/15 text-destructive border-destructive/40 animate-pulse"
-                : isUrgent
-                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
-                  : "bg-muted text-foreground border-border"
-            )}
-          >
-            <Clock className="size-3.5" />
-            <span>{formatTimer(remainingSeconds)}</span>
-          </div>
-
-          {/* Autosave Indicator */}
-          <span className="text-[11px] text-muted-foreground hidden lg:inline-flex items-center gap-1">
-            {saveStatus === "SAVING" ? (
-              <>
-                <Loader2 className="size-3 animate-spin text-primary" />
-                <span>Saving...</span>
-              </>
-            ) : saveStatus === "SAVED" ? (
-              <>
-                <Check className="size-3 text-emerald-500" />
-                <span>Saved</span>
-              </>
-            ) : (
-              <span className="text-destructive">Unsaved</span>
-            )}
-          </span>
-        </div>
-
-        {/* Right: Mark for Review + Overview + Presence + Submit */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Mark for Review Toggle */}
-          <Button
-            variant={isCurrentQuestionMarked ? "default" : "outline"}
-            size="sm"
-            onClick={handleToggleMarkForReview}
-            disabled={markForReviewMutation.isPending}
-            className={cn(
-              "h-8 text-xs gap-1.5 font-medium px-2.5 sm:px-3",
-              isCurrentQuestionMarked
-                ? "bg-purple-600 hover:bg-purple-700 text-white"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            title="Mark this question to review later"
-          >
-            {isCurrentQuestionMarked ? (
-              <BookmarkCheck className="size-3.5 fill-current" />
-            ) : (
-              <Bookmark className="size-3.5" />
-            )}
-            <span className="hidden sm:inline">
-              {isCurrentQuestionMarked ? "Marked" : "Mark for Review"}
-            </span>
-          </Button>
-
-          {/* Overview Matrix Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setOverviewModalOpen(true)}
-            className="h-8 text-xs gap-1.5 px-2.5 sm:px-3 text-muted-foreground hover:text-foreground"
-            title="View assessment instructions and question overview"
-          >
-            <LayoutGrid className="size-3.5" />
-            <span className="hidden md:inline">Overview</span>
-          </Button>
-
-          {/* Connection Dot */}
-          <div
-            className="flex items-center gap-1.5 text-xs text-muted-foreground"
-            title={
-              wsStatus.isConnected
-                ? "WebSocket Live"
-                : wsStatus.isConnecting
-                  ? "Connecting..."
-                  : "Disconnected"
-            }
-          >
-            <div
-              className={cn(
-                "size-2.5 rounded-full transition-all",
-                wsStatus.isConnected
-                  ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                  : wsStatus.isConnecting
-                    ? "bg-amber-500 animate-pulse"
-                    : "bg-destructive"
-              )}
-            />
-          </div>
-
-          {/* Submit Assessment Button */}
-          <Button
-            size="sm"
-            onClick={() => setSubmitModalOpen(true)}
-            className="h-8 gap-1.5 text-xs font-semibold px-3 sm:px-4"
-          >
-            <Send className="size-3.5" />
-            <span>Submit</span>
-          </Button>
-        </div>
-      </header>
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground select-none font-sans">
+      {/* Top Header */}
+      <ExamHeader
+        title={attempt.title}
+        currentIndex={currentIndex}
+        totalQuestions={totalQuestionsCount}
+        saveStatus={saveStatus}
+        remainingSeconds={remainingSeconds}
+        formatTimer={formatTimer}
+        onSubmitClick={() => setSubmitModalOpen(true)}
+        isSubmitting={finalSubmitMutation.isPending}
+      />
 
       {/* Main Workspace Body */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Simplified Sidebar: Question Numbers & Status Hints ONLY */}
-        <aside className="w-16 border-r border-border bg-card/30 flex flex-col items-center py-3 shrink-0 select-none">
-          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
-            Q#
-          </div>
+        {/* Left Vertical Question Rail */}
+        <ExamSidebar
+          questions={questionsList}
+          currentIndex={currentIndex}
+          localResponses={localResponses}
+          isQuestionAnswered={isQuestionAnswered}
+          onSelectQuestion={setCurrentIndex}
+        />
 
-          {/* Vertical rail of numbered question buttons */}
-          <div className="flex-1 w-full overflow-y-auto px-2 space-y-2 flex flex-col items-center">
-            {questionsList.map((q, idx) => {
-              const resp = localResponses[q.questionId]
-              const isAns = isQuestionAnswered(q, resp)
-              const isMarked = Boolean(resp?.markedForReview)
-              const isCurrent = idx === currentIndex
-
-              return (
-                <button
-                  key={q.questionId}
-                  type="button"
-                  onClick={() => setCurrentIndex(idx)}
-                  title={`Question ${idx + 1}${isMarked ? " (Marked)" : isAns ? " (Answered)" : " (Unanswered)"}`}
-                  className={cn(
-                    "relative size-9 rounded-lg font-mono text-xs font-bold transition-all flex items-center justify-center cursor-pointer",
-                    isCurrent
-                      ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40"
-                      : isMarked
-                        ? "border border-purple-500/50 bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25"
-                        : isAns
-                          ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
-                          : "border border-border/80 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  {idx + 1}
-                  {/* Status dot / bookmark hint */}
-                  {isMarked ? (
-                    <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-purple-500 ring-2 ring-background" />
-                  ) : isAns ? (
-                    <span className="absolute -top-1 -right-1 size-2 rounded-full bg-emerald-500 ring-2 ring-background" />
-                  ) : null}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Sidebar Legend Hints */}
-          <div className="pt-2 border-t border-border/60 w-full px-2 flex flex-col items-center gap-1.5 text-[9px] text-muted-foreground">
-            <div className="flex items-center gap-1" title="Answered">
-              <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
-              <span className="hidden sm:inline">Ans</span>
+        {/* Center / Right Split Area */}
+        <div className="flex-1 flex overflow-hidden min-w-0">
+          {currentQuestion.questionType === "MCQ" ? (
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border overflow-hidden">
+              <ExamStatement
+                question={currentQuestion}
+                currentIndex={currentIndex}
+              />
+              <ExamMcqPanel
+                question={currentQuestion}
+                savedResponse={localResponses[currentQuestion.questionId]}
+                onOptionToggle={handleOptionToggle}
+                onClearOptions={handleClearOptions}
+              />
             </div>
-            <div className="flex items-center gap-1" title="Marked for review">
-              <span className="size-2 rounded-full bg-purple-500 shrink-0" />
-              <span className="hidden sm:inline">Flag</span>
-            </div>
-          </div>
-        </aside>
+          ) : (
+            <ResizablePanelGroup orientation="horizontal" className="flex-1">
+              <ResizablePanel defaultSize={45} minSize={25}>
+                <ExamStatement
+                  question={currentQuestion}
+                  currentIndex={currentIndex}
+                />
+              </ResizablePanel>
 
-        {/* Center / Right Question Workspace */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-background">
-          {currentQuestion && (
-            <>
-              {/* Question Subheader */}
-              <div className="h-11 border-b border-border px-4 sm:px-6 flex items-center justify-between shrink-0 bg-card/40">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Question {currentIndex + 1} of {totalQuestionsCount}
-                  </span>
-                  <Badge variant="secondary" className="text-[11px] gap-1">
-                    {currentQuestion.questionType === "MCQ" ? (
-                      <>
-                        <CheckSquare className="size-3 text-sky-500" />
-                        <span>MCQ ({currentQuestion.mcqType === "MULTIPLE_CHOICE" ? "Multiple Choice" : "Single Choice"})</span>
-                      </>
-                    ) : (
-                      <>
-                        <Code2 className="size-3 text-purple-500" />
-                        <span>Coding Problem</span>
-                      </>
-                    )}
-                  </Badge>
-                  <Badge variant="outline" className="text-[11px]">
-                    {currentQuestion.points} Points
-                  </Badge>
-                  {isCurrentQuestionMarked && (
-                    <Badge className="bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30 text-[11px] gap-1">
-                      <Bookmark className="size-3 fill-current" />
-                      <span>Marked</span>
-                    </Badge>
-                  )}
-                </div>
+              <ResizableHandle withHandle />
 
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    disabled={currentIndex === 0}
-                    onClick={() => setCurrentIndex((p) => Math.max(0, p - 1))}
-                  >
-                    <ChevronLeft className="size-3.5" />
-                    <span className="hidden sm:inline">Previous</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    disabled={currentIndex >= totalQuestionsCount - 1}
-                    onClick={() => setCurrentIndex((p) => Math.min(totalQuestionsCount - 1, p + 1))}
-                  >
-                    <span className="hidden sm:inline">Next</span>
-                    <ChevronRight className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* CONSISTENT SPLIT-PANEL LAYOUT FOR MCQ */}
-              {currentQuestion.questionType === "MCQ" && (
-                <div className="flex-1 flex overflow-hidden">
-                  <ResizablePanelGroup orientation="horizontal" className="h-full w-full">
-                    {/* Left Panel: MCQ Problem Statement */}
-                    <ResizablePanel defaultSize={50} minSize={30}>
-                      <div className="h-full flex flex-col overflow-hidden border-r border-border bg-card/10">
-                        <div className="p-4 sm:p-6 border-b border-border/80">
-                          <h2 className="text-lg font-bold text-foreground">
-                            {currentQuestion.title}
-                          </h2>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                          {currentQuestion.mcqContent ? (
-                            <div className="prose dark:prose-invert max-w-none text-sm text-foreground/90">
-                              <MarkdownPreview content={currentQuestion.mcqContent} />
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground italic">No question statement provided.</p>
-                          )}
-                        </div>
-                      </div>
-                    </ResizablePanel>
-
-                    <ResizableHandle withHandle />
-
-                    {/* Right Panel: MCQ Options List */}
-                    <ResizablePanel defaultSize={50} minSize={30}>
-                      <div className="h-full flex flex-col overflow-hidden bg-card/20">
-                        {/* Options Header Bar */}
-                        <div className="p-4 border-b border-border flex items-center justify-between shrink-0 bg-card/40">
-                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            {currentQuestion.mcqType === "MULTIPLE_CHOICE"
-                              ? "Options (Select all that apply):"
-                              : "Options (Select one):"}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleClearMcqSelection}
-                            className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                          >
-                            Clear Selection
-                          </Button>
-                        </div>
-
-                        {/* Options List with Markdown Rendering */}
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
-                          {currentQuestion.options?.map((opt, optIndex) => {
-                            const savedResp = localResponses[currentQuestion.questionId]
-                            const isSelected = Boolean(
-                              savedResp?.selectedOptionIds?.includes(opt.id)
-                            )
-                            const optionLetter = String.fromCharCode(65 + optIndex)
-
-                            return (
-                              <button
-                                key={opt.id}
-                                type="button"
-                                onClick={() => handleMcqOptionSelect(opt.id)}
-                                className={cn(
-                                  "w-full text-left p-4 rounded-xl border transition-all flex items-start gap-3.5 cursor-pointer",
-                                  isSelected
-                                    ? "border-primary bg-primary/10 shadow-xs ring-1 ring-primary"
-                                    : "border-border/80 hover:border-primary/40 hover:bg-muted/40"
-                                )}
-                              >
-                                <div
-                                  className={cn(
-                                    "flex size-6 shrink-0 items-center justify-center rounded-md border text-xs font-bold mt-0.5 transition-colors",
-                                    isSelected
-                                      ? "border-primary bg-primary text-primary-foreground"
-                                      : "border-border bg-muted/40 text-muted-foreground"
-                                  )}
-                                >
-                                  {isSelected ? <Check className="size-3.5 stroke-[3]" /> : optionLetter}
-                                </div>
-                                <div className="flex-1 text-sm leading-relaxed text-foreground min-w-0 prose dark:prose-invert max-w-none">
-                                  <MarkdownPreview content={opt.content} />
-                                </div>
-                              </button>
-                            )
-                          })}
-                        </div>
-
-                        {/* Question Bottom Action Footer */}
-                        <div className="p-3 border-t border-border flex items-center justify-between shrink-0 bg-card/30">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={currentIndex === 0}
-                            onClick={() => setCurrentIndex((p) => Math.max(0, p - 1))}
-                            className="text-xs gap-1"
-                          >
-                            <ChevronLeft className="size-3.5" />
-                            <span>Previous</span>
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            disabled={currentIndex >= totalQuestionsCount - 1}
-                            onClick={() => setCurrentIndex((p) => Math.min(totalQuestionsCount - 1, p + 1))}
-                            className="text-xs gap-1"
-                          >
-                            <span>Next</span>
-                            <ChevronRight className="size-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </ResizablePanel>
-                  </ResizablePanelGroup>
-                </div>
-              )}
-
-              {/* CONSISTENT SPLIT-PANEL LAYOUT FOR CODING */}
-              {currentQuestion.questionType === "CODING" && (
-                <div className="flex-1 flex overflow-hidden">
-                  <ResizablePanelGroup orientation="horizontal" className="h-full w-full">
-                    {/* Left Pane: Statement & Sample Testcases */}
-                    <ResizablePanel defaultSize={45} minSize={30}>
-                      <div className="h-full flex flex-col overflow-hidden border-r border-border bg-card/10">
-                        <div className="p-4 border-b border-border/80 flex items-center justify-between shrink-0">
-                          <h2 className="text-base font-bold text-foreground truncate">
-                            {currentQuestion.title}
-                          </h2>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-                          {/* Statement Markdown */}
-                          {currentQuestion.codingStatement && (
-                            <div className="prose dark:prose-invert max-w-none text-sm text-foreground/90">
-                              <MarkdownPreview content={currentQuestion.codingStatement} />
-                            </div>
-                          )}
-
-                          {/* Public Sample Testcases */}
-                          {currentQuestion.sampleTestCases &&
-                            currentQuestion.sampleTestCases.length > 0 && (
-                              <div className="space-y-4 pt-4 border-t border-border">
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                                  Sample Test Cases
-                                </h3>
-                                <div className="space-y-3">
-                                  {currentQuestion.sampleTestCases.map((tc, idx) => (
-                                    <div
-                                      key={tc.id || idx}
-                                      className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2 text-xs"
-                                    >
-                                      <span className="font-semibold text-muted-foreground">
-                                        Sample #{idx + 1}
-                                      </span>
-                                      {tc.stdin !== undefined && (
-                                        <div>
-                                          <p className="text-[11px] text-muted-foreground font-mono">
-                                            Input:
-                                          </p>
-                                          <pre className="p-2 rounded bg-background/80 border font-mono text-[11px] mt-1 whitespace-pre-wrap">
-                                            {tc.stdin || "(empty input)"}
-                                          </pre>
-                                        </div>
-                                      )}
-                                      {tc.output !== undefined && (
-                                        <div>
-                                          <p className="text-[11px] text-muted-foreground font-mono">
-                                            Expected Output:
-                                          </p>
-                                          <pre className="p-2 rounded bg-background/80 border font-mono text-[11px] mt-1 whitespace-pre-wrap">
-                                            {tc.output}
-                                          </pre>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                        </div>
-
-                        {/* Left Pane Navigation Footer */}
-                        <div className="p-3 border-t border-border flex items-center justify-between shrink-0 bg-card/30">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={currentIndex === 0}
-                            onClick={() => setCurrentIndex((p) => Math.max(0, p - 1))}
-                            className="text-xs gap-1"
-                          >
-                            <ChevronLeft className="size-3.5" />
-                            <span>Previous</span>
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={currentIndex >= totalQuestionsCount - 1}
-                            onClick={() => setCurrentIndex((p) => Math.min(totalQuestionsCount - 1, p + 1))}
-                            className="text-xs gap-1"
-                          >
-                            <span>Next</span>
-                            <ChevronRight className="size-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </ResizablePanel>
-
-                    <ResizableHandle withHandle />
-
-                    {/* Right Pane: Monaco Editor & Redesigned Console */}
-                    <ResizablePanel defaultSize={55} minSize={35}>
-                      <div className="h-full flex flex-col overflow-hidden">
-                        {/* Editor Controls Bar */}
-                        <div className="h-11 border-b border-border/80 px-4 flex items-center justify-between shrink-0 bg-card/60">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground font-medium">
-                              Language:
-                            </span>
-                            <NativeSelect
-                              value={currentLanguage}
-                              onChange={(e) => handleLanguageChange(e.target.value)}
-                              className="h-8 text-xs font-mono w-44"
-                            >
-                              {(currentQuestion.supportedLanguageIds && currentQuestion.supportedLanguageIds.length > 0
-                                ? currentQuestion.supportedLanguageIds
-                                : ["java-21"]
-                              ).map((langId) => {
-                                const cfg = getLanguageById(langId)
-                                return (
-                                  <NativeSelectOption key={langId} value={langId}>
-                                    {cfg ? cfg.name : langId}
-                                  </NativeSelectOption>
-                                )
-                              })}
-                            </NativeSelect>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={handleResetStarterCode}
-                              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                            >
-                              <RotateCcw className="size-3" />
-                              <span>Reset</span>
-                            </Button>
-
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={
-                                activeBottomTab === "custom"
-                                  ? runCustomInputMutation.isPending
-                                  : runSampleMutation.isPending
-                              }
-                              onClick={
-                                activeBottomTab === "custom"
-                                  ? handleRunCustomInput
-                                  : handleRunSampleTests
-                              }
-                              className="h-7 text-xs gap-1.5"
-                            >
-                              {(activeBottomTab === "custom"
-                                ? runCustomInputMutation.isPending
-                                : runSampleMutation.isPending) ? (
-                                <Loader2 className="size-3 animate-spin text-primary" />
-                              ) : (
-                                <Play className="size-3 text-emerald-500 fill-emerald-500" />
-                              )}
-                              <span>
-                                {activeBottomTab === "custom"
-                                  ? "Run Custom Input"
-                                  : "Run Tests"}
-                              </span>
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              disabled={submitCodeMutation.isPending}
-                              onClick={handleSubmitCode}
-                              className="h-7 text-xs gap-1.5 font-semibold"
-                            >
-                              {submitCodeMutation.isPending ? (
-                                <Loader2 className="size-3 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="size-3" />
-                              )}
-                              <span>Submit Code</span>
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Monaco Editor Split with Redesigned Bottom Panel */}
-                        <ResizablePanelGroup orientation="vertical" className="flex-1">
-                          <ResizablePanel defaultSize={60} minSize={25}>
-                            <div className="h-full w-full">
-                              <MonacoEditor
-                                language={resolveMonacoLanguage(currentLanguage)}
-                                value={currentCode}
-                                onChange={handleCodeChange}
-                                height="100%"
-                                options={{
-                                  minimap: { enabled: false },
-                                  fontSize: 13,
-                                  lineNumbers: "on",
-                                  scrollBeyondLastLine: false,
-                                  automaticLayout: true,
-                                }}
-                              />
-                            </div>
-                          </ResizablePanel>
-
-                          <ResizableHandle withHandle />
-
-                          {/* Redesigned Testcase / Console Panel */}
-                          <ResizablePanel defaultSize={40} minSize={20}>
-                            <div className="h-full flex flex-col border-t border-border bg-card/40">
-                              {/* Console Tab Header */}
-                              <div className="h-9 border-b border-border/80 px-4 flex items-center gap-6 text-xs font-semibold shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveBottomTab("sample")}
-                                  className={cn(
-                                    "pb-1 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5",
-                                    activeBottomTab === "sample"
-                                      ? "border-primary text-foreground"
-                                      : "border-transparent text-muted-foreground hover:text-foreground"
-                                  )}
-                                >
-                                  <FileCode className="size-3.5" />
-                                  <span>Sample Testcases</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveBottomTab("custom")}
-                                  className={cn(
-                                    "pb-1 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5",
-                                    activeBottomTab === "custom"
-                                      ? "border-primary text-foreground"
-                                      : "border-transparent text-muted-foreground hover:text-foreground"
-                                  )}
-                                >
-                                  <Terminal className="size-3.5" />
-                                  <span>Custom Input</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveBottomTab("submit")}
-                                  className={cn(
-                                    "pb-1 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5",
-                                    activeBottomTab === "submit"
-                                      ? "border-primary text-foreground"
-                                      : "border-transparent text-muted-foreground hover:text-foreground"
-                                  )}
-                                >
-                                  <CheckCircle2 className="size-3.5" />
-                                  <span>Submission Output</span>
-                                </button>
-                              </div>
-
-                              <div className="flex-1 overflow-y-auto p-4 text-xs">
-                                {/* TAB 1: Sample Testcases with Case Selectors */}
-                                {/* TAB 1: Sample Test Cases */}
-                                {activeBottomTab === "sample" && (
-                                  <div>
-                                    {runSampleMutation.isPending ? (
-                                      <div className="flex items-center gap-2 text-muted-foreground py-6">
-                                        <Loader2 className="size-4 animate-spin text-primary" />
-                                        <span>Executing code against sample test cases in sandbox...</span>
-                                      </div>
-                                    ) : sampleResult ? (() => {
-                                      const isOverallAccepted =
-                                        sampleResult.overallStatus?.toUpperCase() === "ACCEPTED" ||
-                                        sampleResult.overallStatus?.toUpperCase() === "SUCCESS"
-                                      return (
-                                        <div className="space-y-4">
-                                          {/* Status Header */}
-                                          <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                                            <div className="flex items-center gap-2">
-                                              <span
-                                                className={cn(
-                                                  "inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border",
-                                                  isOverallAccepted
-                                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                    : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
-                                                )}
-                                              >
-                                                {sampleResult.overallStatus}
-                                              </span>
-                                              <span className="text-muted-foreground font-medium text-xs">
-                                                Passed {sampleResult.passedTestcases} / {sampleResult.totalTestcases} test cases
-                                              </span>
-                                            </div>
-                                            <span className="text-muted-foreground font-mono text-xs">
-                                              {sampleResult.totalExecutionTimeMs} ms
-                                            </span>
-                                          </div>
-
-                                          {/* Testcase Pill Selectors */}
-                                          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                                            {sampleResult.results?.map((res, idx) => {
-                                              const isCasePassed =
-                                                res.passed === true ||
-                                                res.status?.toUpperCase() === "PASSED" ||
-                                                res.status?.toUpperCase() === "ACCEPTED" ||
-                                                res.status?.toUpperCase() === "SUCCESS"
-                                              return (
-                                                <button
-                                                  key={idx}
-                                                  type="button"
-                                                  onClick={() => setSelectedSampleIndex(idx)}
-                                                  className={cn(
-                                                    "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
-                                                    selectedSampleIndex === idx
-                                                      ? isCasePassed
-                                                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/40"
-                                                        : "border-rose-500/60 bg-rose-500/10 text-rose-500 dark:text-rose-400 ring-1 ring-rose-500/40"
-                                                      : "border-border/80 hover:bg-muted/40 text-muted-foreground"
-                                                  )}
-                                                >
-                                                  <span
-                                                    className={cn(
-                                                      "size-2 rounded-full",
-                                                      isCasePassed ? "bg-emerald-500" : "bg-rose-500"
-                                                    )}
-                                                  />
-                                                  <span>Case {idx + 1}</span>
-                                                </button>
-                                              )
-                                            })}
-                                          </div>
-
-                                          {/* Selected Case Detail: STACKED VERTICALLY ONE BELOW ANOTHER ONLY */}
-                                          {sampleResult.results?.[selectedSampleIndex] && (() => {
-                                            const res = sampleResult.results[selectedSampleIndex]
-                                            const isSelectedPassed =
-                                              res.passed === true ||
-                                              res.status?.toUpperCase() === "PASSED" ||
-                                              res.status?.toUpperCase() === "ACCEPTED" ||
-                                              res.status?.toUpperCase() === "SUCCESS"
-                                            const currentSample = currentQuestion?.sampleTestCases?.[selectedSampleIndex]
-                                            const inputContent = res.stdin ?? currentSample?.stdin
-                                            const expectedContent = res.expectedOutput ?? currentSample?.output
-
-                                            return (
-                                              <div className="space-y-3 pt-2">
-                                                <div className="flex items-center justify-between">
-                                                  <span
-                                                    className={cn(
-                                                      "inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border",
-                                                      isSelectedPassed
-                                                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                        : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
-                                                    )}
-                                                  >
-                                                    {res.status}
-                                                  </span>
-                                                  <span className="text-[11px] text-muted-foreground font-mono">
-                                                    {res.runtimeMs ?? res.executionTimeMs ?? 0} ms
-                                                  </span>
-                                                </div>
-
-                                                {/* Stacked Vertically: Input -> Your Output -> Expected Output */}
-                                                <div className="space-y-3">
-                                                  <div className="space-y-1">
-                                                    <span className="text-[11px] font-semibold text-muted-foreground">
-                                                      Input (stdin):
-                                                    </span>
-                                                    <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[38px]">
-                                                      {inputContent !== undefined && inputContent !== null && inputContent !== ""
-                                                        ? inputContent
-                                                        : "(no input)"}
-                                                    </pre>
-                                                  </div>
-
-                                                  <div className="space-y-1">
-                                                    <span className="text-[11px] font-semibold text-muted-foreground">
-                                                      Your Output:
-                                                    </span>
-                                                    <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
-                                                      {res.actualOutput || "(empty)"}
-                                                    </pre>
-                                                  </div>
-
-                                                  <div className="space-y-1">
-                                                    <span className="text-[11px] font-semibold text-muted-foreground">
-                                                      Expected Output:
-                                                    </span>
-                                                    <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
-                                                      {expectedContent || "(empty)"}
-                                                    </pre>
-                                                  </div>
-                                                </div>
-
-                                                {/* Stderr / Error Message Card */}
-                                                {res.stderr && (
-                                                  <div className="space-y-1 pt-1">
-                                                    <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
-                                                      Error / Compiler / Stderr Output:
-                                                    </span>
-                                                    <pre className="font-mono p-2.5 bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/30 rounded-lg text-xs whitespace-pre-wrap">
-                                                      {res.stderr}
-                                                    </pre>
-                                                  </div>
-                                                )}
-                                              </div>
-                                            )
-                                          })()}
-                                        </div>
-                                      )
-                                    })() : (
-                                      <p className="text-muted-foreground py-6 text-center text-xs">
-                                        Click "Run Tests" above to execute your solution against sample test cases.
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* TAB 2: Custom Input Runner */}
-                                {activeBottomTab === "custom" && (
-                                  <div className="space-y-4">
-                                    <div className="space-y-2">
-                                      <div className="flex items-center justify-between">
-                                        <label className="text-xs font-semibold text-foreground">
-                                          Standard Input (stdin):
-                                        </label>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={handleRunCustomInput}
-                                          disabled={runCustomInputMutation.isPending}
-                                          className="h-7 text-xs gap-1.5"
-                                        >
-                                          {runCustomInputMutation.isPending ? (
-                                            <Loader2 className="size-3 animate-spin text-primary" />
-                                          ) : (
-                                            <Play className="size-3 text-emerald-500 fill-emerald-500" />
-                                          )}
-                                          <span>Run Custom Input</span>
-                                        </Button>
-                                      </div>
-                                      <Textarea
-                                        placeholder="Enter standard input values here to test edge cases..."
-                                        rows={3}
-                                        value={customInputText}
-                                        onChange={(e) => setCustomInputText(e.target.value)}
-                                        className="font-mono text-xs"
-                                      />
-                                    </div>
-
-                                    {/* Custom Output Result */}
-                                    {runCustomInputMutation.isPending ? (
-                                      <div className="flex items-center gap-2 text-muted-foreground py-3">
-                                        <Loader2 className="size-4 animate-spin text-primary" />
-                                        <span>Executing code with custom input in sandbox...</span>
-                                      </div>
-                                    ) : customResult ? (() => {
-                                      const isCustomSuccess =
-                                        customResult.overallStatus === "SUCCESS" ||
-                                        customResult.overallStatus === "ACCEPTED"
-                                      const customOut =
-                                        customResult.results?.[0]?.actualOutput ??
-                                        customResult.results?.[0]?.stdout
-                                      const customExpected =
-                                        customResult.results?.[0]?.expectedOutput
-                                      const customErr =
-                                        customResult.results?.[0]?.stderr ||
-                                        customResult.results?.[0]?.error
-
-                                      return (
-                                        <div className="rounded-lg border p-3 bg-background space-y-3">
-                                          <div className="flex items-center justify-between pb-2 border-b">
-                                            <span
-                                              className={cn(
-                                                "inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border",
-                                                isCustomSuccess
-                                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                  : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
-                                              )}
-                                            >
-                                              {customResult.overallStatus}
-                                            </span>
-                                            <span className="text-muted-foreground font-mono text-xs">
-                                              {customResult.totalExecutionTimeMs} ms
-                                            </span>
-                                          </div>
-
-                                          {/* Stacked Vertically: Your Output -> Expected Output -> Error */}
-                                          <div className="space-y-3">
-                                            <div className="space-y-1">
-                                              <span className="text-[11px] font-semibold text-muted-foreground">
-                                                Your Output:
-                                              </span>
-                                              <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
-                                                {customOut !== undefined && customOut !== ""
-                                                  ? customOut
-                                                  : "(empty output)"}
-                                              </pre>
-                                            </div>
-
-                                            <div className="space-y-1">
-                                              <span className="text-[11px] font-semibold text-muted-foreground">
-                                                Expected Output:
-                                              </span>
-                                              <pre className="font-mono p-2.5 bg-background border rounded-lg text-xs whitespace-pre-wrap min-h-[48px]">
-                                                {customExpected !== undefined && customExpected !== ""
-                                                  ? customExpected
-                                                  : "(empty)"}
-                                              </pre>
-                                            </div>
-                                          </div>
-
-                                          {customErr && (
-                                            <div className="space-y-1 pt-1">
-                                              <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
-                                                Error / Compiler / Stderr Output:
-                                              </span>
-                                              <pre className="font-mono p-2.5 bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/30 rounded-lg text-xs whitespace-pre-wrap">
-                                                {customErr}
-                                              </pre>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )
-                                    })() : (
-                                      <p className="text-muted-foreground py-3 text-xs">
-                                        Provide standard input above and click "Run Custom Input".
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* TAB 3: Submission Output with Best Score & Submissions History */}
-                                {activeBottomTab === "submit" && (
-                                  <div>
-                                    {submitCodeMutation.isPending ? (
-                                      <div className="flex items-center gap-2 text-muted-foreground py-6">
-                                        <Loader2 className="size-4 animate-spin text-primary" />
-                                        <span>Evaluating code against complete test suite...</span>
-                                      </div>
-                                    ) : submitResult || (currentQuestion && localResponses[currentQuestion.questionId]?.submissions?.length) ? (() => {
-                                      const activeResp = submitResult ?? (currentQuestion ? localResponses[currentQuestion.questionId] : null)
-                                      const lastExec = activeResp?.lastExecutionResult
-                                      const status = lastExec?.overallStatus ?? (activeResp?.allTestcasesPassed ? "ACCEPTED" : "FAILED")
-                                      const isAccepted = status === "ACCEPTED" || status === "SUCCESS" || activeResp?.allTestcasesPassed === true
-                                      const passedCount = lastExec?.passedTestcases ?? activeResp?.passedTestcases ?? 0
-                                      const totalCount = lastExec?.totalTestcases ?? activeResp?.totalTestcases ?? 0
-                                      const execTime = lastExec?.totalExecutionTimeMs ?? 0
-                                      const bestPoints = activeResp?.bestAwardedPoints ?? activeResp?.awardedPoints ?? 0
-                                      const maxPts = activeResp?.maxPoints ?? currentQuestion?.points ?? 0
-                                      const submissionsList = activeResp?.submissions ?? []
-
-                                      return (
-                                        <div className="space-y-4">
-                                          {/* Top Verdict Banner */}
-                                          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border bg-card/60">
-                                            <div className="flex items-center gap-2.5">
-                                              <span
-                                                className={cn(
-                                                  "inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border",
-                                                  isAccepted
-                                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                                    : "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30"
-                                                )}
-                                              >
-                                                {status}
-                                              </span>
-                                              <span className="text-xs font-semibold text-foreground">
-                                                Passed {passedCount} / {totalCount} test cases
-                                                {!isAccepted && totalCount > 0 && (
-                                                  <span className="ml-1.5 text-xs text-rose-500 dark:text-rose-400 font-normal">
-                                                    ({totalCount - passedCount} failed)
-                                                  </span>
-                                                )}
-                                              </span>
-                                            </div>
-                                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                              {execTime > 0 && (
-                                                <span>
-                                                  Runtime: <strong className="font-mono text-foreground">{execTime} ms</strong>
-                                                </span>
-                                              )}
-                                              <span>
-                                                Best Score:{" "}
-                                                <strong className="font-mono text-emerald-600 dark:text-emerald-400">
-                                                  {bestPoints.toFixed(1)} / {maxPts} pts
-                                                </strong>
-                                              </span>
-                                            </div>
-                                          </div>
-
-                                          {/* Helpful failure breakdown notification */}
-                                          {!isAccepted && totalCount > 0 && (
-                                            <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-500 dark:text-rose-400 space-y-1">
-                                              <div className="font-semibold flex items-center gap-1.5">
-                                                <AlertCircle className="size-4 shrink-0" />
-                                                <span>Test cases failed: Passed {passedCount} of {totalCount} cases.</span>
-                                              </div>
-                                              <p className="text-[11px] text-muted-foreground">
-                                                Your previous best score ({bestPoints.toFixed(1)} / {maxPts} pts) is safely preserved. Test edge cases with the custom runner and submit an updated solution.
-                                              </p>
-                                            </div>
-                                          )}
-
-                                          {/* Stderr / Compiler Output if failed */}
-                                          {(!isAccepted || lastExec?.logs) && lastExec?.logs && (
-                                            <div className="space-y-1">
-                                              <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
-                                                Compilation / Stderr Output:
-                                              </span>
-                                              <pre className="font-mono p-2.5 bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/30 rounded-lg text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
-                                                {lastExec.logs}
-                                              </pre>
-                                            </div>
-                                          )}
-
-                                          {/* Submission History Table */}
-                                          {submissionsList.length > 0 && (
-                                            <div className="space-y-2 pt-2 border-t">
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                                  <History className="size-3.5 text-muted-foreground" />
-                                                  Submission History ({submissionsList.length})
-                                                </span>
-                                                <span className="text-[11px] text-muted-foreground">
-                                                  Best score is preserved
-                                                </span>
-                                              </div>
-                                              <div className="rounded-md border overflow-hidden">
-                                                <table className="w-full text-xs text-left">
-                                                  <thead className="bg-muted/50 text-muted-foreground font-medium border-b text-[11px]">
-                                                    <tr>
-                                                      <th className="px-3 py-2">#</th>
-                                                      <th className="px-3 py-2">Verdict</th>
-                                                      <th className="px-3 py-2">Test Cases</th>
-                                                      <th className="px-3 py-2">Score</th>
-                                                      <th className="px-3 py-2">Runtime</th>
-                                                      <th className="px-3 py-2 text-right">Submitted</th>
-                                                    </tr>
-                                                  </thead>
-                                                  <tbody className="divide-y divide-border/60">
-                                                    {submissionsList.map((sub, sIdx) => {
-                                                      const subAccepted =
-                                                        sub.status === "ACCEPTED" || sub.status === "SUCCESS"
-                                                      const isBest =
-                                                        sub.awardedPoints === bestPoints && bestPoints > 0
-                                                      return (
-                                                        <tr
-                                                          key={sub.submissionId || sIdx}
-                                                          className={cn(
-                                                            "hover:bg-muted/30 transition-colors",
-                                                            isBest && "bg-emerald-500/5"
-                                                          )}
-                                                        >
-                                                          <td className="px-3 py-2 text-muted-foreground font-mono">
-                                                            {sIdx + 1}
-                                                          </td>
-                                                          <td className="px-3 py-2">
-                                                            <span
-                                                              className={cn(
-                                                                "font-semibold inline-flex items-center gap-1",
-                                                                subAccepted
-                                                                  ? "text-emerald-600 dark:text-emerald-400"
-                                                                  : "text-rose-500 dark:text-rose-400"
-                                                              )}
-                                                            >
-                                                              {subAccepted ? (
-                                                                <Check className="size-3" />
-                                                              ) : (
-                                                                <AlertCircle className="size-3" />
-                                                              )}
-                                                              {sub.status}
-                                                            </span>
-                                                          </td>
-                                                          <td className="px-3 py-2 font-mono">
-                                                            {sub.passedTestcases} / {sub.totalTestcases}
-                                                          </td>
-                                                          <td className="px-3 py-2 font-mono">
-                                                            <span
-                                                              className={cn(
-                                                                isBest &&
-                                                                  "font-bold text-emerald-600 dark:text-emerald-400"
-                                                              )}
-                                                            >
-                                                              {sub.awardedPoints.toFixed(1)} pts
-                                                            </span>
-                                                            {isBest && (
-                                                              <Badge
-                                                                variant="outline"
-                                                                className="ml-1.5 text-[9px] px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                                                              >
-                                                                Best
-                                                              </Badge>
-                                                            )}
-                                                          </td>
-                                                          <td className="px-3 py-2 font-mono text-muted-foreground">
-                                                            {sub.executionTimeMs} ms
-                                                          </td>
-                                                          <td className="px-3 py-2 text-right text-muted-foreground">
-                                                            {new Date(sub.submittedAt).toLocaleTimeString([], {
-                                                              hour: "2-digit",
-                                                              minute: "2-digit",
-                                                              second: "2-digit",
-                                                            })}
-                                                          </td>
-                                                        </tr>
-                                                      )
-                                                    })}
-                                                  </tbody>
-                                                </table>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )
-                                    })() : (
-                                      <p className="text-muted-foreground py-6 text-center text-xs">
-                                        Click "Submit Code" to evaluate your solution against all hidden and visible test cases.
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </ResizablePanel>
-                        </ResizablePanelGroup>
-                      </div>
-                    </ResizablePanel>
-                  </ResizablePanelGroup>
-                </div>
-              )}
-            </>
+              <ResizablePanel defaultSize={55} minSize={30}>
+                <ExamCodeWorkspace
+                  question={currentQuestion}
+                  currentLanguage={currentLanguage}
+                  currentCode={currentCode}
+                  activeBottomTab={activeBottomTab}
+                  isSampleRunning={runSampleMutation.isPending}
+                  isCustomRunning={runCustomInputMutation.isPending}
+                  isSubmittingCode={submitCodeMutation.isPending}
+                  onLanguageChange={handleLanguageChange}
+                  onCodeChange={handleCodeChange}
+                  onResetStarter={handleResetStarter}
+                  onRunTests={handleRunTests}
+                  onSubmitCode={handleSubmitCode}
+                  bottomPanelContent={
+                    <ExamBottomTabs
+                      question={currentQuestion}
+                      activeTab={activeBottomTab}
+                      onTabChange={setActiveBottomTab}
+                      isSampleRunning={runSampleMutation.isPending}
+                      sampleResult={sampleResult}
+                      selectedSampleIndex={selectedSampleIndex}
+                      onSelectSampleIndex={setSelectedSampleIndex}
+                      customInputText={customInputText}
+                      onCustomInputChange={setCustomInputText}
+                      isCustomRunning={runCustomInputMutation.isPending}
+                      customResult={customResult}
+                      onRunCustomInput={handleRunCustomInput}
+                      isSubmittingCode={submitCodeMutation.isPending}
+                      submitResult={submitResult}
+                      savedResponse={localResponses[currentQuestion.questionId]}
+                    />
+                  }
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
           )}
-        </main>
+        </div>
       </div>
 
-      {/* Assessment Question Matrix Overview Modal */}
-      <Dialog open={overviewModalOpen} onOpenChange={setOverviewModalOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <LayoutGrid className="size-5 text-primary" />
-              <span>Assessment Overview</span>
-            </DialogTitle>
-            <DialogDescription>
-              Review assessment details and jump to any question.
-            </DialogDescription>
-          </DialogHeader>
+      {/* Navigation Footer */}
+      <ExamNavigationFooter
+        currentIndex={currentIndex}
+        totalQuestions={totalQuestionsCount}
+        answeredCount={answeredCount}
+        isMarked={isCurrentQuestionMarked}
+        onPrevious={() => setCurrentIndex((idx) => Math.max(0, idx - 1))}
+        onNext={() =>
+          setCurrentIndex((idx) => Math.min(totalQuestionsCount - 1, idx + 1))
+        }
+        onToggleMark={handleToggleMark}
+        onOpenOverview={() => setOverviewModalOpen(true)}
+      />
 
-          <div className="space-y-4 py-2">
-            {/* Assessment Metadata & Instructions */}
-            <div className="p-3.5 rounded-lg border bg-muted/20 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-foreground">{attempt.title}</span>
-                <span className="text-muted-foreground font-mono">
-                  {formatTimer(remainingSeconds)} remaining
-                </span>
-              </div>
-              {attempt.description && (
-                <p className="text-muted-foreground leading-relaxed">
-                  {attempt.description}
-                </p>
-              )}
-            </div>
+      {/* Dialogs */}
+      <ExamOverviewDialog
+        open={overviewModalOpen}
+        onOpenChange={setOverviewModalOpen}
+        questions={questionsList}
+        currentIndex={currentIndex}
+        localResponses={localResponses}
+        isQuestionAnswered={isQuestionAnswered}
+        answeredCount={answeredCount}
+        unansweredCount={unansweredCount}
+        markedCount={markedCount}
+        onSelectQuestion={setCurrentIndex}
+      />
 
-            {/* Metric Chips */}
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2.5 rounded-lg border bg-emerald-500/5 border-emerald-500/20">
-                <div className="text-[11px] text-muted-foreground">Answered</div>
-                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                  {answeredCount}
-                </div>
-              </div>
-              <div className="p-2.5 rounded-lg border bg-amber-500/5 border-amber-500/20">
-                <div className="text-[11px] text-muted-foreground">Unanswered</div>
-                <div className="text-lg font-bold text-amber-500">{unansweredCount}</div>
-              </div>
-              <div className="p-2.5 rounded-lg border bg-purple-500/5 border-purple-500/20">
-                <div className="text-[11px] text-muted-foreground">Marked for Review</div>
-                <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                  {markedCount}
-                </div>
-              </div>
-            </div>
+      <ExamSubmitDialog
+        open={submitModalOpen}
+        onOpenChange={setSubmitModalOpen}
+        totalQuestions={totalQuestionsCount}
+        answeredCount={answeredCount}
+        unansweredCount={unansweredCount}
+        markedCount={markedCount}
+        isSubmitting={finalSubmitMutation.isPending}
+        onConfirmSubmit={handleConfirmFinalSubmit}
+      />
 
-            {/* Questions Grid Matrix */}
-            <div className="grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-60 overflow-y-auto p-1">
-              {questionsList.map((q, idx) => {
-                const resp = localResponses[q.questionId]
-                const isAns = isQuestionAnswered(q, resp)
-                const isMarked = Boolean(resp?.markedForReview)
-                const isCurrent = idx === currentIndex
+      <ExamExpiredDialog
+        open={timeExpiredModalOpen}
+        onViewResults={() =>
+          navigate({
+            to: "/assessments/$assessmentId/results",
+            params: { assessmentId },
+          })
+        }
+      />
 
-                return (
-                  <button
-                    key={q.questionId}
-                    type="button"
-                    onClick={() => {
-                      setCurrentIndex(idx)
-                      setOverviewModalOpen(false)
-                    }}
-                    className={cn(
-                      "flex flex-col items-center justify-center p-2 rounded-lg border text-xs font-bold transition-all relative cursor-pointer",
-                      isCurrent ? "ring-2 ring-primary" : "",
-                      isMarked
-                        ? "border-purple-500 bg-purple-500/15 text-purple-600 dark:text-purple-400"
-                        : isAns
-                          ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                          : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
-                    )}
-                  >
-                    <span>{idx + 1}</span>
-                    <span className="text-[8px] font-normal uppercase mt-0.5">
-                      {q.questionType === "CODING" ? "Code" : "MCQ"}
-                    </span>
-                    {isMarked && (
-                      <div className="absolute top-1 right-1">
-                        <Bookmark className="size-2 text-purple-500 fill-purple-500" />
-                      </div>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOverviewModalOpen(false)}>
-              Close
-            </Button>
-            <Button
-              onClick={() => {
-                setOverviewModalOpen(false)
-                setSubmitModalOpen(true)
-              }}
-              className="gap-1.5"
-            >
-              <Send className="size-3.5" />
-              <span>Submit Assessment</span>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Final Submit Confirmation Modal */}
-      <Dialog open={submitModalOpen} onOpenChange={setSubmitModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Send className="size-5 text-primary" />
-              <span>Submit Assessment?</span>
-            </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to finish and submit your assessment? Once submitted, your answers cannot be modified.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-2 space-y-2 text-xs">
-            <div className="flex justify-between py-1 border-b">
-              <span className="text-muted-foreground">Answered Questions:</span>
-              <span className="font-bold text-foreground">
-                {answeredCount} / {totalQuestionsCount}
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-b">
-              <span className="text-muted-foreground">Unanswered Questions:</span>
-              <span
-                className={cn(
-                  "font-bold",
-                  unansweredCount > 0 ? "text-amber-500" : "text-foreground"
-                )}
-              >
-                {unansweredCount}
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-b">
-              <span className="text-muted-foreground">Marked for Review:</span>
-              <span className="font-bold text-purple-600 dark:text-purple-400">
-                {markedCount}
-              </span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span className="text-muted-foreground">Time Remaining:</span>
-              <span className="font-bold text-foreground font-mono">
-                {formatTimer(remainingSeconds)}
-              </span>
-            </div>
-
-            {unansweredCount > 0 && (
-              <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 mt-2">
-                You have {unansweredCount} unanswered question(s). You can still return to complete them before the timer runs out.
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSubmitModalOpen(false)}>
-              Keep Working
-            </Button>
-            <Button
-              onClick={handleConfirmFinalSubmit}
-              disabled={finalSubmitMutation.isPending}
-              className="gap-2 font-semibold"
-            >
-              {finalSubmitMutation.isPending && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              <span>Confirm & Submit</span>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Time Expired Modal */}
-      <Dialog open={timeExpiredModalOpen} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Clock className="size-5" />
-              <span>Time Has Expired</span>
-            </DialogTitle>
-            <DialogDescription>
-              The allotted time for this assessment has concluded. All saved answers have been preserved.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                setTimeExpiredModalOpen(false)
-                handleConfirmFinalSubmit()
-              }}
-              className="w-full"
-            >
-              Finalize & View Results
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manual Administrator Completion Modal */}
-      <Dialog open={Boolean(manualInterventionModal)} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="size-5" />
-              <span>Assessment Completed by Administrator</span>
-            </DialogTitle>
-            <DialogDescription className="pt-2 text-xs text-foreground/90 leading-relaxed">
-              {manualInterventionModal || "The administrator has manually completed this assessment. All your saved answers have been preserved."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="pt-4">
-            <Button
-              onClick={() => {
-                navigate({
-                  to: "/assessments/$assessmentId/results",
-                  params: { assessmentId },
-                })
-              }}
-              className="w-full text-xs"
-            >
-              View Assessment Results
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExamManualCompletionDialog
+        open={Boolean(manualInterventionModal)}
+        message={manualInterventionModal}
+        onViewResults={() =>
+          navigate({
+            to: "/assessments/$assessmentId/results",
+            params: { assessmentId },
+          })
+        }
+      />
     </div>
   )
 }

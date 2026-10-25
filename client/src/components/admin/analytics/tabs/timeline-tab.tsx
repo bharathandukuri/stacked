@@ -175,7 +175,7 @@ export function TimelineTab() {
 function TimelineEventRow({ event }: { event: ActivityTimelineItemResponse }) {
   const [expanded, setExpanded] = useState(false)
 
-  let relativeTime = ""
+  let relativeTime: string
   let absoluteTime = ""
   try {
     const parsed = parseISO(event.timestamp)

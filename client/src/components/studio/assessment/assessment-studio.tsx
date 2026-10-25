@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import axios from "axios"
 import { useNavigate } from "@tanstack/react-router"
 import {
-  GraduationCap,
   Clock,
   Users,
   CheckCircle2,
@@ -10,25 +9,11 @@ import {
   ArrowRight,
   ArrowLeft,
   Loader2,
-  Code2,
-  CheckSquare,
-  KeyRound,
-  AlertCircle,
   ChevronRight,
-  Send,
-  Lock,
-  AlertTriangle,
-  FileQuestion,
-  Sparkles,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   QuestionPickerDialog,
   type SelectedQuestionItem,
@@ -47,6 +32,11 @@ import type {
   CreateAssessmentPayload,
 } from "@/types/assessment"
 import type { BankQuestionType } from "@/types/question-bank"
+
+import { StepBasicInfo } from "./steps/step-basic-info"
+import { StepQuestionSelection } from "./steps/step-question-selection"
+import { StepCandidateInvitations } from "./steps/step-candidate-invitations"
+import { StepReviewValidation } from "./steps/step-review-validation"
 
 interface CuratedQuestionItem {
   questionId: string
@@ -286,20 +276,6 @@ export function AssessmentStudio() {
 
   const isSaving = createMutation.isPending
 
-  // Map validation error field to step number
-  const getStepForField = (field: string): number => {
-    if (field === "title" || field === "durationMinutes" || field === "scheduledWindow" || field === "maxAttempts" || field === "passingScore") {
-      return 1
-    }
-    if (field === "questionBankId" || field === "questions") {
-      return 2
-    }
-    if (field === "candidateEmails" || field === "invitationCodeExpiresAt" || field === "invitationCodeMaxUses") {
-      return 3
-    }
-    return 1
-  }
-
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {/* Studio Top Navbar */}
@@ -401,131 +377,22 @@ export function AssessmentStudio() {
           {/* STEP 1: BASICS & TIMING */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Assessment Details</CardTitle>
-                  <CardDescription>
-                    Provide a distinct title and instructions for candidates taking this assessment.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">
-                      Assessment Title <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      placeholder="e.g. Senior Backend Java Engineer Assessment"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">
-                      Instructions / Description
-                    </label>
-                    <Textarea
-                      placeholder="Enter guidelines, allowed programming languages, reference hints, and conduct rules..."
-                      rows={4}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Clock className="size-5 text-primary" />
-                    Timing & Benchmark Constraints
-                  </CardTitle>
-                  <CardDescription>
-                    Configure overall countdown duration, scheduled availability window, and passing criteria.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">
-                      Duration (Minutes) <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={1440}
-                      value={durationMinutes}
-                      onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Countdown timer given to candidates once an attempt is started.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">
-                      Max Attempts (Optional)
-                    </label>
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="Unlimited if empty"
-                      value={maxAttempts ?? ""}
-                      onChange={(e) =>
-                        setMaxAttempts(e.target.value ? Number(e.target.value) : undefined)
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Leave empty for unlimited attempts during the schedule window.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">
-                      Scheduled Start (Optional)
-                    </label>
-                    <Input
-                      type="datetime-local"
-                      value={scheduledStart}
-                      onChange={(e) => setScheduledStart(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Candidates cannot access or start before this timestamp.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">
-                      Scheduled End / Deadline (Optional)
-                    </label>
-                    <Input
-                      type="datetime-local"
-                      value={scheduledEnd}
-                      onChange={(e) => setScheduledEnd(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Absolute cut-off time after which all attempts are automatically closed.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <label className="text-sm font-semibold text-foreground">
-                      Passing Benchmark (Points - Optional)
-                    </label>
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="e.g. 70"
-                      value={passingScore ?? ""}
-                      onChange={(e) =>
-                        setPassingScore(e.target.value ? Number(e.target.value) : undefined)
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Minimum score required to receive a Passing grade on post-submission results.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              <StepBasicInfo
+                title={title}
+                onTitleChange={setTitle}
+                description={description}
+                onDescriptionChange={setDescription}
+                durationMinutes={durationMinutes}
+                onDurationChange={setDurationMinutes}
+                scheduledStart={scheduledStart}
+                onScheduledStartChange={setScheduledStart}
+                scheduledEnd={scheduledEnd}
+                onScheduledEndChange={setScheduledEnd}
+                maxAttempts={maxAttempts}
+                onMaxAttemptsChange={setMaxAttempts}
+                passingScore={passingScore}
+                onPassingScoreChange={setPassingScore}
+              />
 
               <div className="flex justify-end">
                 <Button
@@ -543,345 +410,20 @@ export function AssessmentStudio() {
           {/* STEP 2: QUESTION SOURCE */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Question Source Strategy</CardTitle>
-                  <CardDescription>
-                    Question Banks provide validated, peer-reviewed questions with complete scoring rubrics.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setSelectionMode("QUESTION_BANK")}
-                      className={cn(
-                        "flex flex-col items-start p-4 rounded-xl border text-left transition-all cursor-pointer",
-                        selectionMode === "QUESTION_BANK"
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs"
-                          : "border-border hover:bg-muted/40"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <GraduationCap className="size-5 text-primary" />
-                        <span className="font-semibold text-foreground">Published Question Bank (Recommended)</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Select a published question bank. Its questions, judge configurations, and starter code are safely snapshotted into this immutable assessment.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectionMode("INDIVIDUAL_QUESTIONS")}
-                      className={cn(
-                        "flex flex-col items-start p-4 rounded-xl border text-left transition-all cursor-pointer",
-                        selectionMode === "INDIVIDUAL_QUESTIONS"
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs"
-                          : "border-border hover:bg-muted/40"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Layers className="size-5 text-primary" />
-                        <span className="font-semibold text-foreground">Custom Question Selection</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Hand-pick individual published questions and customize question points manually.
-                      </p>
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Primary Mode: Question Bank Selection & Live Preview */}
-              {selectionMode === "QUESTION_BANK" && (
-                <div className="space-y-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Choose a Published Question Bank</CardTitle>
-                      <CardDescription>
-                        Only question banks in PUBLISHED status can be selected for assessments.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {loadingBanks ? (
-                        <div className="py-8 flex items-center justify-center text-muted-foreground gap-2">
-                          <Loader2 className="size-4 animate-spin text-primary" />
-                          <span className="text-xs">Loading published question banks...</span>
-                        </div>
-                      ) : publishedBanks.length === 0 ? (
-                        <div className="p-8 border border-dashed rounded-lg text-center text-muted-foreground">
-                          <AlertCircle className="size-8 mx-auto text-muted-foreground/50 mb-2" />
-                          <p className="font-medium text-foreground">No Published Question Banks Found</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Go to Question Banks and publish a bank first, or switch to Custom Question Selection.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto p-1">
-                          {publishedBanks.map((bank) => {
-                            const isSelected = selectedQuestionBankId === bank.id
-                            return (
-                              <div
-                                key={bank.id}
-                                onClick={() => setSelectedQuestionBankId(bank.id)}
-                                className={cn(
-                                  "p-4 rounded-lg border transition-all cursor-pointer flex flex-col justify-between",
-                                  isSelected
-                                    ? "border-primary bg-primary/5 ring-2 ring-primary shadow-xs"
-                                    : "border-border hover:bg-muted/30"
-                                )}
-                              >
-                                <div>
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="font-semibold text-sm text-foreground">
-                                      {bank.title}
-                                    </span>
-                                    {isSelected && (
-                                      <CheckCircle2 className="size-4 text-primary shrink-0" />
-                                    )}
-                                  </div>
-                                  {bank.description && (
-                                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                                      {bank.description}
-                                    </p>
-                                  )}
-                                  {bank.category && (
-                                    <Badge variant="outline" className="text-[10px] uppercase font-mono mb-2">
-                                      {bank.category}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2 pt-2 border-t text-[11px] text-muted-foreground">
-                                  <span>{bank.totalQuestions} Questions</span>
-                                  <span>•</span>
-                                  <span>{bank.totalPoints} Pts</span>
-                                  <span>•</span>
-                                  <span>
-                                    {bank.mcqCount} MCQ / {bank.codingCount} Coding
-                                  </span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Rich Bank Preview Panel */}
-                  {selectedQuestionBankId && (
-                    <Card className="border-primary/30">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="size-4 text-primary" />
-                            <CardTitle className="text-base">Selected Bank Snapshot Preview</CardTitle>
-                          </div>
-                          {loadingBankPreview ? (
-                            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                          ) : bankPreview?.eligibleForAssessment ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1">
-                              <CheckCircle2 className="size-3" />
-                              <span>Eligible for Assessment</span>
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive" className="gap-1">
-                              <AlertCircle className="size-3" />
-                              <span>Ineligible Questions</span>
-                            </Badge>
-                          )}
-                        </div>
-                        <CardDescription>
-                          This configuration and all questions below will be snapshotted permanently into this assessment upon creation.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {loadingBankPreview ? (
-                          <div className="py-6 flex items-center justify-center gap-2 text-muted-foreground text-xs">
-                            <Loader2 className="size-4 animate-spin text-primary" />
-                            Loading bank snapshot preview and judging configurations...
-                          </div>
-                        ) : bankPreview ? (
-                          <>
-                            {/* Ineligibility Alert */}
-                            {!bankPreview.eligibleForAssessment && bankPreview.ineligibilityReason && (
-                              <Alert variant="destructive">
-                                <AlertCircle className="size-4" />
-                                <AlertTitle>Bank Has Ineligible Questions</AlertTitle>
-                                <AlertDescription className="text-xs">
-                                  {bankPreview.ineligibilityReason}
-                                </AlertDescription>
-                              </Alert>
-                            )}
-
-                            {/* Metrics Breakdown */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-muted/40 rounded-lg border text-center text-xs">
-                              <div>
-                                <span className="text-muted-foreground">Total Questions</span>
-                                <div className="text-base font-bold text-foreground mt-0.5">
-                                  {bankPreview.totalQuestions}
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">MCQ vs Coding</span>
-                                <div className="text-base font-bold text-foreground mt-0.5">
-                                  {bankPreview.mcqCount} MCQ / {bankPreview.codingCount} Code
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">Total Assessment Score</span>
-                                <div className="text-base font-bold text-foreground mt-0.5">
-                                  {bankPreview.totalPoints} Points
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">Category</span>
-                                <div className="text-base font-bold text-foreground mt-0.5">
-                                  {bankPreview.category || "General"}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Difficulty Distribution */}
-                            <div className="flex flex-wrap items-center gap-2 text-xs">
-                              <span className="text-muted-foreground font-medium">Difficulty Breakdown:</span>
-                              {Object.entries(bankPreview.difficultyDistribution || {}).map(([diff, count]) => (
-                                <Badge key={diff} variant="secondary" className="text-xs">
-                                  {diff}: {count}
-                                </Badge>
-                              ))}
-                            </div>
-
-                            {/* Supported Languages */}
-                            {bankPreview.supportedCodingLanguages && bankPreview.supportedCodingLanguages.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-2 text-xs">
-                                <span className="text-muted-foreground font-medium flex items-center gap-1">
-                                  <Code2 className="size-3.5 text-primary" />
-                                  Supported Languages:
-                                </span>
-                                {bankPreview.supportedCodingLanguages.map((lang) => (
-                                  <Badge key={lang} variant="outline" className="font-mono text-[10px]">
-                                    {lang}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Questions Item List */}
-                            <div className="border rounded-lg overflow-hidden">
-                              <div className="px-3 py-2 bg-muted/50 border-b text-xs font-semibold text-muted-foreground">
-                                Question Bank Contents ({bankPreview.items.length})
-                              </div>
-                              <div className="max-h-60 overflow-y-auto divide-y divide-border">
-                                {bankPreview.items.map((item, idx) => (
-                                  <div key={item.questionId} className="p-3 flex items-center justify-between text-xs gap-3">
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <span className="font-mono text-muted-foreground w-5 text-right">
-                                        {idx + 1}.
-                                      </span>
-                                      {item.questionType === "MCQ" ? (
-                                        <CheckSquare className="size-3.5 text-amber-500 shrink-0" />
-                                      ) : (
-                                        <Code2 className="size-3.5 text-blue-500 shrink-0" />
-                                      )}
-                                      <span className="font-medium text-foreground truncate">
-                                        {item.title}
-                                      </span>
-                                      <Badge variant="outline" className="text-[10px] uppercase shrink-0">
-                                        {item.difficulty}
-                                      </Badge>
-                                      {!item.eligible && (
-                                        <Badge variant="destructive" className="text-[10px] shrink-0" title={item.ineligibilityReason}>
-                                          Issues
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-3 shrink-0">
-                                      <span className="font-mono font-medium text-foreground">
-                                        {item.points} pts
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        ) : null}
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              )}
-
-              {/* Mode B: Individual Questions */}
-              {selectionMode === "INDIVIDUAL_QUESTIONS" && (
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg">Curated Assessment Questions</CardTitle>
-                      <CardDescription>
-                        Pick individual questions from the repository.
-                      </CardDescription>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => setPickerOpen(true)}
-                      className="gap-1.5 text-xs"
-                    >
-                      <span>Add Questions</span>
-                    </Button>
-                  </CardHeader>
-                  <CardContent>
-                    {curatedQuestions.length === 0 ? (
-                      <div className="p-8 border border-dashed rounded-lg text-center text-muted-foreground">
-                        <FileQuestion className="size-8 mx-auto text-muted-foreground/50 mb-2" />
-                        <p className="font-medium text-foreground">No Questions Added Yet</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Click "Add Questions" to select published questions.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="border rounded-lg overflow-hidden divide-y divide-border">
-                        {curatedQuestions.map((q, idx) => (
-                          <div key={q.questionId} className="p-3 flex items-center justify-between text-xs gap-3">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className="font-mono text-muted-foreground w-5 text-right">
-                                {idx + 1}.
-                              </span>
-                              {q.questionType === "MCQ" ? (
-                                <CheckSquare className="size-3.5 text-amber-500 shrink-0" />
-                              ) : (
-                                <Code2 className="size-3.5 text-blue-500 shrink-0" />
-                              )}
-                              <span className="font-medium text-foreground truncate">
-                                {q.title}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              <Input
-                                type="number"
-                                min={1}
-                                className="w-16 h-7 text-xs font-mono text-center"
-                                value={q.points}
-                                onChange={(e) => handleUpdatePoints(q.questionId, Number(e.target.value))}
-                              />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveQuestion(q.questionId)}
-                                className="h-7 px-2 text-destructive hover:bg-destructive/10"
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              <StepQuestionSelection
+                selectionMode={selectionMode}
+                onSelectionModeChange={setSelectionMode}
+                selectedQuestionBankId={selectedQuestionBankId}
+                onSelectedQuestionBankIdChange={setSelectedQuestionBankId}
+                curatedQuestions={curatedQuestions}
+                onOpenPicker={() => setPickerOpen(true)}
+                onUpdatePoints={handleUpdatePoints}
+                onRemoveQuestion={handleRemoveQuestion}
+                publishedBanks={publishedBanks}
+                loadingBanks={loadingBanks}
+                bankPreview={bankPreview}
+                loadingBankPreview={loadingBankPreview}
+              />
 
               <div className="flex justify-between">
                 <Button
@@ -910,117 +452,17 @@ export function AssessmentStudio() {
           {/* STEP 3: CANDIDATE ACCESS */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              {/* Method A: Email Invitations */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Send className="size-5 text-primary" />
-                    Direct Candidate Assignments
-                  </CardTitle>
-                  <CardDescription>
-                    Candidates with these emails will automatically find this assessment on their dashboard upon login.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span>Candidate Email Addresses</span>
-                      <span className="text-primary font-bold">
-                        {parsedCandidateEmails.length} Recognized Email(s)
-                      </span>
-                    </div>
-                    <Textarea
-                      placeholder="alice@example.com, bob@company.org&#10;carol@university.edu"
-                      rows={5}
-                      value={candidateEmailsRaw}
-                      onChange={(e) => setCandidateEmailsRaw(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Accepts comma-separated, space-separated, or newline-separated email addresses.
-                    </p>
-                  </div>
-
-                  {parsedCandidateEmails.length > 0 && (
-                    <div className="p-3 bg-muted/40 rounded-lg border">
-                      <span className="text-xs font-semibold text-foreground block mb-2">
-                        Recognized Candidate List ({parsedCandidateEmails.length}):
-                      </span>
-                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
-                        {parsedCandidateEmails.map((email) => (
-                          <Badge key={email} variant="secondary" className="text-xs font-mono">
-                            {email}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Method B: Shareable Invitation Code */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <KeyRound className="size-5 text-primary" />
-                        Shareable Join Passcode
-                      </CardTitle>
-                      <CardDescription>
-                        Generate a secure passcode allowing candidates to self-enroll and start the test.
-                      </CardDescription>
-                    </div>
-                    <Switch
-                      checked={enableInvitationCode}
-                      onCheckedChange={setEnableInvitationCode}
-                    />
-                  </div>
-                </CardHeader>
-
-                {enableInvitationCode && (
-                  <CardContent className="space-y-4 pt-2">
-                    <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 text-xs text-muted-foreground">
-                      A cryptographically secure unique passcode (e.g. <span className="font-mono font-semibold text-primary">STK-XXXX-YYYY</span>) will be automatically generated and bound to this assessment.
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-foreground">
-                          Passcode Expiration (Optional)
-                        </label>
-                        <Input
-                          type="datetime-local"
-                          value={invitationCodeExpiresAt}
-                          onChange={(e) => setInvitationCodeExpiresAt(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          After this time, no new candidate can join with this code.
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-foreground">
-                          Max Uses Limit (Optional)
-                        </label>
-                        <Input
-                          type="number"
-                          min={1}
-                          placeholder="Unlimited if empty"
-                          value={invitationCodeMaxUses ?? ""}
-                          onChange={(e) =>
-                            setInvitationCodeMaxUses(
-                              e.target.value ? Number(e.target.value) : undefined
-                            )
-                          }
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Maximum number of candidates allowed to join with this code.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
+              <StepCandidateInvitations
+                candidateEmailsRaw={candidateEmailsRaw}
+                onCandidateEmailsRawChange={setCandidateEmailsRaw}
+                parsedCandidateEmails={parsedCandidateEmails}
+                enableInvitationCode={enableInvitationCode}
+                onEnableInvitationCodeChange={setEnableInvitationCode}
+                invitationCodeExpiresAt={invitationCodeExpiresAt}
+                onInvitationCodeExpiresAtChange={setInvitationCodeExpiresAt}
+                invitationCodeMaxUses={invitationCodeMaxUses}
+                onInvitationCodeMaxUsesChange={setInvitationCodeMaxUses}
+              />
 
               <div className="flex justify-between">
                 <Button
@@ -1031,216 +473,42 @@ export function AssessmentStudio() {
                   <ArrowLeft className="size-4" />
                   <span>Back to Questions</span>
                 </Button>
-                <Button onClick={() => setCurrentStep(4)} className="gap-2">
-                  <span>Continue to Validation & Review</span>
+                <Button
+                  onClick={() => setCurrentStep(4)}
+                  className="gap-2"
+                >
+                  <span>Review & Finalize</span>
                   <ArrowRight className="size-4" />
                 </Button>
               </div>
             </div>
           )}
 
-          {/* STEP 4: PRE-CREATION VALIDATION & REVIEW */}
+          {/* STEP 4: REVIEW & VALIDATION */}
           {currentStep === 4 && (
             <div className="space-y-6">
-              {/* Permanent Immutability Warning Banner */}
-              <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
-                <Lock className="size-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-                <div className="space-y-1">
-                  <div className="font-semibold text-sm">
-                    Assessment Immutability Notice
-                  </div>
-                  <p className="text-xs text-amber-700/90 dark:text-amber-400/90 leading-relaxed">
-                    Once created, Stacked assessments are <strong>permanently immutable</strong>. The definition, timing, question bank association, and question snapshots cannot be modified. If configuration changes are needed later, a new assessment must be created.
-                  </p>
-                </div>
-              </div>
-
-              {/* Pre-Creation Backend Validation Status */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <CheckCircle2 className="size-5 text-primary" />
-                      Pre-Creation Validation Engine
-                    </CardTitle>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={runPreCreationValidation}
-                      disabled={isValidating}
-                      className="text-xs h-7 gap-1"
-                    >
-                      {isValidating ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Sparkles className="size-3" />
-                      )}
-                      <span>Re-validate</span>
-                    </Button>
-                  </div>
-                  <CardDescription>
-                    All assessment fields, question contents, code execution constraints, and candidate parameters are validated before saving.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {isValidating ? (
-                    <div className="py-6 flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
-                      <Loader2 className="size-5 animate-spin text-primary" />
-                      <span>Running comprehensive backend validation checks...</span>
-                    </div>
-                  ) : validationResult ? (
-                    validationResult.valid ? (
-                      <Alert className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-                        <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        <AlertTitle>All Validation Checks Passed</AlertTitle>
-                        <AlertDescription className="text-xs">
-                          Configuration is complete. Question bank questions and judging rules are verified and ready for atomic creation.
-                        </AlertDescription>
-                      </Alert>
-                    ) : (
-                      <div className="space-y-3">
-                        <Alert variant="destructive">
-                          <AlertCircle className="size-4" />
-                          <AlertTitle>Validation Errors Detected ({validationResult.errors.length})</AlertTitle>
-                          <AlertDescription className="text-xs">
-                            The assessment cannot be created until the following blocking configuration issues are resolved:
-                          </AlertDescription>
-                        </Alert>
-
-                        <div className="divide-y divide-border rounded-lg border bg-destructive/5 overflow-hidden">
-                          {validationResult.errors.map((err, idx) => (
-                            <div key={idx} className="p-3 flex items-center justify-between text-xs gap-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Badge variant="destructive" className="font-mono text-[10px] shrink-0">
-                                  {err.field}
-                                </Badge>
-                                <span className="text-destructive font-medium truncate">
-                                  {err.message}
-                                </span>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setCurrentStep(getStepForField(err.field))}
-                                className="h-6 text-[11px] px-2 shrink-0 border-destructive/30 hover:bg-destructive/10"
-                              >
-                                Fix in Step {getStepForField(err.field)}
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  ) : null}
-
-                  {/* Warnings */}
-                  {validationResult?.warnings && validationResult.warnings.length > 0 && (
-                    <div className="space-y-2">
-                      {validationResult.warnings.map((warn, i) => (
-                        <div key={i} className="flex items-center gap-2 p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs">
-                          <AlertTriangle className="size-3.5 shrink-0" />
-                          <span>{warn}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Assessment Configuration Review Cards */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Assessment Configuration Review</CardTitle>
-                  <CardDescription>
-                    Summary of configuration that will be locked into the assessment record.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Summary Metric Strip */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-muted/40 rounded-xl border text-center">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Duration</div>
-                      <div className="text-lg font-bold text-foreground mt-0.5">
-                        {durationMinutes} mins
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Total Questions</div>
-                      <div className="text-lg font-bold text-foreground mt-0.5">
-                        {totalCalculatedQuestions}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {mcqCount} MCQ • {codingCount} Code
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Total Points</div>
-                      <div className="text-lg font-bold text-foreground mt-0.5">
-                        {totalCalculatedPoints} pts
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Invited Candidates</div>
-                      <div className="text-lg font-bold text-primary mt-0.5">
-                        {parsedCandidateEmails.length}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Detailed Spec List */}
-                  <div className="space-y-2.5 text-xs">
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">Title</span>
-                      <span className="font-semibold text-foreground text-sm">{title}</span>
-                    </div>
-
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">Question Bank Source</span>
-                      <span className="font-medium text-foreground">
-                        {selectionMode === "QUESTION_BANK"
-                          ? `${bankPreview?.title || selectedBank?.title || "Question Bank"} (${totalCalculatedQuestions} questions)`
-                          : `Custom Selection (${curatedQuestions.length} questions)`}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">Schedule Window</span>
-                      <span className="font-medium text-foreground">
-                        {scheduledStart ? new Date(scheduledStart).toLocaleString() : "Immediately Open"}{" "}
-                        &rarr;{" "}
-                        {scheduledEnd ? new Date(scheduledEnd).toLocaleString() : "No Deadline"}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">Attempt Limits</span>
-                      <span className="font-medium text-foreground">
-                        {maxAttempts ? `${maxAttempts} attempt(s)` : "Unlimited Attempts"}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">Passing Benchmark</span>
-                      <span className="font-medium text-foreground">
-                        {passingScore ? `${passingScore} / ${totalCalculatedPoints} points (${Math.round((passingScore / totalCalculatedPoints) * 100)}%)` : "Not Configured"}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">Self-Join Passcode</span>
-                      <span className="font-medium">
-                        {enableInvitationCode ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                            Enabled (Auto-generated on creation)
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">Disabled</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <StepReviewValidation
+                title={title}
+                durationMinutes={durationMinutes}
+                scheduledStart={scheduledStart}
+                scheduledEnd={scheduledEnd}
+                maxAttempts={maxAttempts}
+                passingScore={passingScore}
+                selectionMode={selectionMode}
+                selectedBank={selectedBank}
+                bankPreview={bankPreview}
+                curatedQuestions={curatedQuestions}
+                parsedCandidateEmails={parsedCandidateEmails}
+                enableInvitationCode={enableInvitationCode}
+                totalCalculatedQuestions={totalCalculatedQuestions}
+                totalCalculatedPoints={totalCalculatedPoints}
+                mcqCount={mcqCount}
+                codingCount={codingCount}
+                isValidating={isValidating}
+                validationResult={validationResult}
+                onRevalidate={() => runPreCreationValidation()}
+                onFixFieldInStep={(stepNum) => setCurrentStep(stepNum)}
+              />
 
               {/* Bottom Submit Controls */}
               <div className="flex justify-between items-center pt-2">
@@ -1255,7 +523,11 @@ export function AssessmentStudio() {
 
                 <div className="flex items-center gap-2">
                   <Button
-                    disabled={isSaving || isValidating || (validationResult !== null && !validationResult.valid)}
+                    disabled={
+                      isSaving ||
+                      isValidating ||
+                      (validationResult !== null && !validationResult.valid)
+                    }
                     onClick={() => handleSubmit()}
                     className="gap-2 text-xs font-medium"
                   >

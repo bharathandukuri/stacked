@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { useNavigate } from "@tanstack/react-router"
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Check,
@@ -11,23 +11,27 @@ import {
   Settings2,
   Tag,
   AlertCircle,
-} from "lucide-react"
+  Lock,
+  BookOpen,
+} from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { toast } from "@/components/ui/toast"
-import { TopicManagerDialog } from "./topic-manager-dialog"
-import { McqPreviewModal } from "./mcq-preview-modal"
-import { McqMarkdownField } from "./mcq-markdown-field"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import { toast } from "@/components/ui/toast";
+import { McqPreviewModal } from "./mcq-preview-modal";
+import { McqMarkdownField } from "./mcq-markdown-field";
 import {
   useMcqQuestion,
   useCreateMcqQuestion,
   useUpdateMcqQuestion,
   useMcqTopics,
-} from "@/hooks/use-mcq"
+} from "@/hooks/use-mcq";
 import type {
   CreateMcqPayload,
   McqDifficulty,
@@ -35,16 +39,17 @@ import type {
   McqStatus,
   McqType,
   UpdateMcqPayload,
-} from "@/types/mcq"
-import { cn } from "@/lib/utils"
+} from "@/types/mcq";
+import { cn } from "@/lib/utils";
 
 interface McqStudioProps {
-  mode?: "create" | "edit"
-  questionId?: string
+  mode?: "create" | "edit";
+  questionId?: string;
+  initialTopic?: string;
 }
 
 function generateOptionId() {
-  return "opt_" + Math.random().toString(36).substring(2, 9)
+  return "opt_" + Math.random().toString(36).substring(2, 9);
 }
 
 const DEFAULT_OPTIONS = [
@@ -52,63 +57,77 @@ const DEFAULT_OPTIONS = [
   { id: generateOptionId(), text: "", explanation: "" },
   { id: generateOptionId(), text: "", explanation: "" },
   { id: generateOptionId(), text: "", explanation: "" },
-]
+];
 
-export function McqStudio({ mode = "create", questionId }: McqStudioProps) {
-  const isEditMode = mode === "edit" && Boolean(questionId)
+export function McqStudio({
+  mode = "create",
+  questionId,
+  initialTopic,
+}: McqStudioProps) {
+  const isEditMode = mode === "edit" && Boolean(questionId);
   const { data: initialData, isLoading: isLoadingQuestion } = useMcqQuestion(
     isEditMode ? questionId : undefined
-  )
+  );
 
   if (isEditMode && isLoadingQuestion) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
-    )
+    );
   }
 
   return (
     <McqStudioForm
-      key={initialData?.id || "create-new"}
+      key={
+        initialData?.id ||
+        (initialTopic ? `create-${initialTopic}` : "create-new")
+      }
       initialData={initialData}
       isEditMode={isEditMode}
       questionId={questionId}
+      initialTopic={initialTopic}
     />
-  )
+  );
 }
 
 interface McqStudioFormProps {
-  initialData?: McqQuestionDetail
-  isEditMode: boolean
-  questionId?: string
+  initialData?: McqQuestionDetail;
+  isEditMode: boolean;
+  questionId?: string;
+  initialTopic?: string;
 }
 
 function McqStudioForm({
   initialData,
   isEditMode,
   questionId,
+  initialTopic,
 }: McqStudioFormProps) {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   // Query and mutations
-  const { data: topicList = [] } = useMcqTopics()
-  const createMutation = useCreateMcqQuestion()
-  const updateMutation = useUpdateMcqQuestion()
+  const { data: topicList = [] } = useMcqTopics();
+  const createMutation = useCreateMcqQuestion();
+  const updateMutation = useUpdateMcqQuestion();
 
   // Form State initialized from initialData or defaults
-  const [title, setTitle] = useState(initialData?.title || "")
-  const [content, setContent] = useState(initialData?.content || "")
-  const [type, setType] = useState<McqType>(initialData?.type || "SINGLE_CHOICE")
+  const [title, setTitle] = useState(initialData?.title || "");
+  const [content, setContent] = useState(initialData?.content || "");
+  const [type, setType] = useState<McqType>(
+    initialData?.type || "SINGLE_CHOICE"
+  );
   const [difficulty, setDifficulty] = useState<McqDifficulty>(
     initialData?.difficulty || "MEDIUM"
-  )
+  );
   const [status, setStatus] = useState<McqStatus>(
     initialData?.status || "DRAFT"
-  )
-  const [topics, setTopics] = useState<string[]>(initialData?.topics || [])
-  const [tagInput, setTagInput] = useState("")
-  const [tags, setTags] = useState<string[]>(initialData?.tags || [])
+  );
+  const [topics, setTopics] = useState<string[]>(
+    initialData?.topics || (initialTopic ? [initialTopic] : [])
+  );
+  const [tagInput, setTagInput] = useState("");
+  const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [options, setOptions] = useState<
     { id: string; text: string; explanation?: string | null }[]
   >(
@@ -117,73 +136,75 @@ function McqStudioForm({
       text: opt.text,
       explanation: opt.explanation || "",
     })) || DEFAULT_OPTIONS
-  )
+  );
   const [correctOptionIds, setCorrectOptionIds] = useState<string[]>(
     initialData?.correctOptionIds || []
-  )
+  );
   const [explanation, setExplanation] = useState(
     initialData?.explanation || ""
-  )
+  );
   const [shuffleOptions, setShuffleOptions] = useState(
     initialData?.shuffleOptions ?? true
-  )
+  );
   const [imageFileIds, setImageFileIds] = useState<string[]>(
     initialData?.imageFileIds || []
-  )
+  );
 
   // UI state
-  const [topicManagerOpen, setTopicManagerOpen] = useState(false)
-  const [previewModalOpen, setPreviewModalOpen] = useState(false)
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   // Handle type change adjustments
   const handleTypeChange = (newType: McqType) => {
-    setType(newType)
+    setType(newType);
     if (newType === "BOOLEAN") {
       const boolOptions = [
         { id: "opt_true", text: "True", explanation: "" },
         { id: "opt_false", text: "False", explanation: "" },
-      ]
-      setOptions(boolOptions)
-      setCorrectOptionIds(["opt_true"])
+      ];
+      setOptions(boolOptions);
+      setCorrectOptionIds(["opt_true"]);
     } else if (newType === "SINGLE_CHOICE") {
       // If multiple were previously selected, pick only the first
       if (correctOptionIds.length > 1) {
-        setCorrectOptionIds([correctOptionIds[0]])
+        setCorrectOptionIds([correctOptionIds[0]]);
       }
     }
-  }
+  };
 
   // Option text change
   const handleOptionTextChange = (index: number, text: string) => {
     setOptions((prev) => {
-      const updated = [...prev]
-      updated[index] = { ...updated[index], text }
-      return updated
-    })
-  }
+      const updated = [...prev];
+      updated[index] = { ...updated[index], text };
+      return updated;
+    });
+  };
 
   // Option explanation change
-  const handleOptionExplanationChange = (index: number, explanation: string) => {
+  const handleOptionExplanationChange = (
+    index: number,
+    explanation: string
+  ) => {
     setOptions((prev) => {
-      const updated = [...prev]
-      updated[index] = { ...updated[index], explanation }
-      return updated
-    })
-  }
+      const updated = [...prev];
+      updated[index] = { ...updated[index], explanation };
+      return updated;
+    });
+  };
 
   // Toggle correct option
   const toggleCorrectOption = (optionId: string) => {
     if (type === "SINGLE_CHOICE" || type === "BOOLEAN") {
-      setCorrectOptionIds([optionId])
+      setCorrectOptionIds([optionId]);
     } else {
       setCorrectOptionIds((prev) =>
         prev.includes(optionId)
           ? prev.filter((id) => id !== optionId)
           : [...prev, optionId]
-      )
+      );
     }
-  }
+  };
 
   // Add option
   const addOption = () => {
@@ -192,12 +213,12 @@ function McqStudioForm({
         title: "Limit Reached",
         description: "Maximum 8 options allowed per question.",
         type: "error",
-      })
-      return
+      });
+      return;
     }
-    const newId = generateOptionId()
-    setOptions((prev) => [...prev, { id: newId, text: "", explanation: "" }])
-  }
+    const newId = generateOptionId();
+    setOptions((prev) => [...prev, { id: newId, text: "", explanation: "" }]);
+  };
 
   // Remove option
   const removeOption = (index: number) => {
@@ -206,63 +227,56 @@ function McqStudioForm({
         title: "Minimum Options Required",
         description: "A question must have at least 2 options.",
         type: "error",
-      })
-      return
+      });
+      return;
     }
-    const removedId = options[index].id
-    setOptions((prev) => prev.filter((_, i) => i !== index))
-    setCorrectOptionIds((prev) => prev.filter((id) => id !== removedId))
-  }
-
-  // Topic toggle
-  const toggleTopic = (topicName: string) => {
-    setTopics((prev) =>
-      prev.includes(topicName)
-        ? prev.filter((t) => t !== topicName)
-        : [...prev, topicName]
-    )
-  }
+    const removedId = options[index].id;
+    setOptions((prev) => prev.filter((_, i) => i !== index));
+    setCorrectOptionIds((prev) => prev.filter((id) => id !== removedId));
+  };
 
   // Tag add/remove
   const handleAddTag = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault()
-      const trimmed = tagInput.trim().replace(/^,+|,+$/g, "")
+      e.preventDefault();
+      const trimmed = tagInput.trim().replace(/^,+|,+$/g, "");
       if (trimmed && !tags.includes(trimmed)) {
-        setTags((prev) => [...prev, trimmed])
-        setTagInput("")
+        setTags((prev) => [...prev, trimmed]);
+        setTagInput("");
       }
     }
-  }
+  };
 
   const removeTag = (tagToRemove: string) => {
-    setTags((prev) => prev.filter((t) => t !== tagToRemove))
-  }
+    setTags((prev) => prev.filter((t) => t !== tagToRemove));
+  };
 
   // Validation
   const validateForm = (): boolean => {
-    const errors: string[] = []
-    if (!title.trim()) errors.push("Question title is required.")
-    if (!content.trim()) errors.push("Question prompt content is required.")
-    if (options.length < 2) errors.push("At least 2 options are required.")
+    const errors: string[] = [];
+    if (!title.trim()) errors.push("Question title is required.");
+    if (!content.trim()) errors.push("Question prompt content is required.");
+    if (options.length < 2) errors.push("At least 2 options are required.");
 
-    const emptyOptionIndex = options.findIndex((opt) => !opt.text.trim())
+    const emptyOptionIndex = options.findIndex((opt) => !opt.text.trim());
     if (emptyOptionIndex !== -1) {
-      errors.push(`Option ${emptyOptionIndex + 1} text cannot be blank.`)
+      errors.push(`Option ${emptyOptionIndex + 1} text cannot be blank.`);
     }
 
     if (correctOptionIds.length === 0) {
-      errors.push("At least one option must be marked as correct.")
+      errors.push("At least one option must be marked as correct.");
     } else if (
       (type === "SINGLE_CHOICE" || type === "BOOLEAN") &&
       correctOptionIds.length !== 1
     ) {
-      errors.push("Single choice and boolean questions must have exactly 1 correct answer.")
+      errors.push(
+        "Single choice and boolean questions must have exactly 1 correct answer."
+      );
     }
 
-    setValidationErrors(errors)
-    return errors.length === 0
-  }
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
 
   // Submit handler
   const handleSave = async () => {
@@ -271,23 +285,24 @@ function McqStudioForm({
         title: "Validation Error",
         description: "Please fix the highlighted errors before saving.",
         type: "error",
-      })
-      return
+      });
+      return;
     }
 
     const cleanedOptions = options.map((opt) => ({
       id: opt.id,
       text: opt.text.trim(),
       explanation: opt.explanation?.trim() || null,
-    }))
+    }));
 
     if (isPublishedReadOnly) {
       toast.add({
         title: "Question is Published",
-        description: "Only draft questions can be edited. Unpublish to DRAFT first.",
+        description:
+          "Only draft questions can be edited. Unpublish to DRAFT first.",
         type: "warning",
-      })
-      return
+      });
+      return;
     }
 
     if (isEditMode && questionId) {
@@ -297,16 +312,20 @@ function McqStudioForm({
         type,
         difficulty,
         status,
-        topics,
+        topics: activeTopic ? [activeTopic] : topics,
         tags,
         options: cleanedOptions,
         correctOptionIds,
         explanation: explanation.trim() || null,
         shuffleOptions,
         imageFileIds,
+      };
+      await updateMutation.mutateAsync({ id: questionId, payload });
+      if (activeTopic) {
+        navigate({ to: "/admin/mcq", search: { topic: activeTopic } });
+      } else {
+        navigate({ to: "/admin/mcq", search: {} });
       }
-      await updateMutation.mutateAsync({ id: questionId, payload })
-      navigate({ to: "/admin/mcq" })
     } else {
       const payload: CreateMcqPayload = {
         title: title.trim(),
@@ -314,20 +333,35 @@ function McqStudioForm({
         type,
         difficulty,
         status,
-        topics,
+        topics: activeTopic ? [activeTopic] : topics,
         tags,
         options: cleanedOptions,
         correctOptionIds,
         explanation: explanation.trim() || null,
         shuffleOptions,
         imageFileIds,
+      };
+      await createMutation.mutateAsync(payload);
+      if (activeTopic) {
+        navigate({ to: "/admin/mcq", search: { topic: activeTopic } });
+      } else {
+        navigate({ to: "/admin/mcq", search: {} });
       }
-      await createMutation.mutateAsync(payload)
-      navigate({ to: "/admin/mcq" })
     }
-  }
+  };
 
-  const isPublishedReadOnly = isEditMode && initialData?.status === "PUBLISHED"
+  const isPublishedReadOnly = isEditMode && initialData?.status === "PUBLISHED";
+
+  // Active topic reference
+  const activeTopic = topics[0] || initialTopic || "";
+
+  const handleBack = () => {
+    if (activeTopic) {
+      navigate({ to: "/admin/mcq", search: { topic: activeTopic } });
+    } else {
+      navigate({ to: "/admin/mcq", search: {} });
+    }
+  };
 
   // Build live preview object
   const previewQuestion: McqQuestionDetail = {
@@ -337,7 +371,7 @@ function McqStudioForm({
     type,
     difficulty,
     status,
-    topics,
+    topics: activeTopic ? [activeTopic] : topics,
     tags,
     options: options.map((o) => ({
       id: o.id,
@@ -348,9 +382,9 @@ function McqStudioForm({
     explanation: explanation || null,
     shuffleOptions,
     imageFileIds,
-  }
+  };
 
-  const isSaving = createMutation.isPending || updateMutation.isPending
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -360,11 +394,11 @@ function McqStudioForm({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate({ to: "/admin/mcq" })}
+            onClick={handleBack}
             className="gap-1.5 text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to MCQs
+            {activeTopic ? `Back to ${activeTopic}` : "Back to Topics"}
           </Button>
           <div className="h-4 w-px bg-border" />
           <span className="text-sm font-semibold tracking-tight text-foreground">
@@ -375,10 +409,10 @@ function McqStudioForm({
               status === "PUBLISHED"
                 ? "default"
                 : status === "DRAFT"
-                ? "secondary"
-                : "outline"
+                  ? "secondary"
+                  : "outline"
             }
-            className="text-[10px] uppercase font-bold tracking-wider"
+            className="text-[10px] font-bold tracking-wider uppercase"
           >
             {status}
           </Badge>
@@ -389,7 +423,7 @@ function McqStudioForm({
             variant="outline"
             size="sm"
             onClick={() => setPreviewModalOpen(true)}
-            className="gap-1.5 text-xs h-8"
+            className="h-8 gap-1.5 text-xs"
           >
             <Eye className="h-3.5 w-3.5" />
             Candidate Preview
@@ -399,7 +433,7 @@ function McqStudioForm({
             size="sm"
             onClick={handleSave}
             disabled={isSaving || isPublishedReadOnly}
-            className="gap-1.5 text-xs h-8"
+            className="h-8 gap-1.5 text-xs"
           >
             {isSaving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -412,15 +446,17 @@ function McqStudioForm({
       </header>
 
       {/* Main Studio Body: Spacious Grid */}
-      <main className="mx-auto w-full max-w-[1600px] grid flex-1 grid-cols-1 gap-6 p-6 xl:grid-cols-4">
+      <main className="mx-auto grid w-full max-w-[1600px] flex-1 grid-cols-1 gap-6 p-6 xl:grid-cols-4">
         {/* Left Column (3 spans): Full Width Markdown Editors & Options */}
         <div className="space-y-6 xl:col-span-3">
           {isPublishedReadOnly && (
-            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-300 flex items-center justify-between">
+            <div className="flex items-center justify-between rounded-lg border border-amber-500/50 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-300">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                 <span>
-                  This MCQ is currently <strong>PUBLISHED</strong> and read-only. Only draft questions can be edited. Unpublish to DRAFT to make changes.
+                  This MCQ is currently <strong>PUBLISHED</strong> and
+                  read-only. Only draft questions can be edited. Unpublish to
+                  DRAFT to make changes.
                 </span>
               </div>
             </div>
@@ -429,7 +465,7 @@ function McqStudioForm({
           {/* Validation Banner */}
           {validationErrors.length > 0 && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3.5 text-xs text-destructive">
-              <div className="flex items-center gap-1.5 font-semibold mb-1">
+              <div className="mb-1 flex items-center gap-1.5 font-semibold">
                 <AlertCircle className="h-4 w-4" />
                 Please correct the following:
               </div>
@@ -443,8 +479,9 @@ function McqStudioForm({
 
           {/* Title & Core Meta */}
           <div className="space-y-3 rounded-xl border border-border/70 bg-card p-5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Question Title / Header <span className="text-destructive">*</span>
+            <label className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              Question Title / Header{" "}
+              <span className="text-destructive">*</span>
             </label>
             <Input
               placeholder="e.g. Time Complexity of QuickSort Worst Case"
@@ -491,7 +528,7 @@ function McqStudioForm({
                   variant="outline"
                   size="sm"
                   onClick={addOption}
-                  className="gap-1.5 text-xs h-7"
+                  className="h-7 gap-1.5 text-xs"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add Option
@@ -501,8 +538,8 @@ function McqStudioForm({
 
             <div className="space-y-4">
               {options.map((option, index) => {
-                const isCorrect = correctOptionIds.includes(option.id)
-                const letter = String.fromCharCode(65 + index)
+                const isCorrect = correctOptionIds.includes(option.id);
+                const letter = String.fromCharCode(65 + index);
 
                 return (
                   <div
@@ -520,7 +557,7 @@ function McqStudioForm({
                         type="button"
                         onClick={() => toggleCorrectOption(option.id)}
                         className={cn(
-                          "mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-xs font-bold transition-all cursor-pointer",
+                          "mt-1 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border text-xs font-bold transition-all",
                           isCorrect
                             ? "border-emerald-600 bg-emerald-600 text-white shadow-xs"
                             : "border-border/80 bg-card text-muted-foreground hover:border-primary/60"
@@ -552,7 +589,7 @@ function McqStudioForm({
                             <Input
                               value={option.text}
                               disabled
-                              className="bg-card font-medium text-sm"
+                              className="bg-card text-sm font-medium"
                             />
                           ) : (
                             <McqMarkdownField
@@ -579,7 +616,8 @@ function McqStudioForm({
                         {/* Optional Explanation for Option */}
                         <div className="space-y-1 pt-1">
                           <span className="text-[11px] font-medium text-muted-foreground">
-                            Option {letter} Rationale (Optional explanation shown upon review)
+                            Option {letter} Rationale (Optional explanation
+                            shown upon review)
                           </span>
                           <McqMarkdownField
                             id={`mcq-opt-exp-${option.id}`}
@@ -616,7 +654,7 @@ function McqStudioForm({
                       )}
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           </div>
@@ -677,9 +715,7 @@ function McqStudioForm({
               </label>
               <NativeSelect
                 value={difficulty}
-                onChange={(e) =>
-                  setDifficulty(e.target.value as McqDifficulty)
-                }
+                onChange={(e) => setDifficulty(e.target.value as McqDifficulty)}
               >
                 <NativeSelectOption value="EASY">Easy</NativeSelectOption>
                 <NativeSelectOption value="MEDIUM">Medium</NativeSelectOption>
@@ -722,101 +758,125 @@ function McqStudioForm({
             </div>
           </div>
 
-          {/* Topics & Categorization */}
-          <div className="space-y-4 rounded-xl border border-border/70 bg-card p-5">
+          {/* Main Topic (Locked) */}
+          <div className="space-y-3 rounded-xl border border-border/70 bg-card p-5">
+            <div className="flex items-center justify-between border-b border-border/50 pb-3">
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Main Topic
+                </h3>
+              </div>
+              <Badge
+                variant="outline"
+                className="gap-1 font-mono text-[10px] text-muted-foreground"
+              >
+                <Lock className="size-2.5" />
+                Locked
+              </Badge>
+            </div>
+
+            {activeTopic ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <BookOpen className="size-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground">
+                        {activeTopic}
+                      </span>
+                      <p className="text-[11px] text-muted-foreground">
+                        Assigned Topic Workspace
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  This question is locked to <strong>{activeTopic}</strong>. To
+                  assign to another topic, return to the Topics catalog.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">
+                  Assign Topic
+                </label>
+                <NativeSelect
+                  value={topics[0] || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTopics(val ? [val] : []);
+                  }}
+                  className="text-xs"
+                >
+                  <NativeSelectOption value="">
+                    Select a topic...
+                  </NativeSelectOption>
+                  {topicList.map((t) => (
+                    <NativeSelectOption key={t.id} value={t.name}>
+                      {t.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+            )}
+          </div>
+
+          {/* Subtopics / Tags */}
+          <div className="space-y-3 rounded-xl border border-border/70 bg-card p-5">
             <div className="flex items-center justify-between border-b border-border/50 pb-3">
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold text-foreground">
-                  Topic Tags
+                  Subtopics
                 </h3>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setTopicManagerOpen(true)}
-                className="text-xs text-primary hover:text-primary/80 h-7 px-2"
-              >
-                Manage Topics
-              </Button>
+              <span className="text-[10px] text-muted-foreground">
+                Press Enter to add
+              </span>
             </div>
 
-            {/* Available Topics Pill Selector */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Select from System Topics:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {topicList.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">
-                    No topics found. Click &quot;Manage Topics&quot; to create one.
-                  </p>
-                ) : (
-                  topicList.map((t) => {
-                    const isSelected = topics.includes(t.name)
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => toggleTopic(t.name)}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-all",
-                          isSelected
-                            ? "bg-primary text-primary-foreground shadow-xs"
-                            : "bg-muted/60 text-muted-foreground hover:bg-muted"
-                        )}
-                      >
-                        {isSelected && <Check className="h-3 w-3" />}
-                        {t.name}
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Custom Search Tags */}
-            <div className="space-y-2 border-t border-border/50 pt-3">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Custom Tags (press Enter to add)
-              </span>
+            <div className="space-y-2.5">
               <Input
-                placeholder="e.g. spring-boot-4, reactive, dynamic-programming"
+                placeholder="e.g. percentages, number-system"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleAddTag}
                 className="h-8 text-xs"
               />
-              {tags.length > 0 && (
+
+              {tags.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {tags.map((tag) => (
                     <Badge
                       key={tag}
-                      variant="outline"
-                      className="gap-1 bg-accent/30 text-xs"
+                      variant="secondary"
+                      className="gap-1.5 bg-muted px-2 py-0.5 text-xs font-normal hover:bg-muted"
                     >
-                      {tag}
+                      <span>#{tag}</span>
                       <button
                         type="button"
                         onClick={() => removeTag(tag)}
-                        className="text-muted-foreground hover:text-foreground"
+                        className="cursor-pointer text-muted-foreground hover:text-destructive"
+                        title={`Remove subtopic ${tag}`}
                       >
                         ×
                       </button>
                     </Badge>
                   ))}
                 </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground italic">
+                  No subtopics added yet. Add subtopics to enable fine-grained
+                  filtering.
+                </p>
               )}
             </div>
           </div>
         </div>
       </main>
-
-      {/* Topics Manager Modal */}
-      <TopicManagerDialog
-        open={topicManagerOpen}
-        onOpenChange={setTopicManagerOpen}
-      />
 
       {/* Candidate Preview Modal */}
       <McqPreviewModal
@@ -825,7 +885,7 @@ function McqStudioForm({
         onOpenChange={setPreviewModalOpen}
       />
     </div>
-  )
+  );
 }
 
-export default McqStudio
+export default McqStudio;

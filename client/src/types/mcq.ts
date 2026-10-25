@@ -101,6 +101,7 @@ export interface UpdateMcqTopicPayload {
 export interface McqFilterParams {
   search?: string
   topic?: string
+  tag?: string
   difficulty?: McqDifficulty | ""
   type?: McqType | ""
   status?: McqStatus | ""

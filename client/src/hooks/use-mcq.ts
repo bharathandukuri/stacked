@@ -13,6 +13,7 @@ import type {
   McqStatus,
   McqTopicItem,
   UpdateMcqPayload,
+  UpdateMcqTopicPayload,
 } from "@/types/mcq"
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -293,6 +294,33 @@ export function useCreateMcqTopic() {
       toast.add({
         title: "Failed to Create Topic",
         description: extractErrorMessage(error, "Could not create topic."),
+        type: "error",
+      })
+    },
+  })
+}
+
+/**
+ * Hook to update an existing MCQ topic
+ */
+export function useUpdateMcqTopic() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateMcqTopicPayload }) =>
+      mcqService.updateTopic(id, payload),
+    onSuccess: (updated) => {
+      toast.add({
+        title: "Topic Updated",
+        description: `Topic "${updated.name}" has been updated.`,
+        type: "success",
+      })
+      queryClient.invalidateQueries({ queryKey: mcqKeys.topics() })
+    },
+    onError: (error: unknown) => {
+      toast.add({
+        title: "Failed to Update Topic",
+        description: extractErrorMessage(error, "Could not update topic."),
         type: "error",
       })
     },

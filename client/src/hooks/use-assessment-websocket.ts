@@ -69,6 +69,8 @@ export function useAssessmentWebSocket({
     }
   }, [])
 
+  const connectRef = useRef<() => void>(() => {})
+
   const connect = useCallback(() => {
     if (
       !enabled ||
@@ -224,7 +226,7 @@ export function useAssessmentWebSocket({
           reconnectAttemptsRef.current += 1
           reconnectTimeoutRef.current = window.setTimeout(() => {
             if (!unmountedRef.current && !isSupersededRef.current) {
-              connect()
+              connectRef.current()
             }
           }, delay)
         }
@@ -237,6 +239,10 @@ export function useAssessmentWebSocket({
       setStatus((prev) => ({ ...prev, isConnecting: false, isConnected: false }))
     }
   }, [accessToken, assessmentId, attemptId, enabled, clearTimers])
+
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
 
   useEffect(() => {
     unmountedRef.current = false

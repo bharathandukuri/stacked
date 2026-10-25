@@ -51,12 +51,13 @@ export function OverviewTab({
   isLoading,
 }: OverviewTabProps) {
   // Aggregate daily attempt trends (started vs submitted)
+  const assessmentTrends = assessments?.trends
   const attemptTrendData = useMemo(() => {
-    if (!assessments?.trends || assessments.trends.length === 0) return []
+    if (!assessmentTrends || assessmentTrends.length === 0) return []
 
     const map = new Map<string, { date: string; started: number; submitted: number }>()
 
-    assessments.trends.forEach((t) => {
+    assessmentTrends.forEach((t) => {
       const existing = map.get(t.date) || { date: t.date, started: 0, submitted: 0 }
       if (t.metricKey === "ATTEMPT_STARTED") {
         existing.started += t.count
@@ -80,7 +81,7 @@ export function OverviewTab({
           formattedDate: label,
         }
       })
-  }, [assessments?.trends])
+  }, [assessmentTrends])
 
   // Content published vs draft breakdown
   const contentBalanceData = useMemo(() => {

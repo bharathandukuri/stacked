@@ -1,5 +1,6 @@
 import { type ReactNode } from "react"
 import { useFieldContext } from "@/hooks/form/create-form-hooks"
+import { cn } from "@/lib/utils"
 import {
   Field,
   FieldContent,
@@ -14,12 +15,14 @@ export type FormControlProps = {
   required?: boolean
   labelAction?: ReactNode
   validator?: ReactNode
+  className?: string
 }
 
 export type FormBaseProps = FormControlProps & {
   children: ReactNode
   horizontal?: boolean
   controlFirst?: boolean
+  className?: string
 }
 
 export function FormBase({
@@ -31,6 +34,7 @@ export function FormBase({
   validator,
   controlFirst,
   horizontal,
+  className,
 }: FormBaseProps) {
   const field = useFieldContext()
   const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -39,6 +43,7 @@ export function FormBase({
     <Field
       data-invalid={isInvalid}
       orientation={horizontal ? "horizontal" : undefined}
+      className={cn("min-w-0 max-w-full", className)}
     >
       {controlFirst ? (
         <>

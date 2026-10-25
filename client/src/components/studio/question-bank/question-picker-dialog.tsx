@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  Tag,
 } from "lucide-react"
 import {
   Dialog,
@@ -71,6 +72,8 @@ export function QuestionPickerDialog({
   // MCQ Tab Filters & Pagination
   const [mcqSearch, setMcqSearch] = useState("")
   const deferredMcqSearch = useDeferredValue(mcqSearch)
+  const [mcqSubtopic, setMcqSubtopic] = useState("")
+  const deferredMcqSubtopic = useDeferredValue(mcqSubtopic)
   const [mcqDifficulty, setMcqDifficulty] = useState<string>("ALL")
   const [mcqType, setMcqType] = useState<string>("ALL")
   const [mcqTopic, setMcqTopic] = useState<string>("ALL")
@@ -93,6 +96,7 @@ export function QuestionPickerDialog({
       mcqDifficulty !== "ALL" ? (mcqDifficulty as McqDifficulty) : undefined,
     type: mcqType !== "ALL" ? (mcqType as McqType) : undefined,
     topic: mcqTopic !== "ALL" ? mcqTopic : undefined,
+    tag: deferredMcqSubtopic.trim() || undefined,
     page: mcqPage,
     size: 6,
   })
@@ -335,6 +339,19 @@ export function QuestionPickerDialog({
                   ))}
                 </NativeSelect>
               )}
+
+              <div className="relative w-36">
+                <Tag className="absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Subtopic..."
+                  value={mcqSubtopic}
+                  onChange={(e) => {
+                    setMcqSubtopic(e.target.value)
+                    setMcqPage(0)
+                  }}
+                  className="pl-7 text-xs h-8"
+                />
+              </div>
             </div>
 
             {/* MCQ List Table */}

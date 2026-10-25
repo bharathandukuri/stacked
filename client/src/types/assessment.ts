@@ -234,6 +234,7 @@ export interface SavedQuestionResponse {
   bestAwardedPoints?: number
   maxPoints?: number
   passedTestcases?: number
+  bestPassedTestcases?: number
   totalTestcases?: number
   submissions?: CodingSubmissionRecord[]
   savedAt?: string

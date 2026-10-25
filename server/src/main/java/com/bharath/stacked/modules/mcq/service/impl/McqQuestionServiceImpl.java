@@ -156,6 +156,11 @@ public class McqQuestionServiceImpl implements McqQuestionService {
             criteriaList.add(Criteria.where("topics").regex(topicRegex, "i"));
         }
 
+        if (filter.getTag() != null && !filter.getTag().trim().isEmpty()) {
+            String tagRegex = "^" + Pattern.quote(filter.getTag().trim()) + "$";
+            criteriaList.add(Criteria.where("tags").regex(tagRegex, "i"));
+        }
+
         if (filter.getSearch() != null && !filter.getSearch().trim().isEmpty()) {
             String sanitizedSearch = Pattern.quote(filter.getSearch().trim());
             criteriaList.add(new Criteria().orOperator(
