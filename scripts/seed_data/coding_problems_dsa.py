@@ -395,6 +395,37 @@ CODING_PROBLEMS_DSA = [
             "        seen[num] = i\n\n"
             "solve()\n"
         ),
+        "requireVerificationScript": True,
+        "verificationScriptLanguage": "python-3.12",
+        "verificationScript": (
+            "import sys\n\n"
+            "# argv[1]: input file (contains n target and nums)\n"
+            "# argv[2]: candidate output file (contains two space-separated indices)\n"
+            "# argv[3]: reference solution output file\n\n"
+            "with open(sys.argv[1], 'r') as f:\n"
+            "    tokens = [int(x) for x in f.read().split()]\n"
+            "    if len(tokens) < 2:\n"
+            "        sys.exit(1)\n"
+            "    n = tokens[0]\n"
+            "    target = tokens[1]\n"
+            "    nums = tokens[2:2+n]\n\n"
+            "with open(sys.argv[2], 'r') as f:\n"
+            "    out_tokens = [int(x) for x in f.read().split()]\n\n"
+            "if len(out_tokens) != 2:\n"
+            "    print(f'Expected 2 space-separated indices, got {len(out_tokens)}', file=sys.stderr)\n"
+            "    sys.exit(1)\n\n"
+            "i, j = out_tokens[0], out_tokens[1]\n\n"
+            "if i == j:\n"
+            "    print(f'Cannot use the same element twice (i={i}, j={j})', file=sys.stderr)\n"
+            "    sys.exit(1)\n\n"
+            "if not (0 <= i < n and 0 <= j < n):\n"
+            "    print(f'Indices out of range [0, {n-1}]: i={i}, j={j}', file=sys.stderr)\n"
+            "    sys.exit(1)\n\n"
+            "if nums[i] + nums[j] != target:\n"
+            "    print(f'nums[{i}] ({nums[i]}) + nums[{j}] ({nums[j]}) = {nums[i] + nums[j]} != target ({target})', file=sys.stderr)\n"
+            "    sys.exit(1)\n\n"
+            "sys.exit(0)\n"
+        ),
         "executionConstraints": {
             "python-3.12": {"timeLimitMs": 2000, "memoryLimitKb": 262144},
             "java-21": {"timeLimitMs": 2000, "memoryLimitKb": 262144},
@@ -686,6 +717,41 @@ CODING_PROBLEMS_DSA = [
             "                    print(' '.join(str(x) for x in res))\n"
             "                    return\n\n"
             "solve()\n"
+        ),
+        "requireVerificationScript": True,
+        "verificationScriptLanguage": "python-3.12",
+        "verificationScript": (
+            "import sys\n"
+            "from collections import Counter\n\n"
+            "# argv[1]: input file (n, k, nums)\n"
+            "# argv[2]: candidate output file (k elements)\n"
+            "# argv[3]: reference solution output file\n\n"
+            "with open(sys.argv[1], 'r') as f:\n"
+            "    tokens = [int(x) for x in f.read().split()]\n"
+            "    if len(tokens) < 2:\n"
+            "        sys.exit(1)\n"
+            "    n = tokens[0]\n"
+            "    k = tokens[1]\n"
+            "    nums = tokens[2:2+n]\n\n"
+            "with open(sys.argv[2], 'r') as f:\n"
+            "    cand = [int(x) for x in f.read().split()]\n\n"
+            "if len(cand) != k:\n"
+            "    print(f'Expected {k} numbers, got {len(cand)}', file=sys.stderr)\n"
+            "    sys.exit(1)\n\n"
+            "if len(set(cand)) != k:\n"
+            "    print(f'Duplicate values in output: {cand}', file=sys.stderr)\n"
+            "    sys.exit(1)\n\n"
+            "counts = Counter(nums)\n"
+            "for x in cand:\n"
+            "    if x not in counts:\n"
+            "        print(f'Value {x} is not in input array', file=sys.stderr)\n"
+            "        sys.exit(1)\n\n"
+            "min_chosen_freq = min(counts[x] for x in cand)\n"
+            "for num, freq in counts.items():\n"
+            "    if num not in cand and freq > min_chosen_freq:\n"
+            "        print(f'Element {num} with frequency {freq} was omitted while element with frequency {min_chosen_freq} was included', file=sys.stderr)\n"
+            "        sys.exit(1)\n\n"
+            "sys.exit(0)\n"
         ),
         "executionConstraints": {
             "python-3.12": {"timeLimitMs": 2000, "memoryLimitKb": 262144},
@@ -1390,6 +1456,241 @@ CODING_PROBLEMS_DSA = [
             # The optimal solution checks (x - 1) 10,000 times, only initiates streak at 1, taking ~3ms.
             {"stdin": f"10000\n{' '.join(str(i) for i in range(1, 10001))}", "dbInit": None}
         ]
-    }
+    },
+
+    # --------------------------------------------------------------------------
+    # 10. Sequence Game (Codeforces 1862B)
+    # --------------------------------------------------------------------------
+    {
+        "title": "Sequence Game",
+        "slug": "sequence-game",
+        "difficulty": "EASY",
+        "problemType": "GENERIC",
+        "topics": ["Array", "Greedy", "Constructive"],
+        "hints": [
+            "Notice the rule: a value b_i from the original sequence a is recorded if and only if it is the first element or b_i >= b_{i-1}.",
+            "If b_i < b_{i-1}, you can insert an extra intermediate element (such as b_i) right before b_i so that the sequence remains valid and length does not exceed 2*n."
+        ],
+        "statement": (
+            "Tema and Vika are playing the following game.\n\n"
+            "First, Vika comes up with a sequence of positive integers $a$ of length $m$ and writes it down on a piece of paper. "
+            "Then she takes a new piece of paper and writes down the sequence $b$ according to the following rule:\n\n"
+            "- First, she writes down $a_1$.\n"
+            "- Then, she writes down only those $a_i$ ($2 \\le i \\le m$) such that $a_{i-1} \\le a_i$. Let the length of this sequence be denoted as $n$.\n\n"
+            "For example, from the sequence $a = [4, 3, 2, 6, 3, 3]$, Vika will obtain the sequence $b = [4, 6, 3]$.\n\n"
+            "She then gives the piece of paper with the sequence $b$ to Tema. He, in turn, tries to guess the sequence $a$. "
+            "Tema considers winning in such a game highly unlikely, but still wants to find at least one sequence $a$ that could have been originally chosen by Vika. "
+            "Help him and output any such sequence.\n\n"
+            "Note that the length of the sequence you output should not exceed the input sequence length by more than two times ($n \\le m \\le 2n$).\n\n"
+            "### Example 1:\n"
+            "```\n"
+            "Input:\n"
+            "6\n"
+            "3\n"
+            "4 6 3\n"
+            "2\n"
+            "1 2\n"
+            "5\n"
+            "1 7 9 5 7\n"
+            "1\n"
+            "144\n"
+            "2\n"
+            "1 1\n"
+            "3\n"
+            "4 3 2\n\n"
+            "Output:\n"
+            "4\n"
+            "4 6 3 3\n"
+            "2\n"
+            "1 2\n"
+            "6\n"
+            "1 7 9 5 5 7\n"
+            "1\n"
+            "144\n"
+            "2\n"
+            "1 1\n"
+            "5\n"
+            "4 3 3 2 2\n"
+            "```\n\n"
+            "### Constraints:\n"
+            "- $1 \\le t \\le 10^4$ (number of test cases)\n"
+            "- $1 \\le n \\le 2 \\cdot 10^5$ (length of sequence $b$)\n"
+            "- $1 \\le b_i \\le 10^9$ (elements of sequence $b$)\n"
+            "- The sum of $n$ over all test cases does not exceed $2 \\cdot 10^5$.\n\n"
+            "### Input / Output Format:\n"
+            "- **Input**:\n"
+            "  - Line 1: An integer $t$, the number of test cases.\n"
+            "  - For each testcase:\n"
+            "    - Line 1: An integer $n$, the length of sequence $b$.\n"
+            "    - Line 2: $n$ space-separated integers $b_1, b_2, \\dots, b_n$.\n"
+            "- **Output**:\n"
+            "  - For each test case, output two lines:\n"
+            "    - Line 1: An integer $m$, the length of the assumed sequence ($n \\le m \\le 2n$).\n"
+            "    - Line 2: $m$ space-separated integers $a_1, a_2, \\dots, a_m$ ($1 \\le a_i \\le 10^9$).\n"
+            "  - If there are multiple suitable sequences, you may output any of them."
+        ),
+        "supportedLanguageIds": ["python-3.12", "java-21", "javascript-node-20", "cpp-23"],
+        "starterCode": {
+            "python-3.12": (
+                "import sys\n\n"
+                "def solve():\n"
+                "    raw = sys.stdin.read().split()\n"
+                "    if not raw:\n"
+                "        return\n"
+                "    t = int(raw[0])\n"
+                "    idx = 1\n"
+                "    for _ in range(t):\n"
+                "        n = int(raw[idx])\n"
+                "        idx += 1\n"
+                "        b = [int(x) for x in raw[idx:idx + n]]\n"
+                "        idx += n\n"
+                "        # TODO: Construct sequence a of length m (n <= m <= 2*n)\n"
+                "        # Print m on first line, then m integers on second line\n"
+                "        pass\n\n"
+                "solve()\n"
+            ),
+            "java-21": (
+                "import java.util.*;\n"
+                "import java.io.*;\n\n"
+                "public class Solution {\n"
+                "    public static void main(String[] args) throws IOException {\n"
+                "        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n"
+                "        String line = br.readLine();\n"
+                "        if (line == null) return;\n"
+                "        StringTokenizer st = new StringTokenizer(line);\n"
+                "        while (!st.hasMoreTokens()) {\n"
+                "            line = br.readLine();\n"
+                "            if (line == null) return;\n"
+                "            st = new StringTokenizer(line);\n"
+                "        }\n"
+                "        int t = Integer.parseInt(st.nextToken());\n"
+                "        // TODO: Read each testcase (n, then b) and output m and sequence a\n"
+                "    }\n"
+                "}\n"
+            ),
+            "javascript-node-20": (
+                "const fs = require('fs');\n\n"
+                "function main() {\n"
+                "    const raw = fs.readFileSync(0, 'utf-8').trim().split(/\\s+/);\n"
+                "    if (!raw[0]) return;\n"
+                "    const t = parseInt(raw[0], 10);\n"
+                "    let idx = 1;\n"
+                "    // TODO: Process t testcases and output m and sequence a\n"
+                "}\n\n"
+                "main();\n"
+            ),
+            "cpp-23": (
+                "#include <iostream>\n"
+                "#include <vector>\n\n"
+                "using namespace std;\n\n"
+                "int main() {\n"
+                "    ios_base::sync_with_stdio(false);\n"
+                "    cin.tie(NULL);\n"
+                "    int t;\n"
+                "    if (!(cin >> t)) return 0;\n"
+                "    while (t--) {\n"
+                "        int n;\n"
+                "        cin >> n;\n"
+                "        vector<int> b(n);\n"
+                "        for (int i = 0; i < n; i++) cin >> b[i];\n"
+                "        // TODO: Construct and print sequence a\n"
+                "    }\n"
+                "    return 0;\n"
+                "}\n"
+            )
+        },
+        "referenceSolutionLanguage": "python-3.12",
+        "referenceSolution": (
+            "import sys\n\n"
+            "def solve():\n"
+            "    raw = sys.stdin.read().split()\n"
+            "    if not raw:\n"
+            "        return\n"
+            "    t = int(raw[0])\n"
+            "    idx = 1\n"
+            "    out = []\n"
+            "    for _ in range(t):\n"
+            "        n = int(raw[idx])\n"
+            "        idx += 1\n"
+            "        b = [int(x) for x in raw[idx:idx + n]]\n"
+            "        idx += n\n"
+            "        a = [b[0]]\n"
+            "        for x in b[1:]:\n"
+            "            if x < a[-1]:\n"
+            "                a.append(x)\n"
+            "            a.append(x)\n"
+            "        out.append(str(len(a)))\n"
+            "        out.append(' '.join(str(x) for x in a))\n"
+            "    print('\\n'.join(out))\n\n"
+            "solve()\n"
+        ),
+        "requireVerificationScript": True,
+        "verificationScriptLanguage": "python-3.12",
+        "verificationScript": (
+            "import sys\n\n"
+            "# argv[1]: input file\n"
+            "# argv[2]: candidate output file\n"
+            "# argv[3]: reference solution output file\n\n"
+            "with open(sys.argv[1], 'r') as f:\n"
+            "    in_tokens = [int(x) for x in f.read().split()]\n\n"
+            "with open(sys.argv[2], 'r') as f:\n"
+            "    out_tokens = [int(x) for x in f.read().split()]\n\n"
+            "if not in_tokens:\n"
+            "    sys.exit(0)\n\n"
+            "t = in_tokens[0]\n"
+            "in_ptr = 1\n"
+            "out_ptr = 0\n\n"
+            "for case in range(1, t + 1):\n"
+            "    if in_ptr >= len(in_tokens):\n"
+            "        print(f'Testcase {case}: Incomplete input data', file=sys.stderr)\n"
+            "        sys.exit(1)\n\n"
+            "    n = in_tokens[in_ptr]\n"
+            "    in_ptr += 1\n"
+            "    b = in_tokens[in_ptr:in_ptr + n]\n"
+            "    in_ptr += n\n\n"
+            "    if out_ptr >= len(out_tokens):\n"
+            "        print(f'Testcase {case}: Output ended prematurely', file=sys.stderr)\n"
+            "        sys.exit(1)\n\n"
+            "    m = out_tokens[out_ptr]\n"
+            "    out_ptr += 1\n\n"
+            "    if not (n <= m <= 2 * n):\n"
+            "        print(f'Testcase {case}: Sequence length m={m} not in [{n}, {2*n}]', file=sys.stderr)\n"
+            "        sys.exit(1)\n\n"
+            "    if out_ptr + m > len(out_tokens):\n"
+            "        print(f'Testcase {case}: Expected {m} elements, but output ended early', file=sys.stderr)\n"
+            "        sys.exit(1)\n\n"
+            "    a = out_tokens[out_ptr:out_ptr + m]\n"
+            "    out_ptr += m\n\n"
+            "    for val in a:\n"
+            "        if val < 1 or val > 10**9:\n"
+            "            print(f'Testcase {case}: Value {val} out of bounds [1, 10^9]', file=sys.stderr)\n"
+            "            sys.exit(1)\n\n"
+            "    # Simulate Vika's rule\n"
+            "    cand_b = [a[0]]\n"
+            "    for i in range(1, m):\n"
+            "        if a[i] >= a[i - 1]:\n"
+            "            cand_b.append(a[i])\n\n"
+            "    if cand_b != b:\n"
+            "        print(f\'Testcase {case}: Vika rule produced {cand_b[:5]}, expected {b[:5]}\', file=sys.stderr)\n"
+            "        sys.exit(1)\n\n"
+            "if out_ptr != len(out_tokens):\n"
+            "    print('Extraneous output tokens found after all test cases', file=sys.stderr)\n"
+            "    sys.exit(1)\n\n"
+            "sys.exit(0)\n"
+        ),
+        "executionConstraints": {
+            "python-3.12": {"timeLimitMs": 3000, "memoryLimitKb": 262144},
+            "java-21": {"timeLimitMs": 2000, "memoryLimitKb": 262144},
+            "javascript-node-20": {"timeLimitMs": 2000, "memoryLimitKb": 262144},
+            "cpp-23": {"timeLimitMs": 1000, "memoryLimitKb": 131072}
+        },
+        "sampleTestcases": [
+            {"stdin": "6\n3\n4 6 3\n2\n1 2\n5\n1 7 9 5 7\n1\n144\n2\n1 1\n3\n4 3 2", "dbInit": None}
+        ],
+        "hiddenTestcases": [
+            {"stdin": "3\n1\n1000000000\n3\n1 1 1\n4\n10 9 8 7", "dbInit": None},
+            {"stdin": "1\n5\n5 4 3 2 1", "dbInit": None}
+        ]
+    },
 ]
 

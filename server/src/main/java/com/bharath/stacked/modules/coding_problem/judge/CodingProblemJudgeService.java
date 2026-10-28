@@ -15,7 +15,6 @@ import java.util.List;
 
 public interface CodingProblemJudgeService {
 
-    String VERIFICATION_DELIMITER = "---STACKED_INPUT_END---";
     String DEFAULT_TESTCASE_DELIMITER = "---STACKED_TESTCASE_DELIMITER---";
 
     record InitializedTestcases(

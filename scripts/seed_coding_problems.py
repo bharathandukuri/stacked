@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Seed Script: Ingest 14 Foundational LeetCode Coding Problems
-- 9 NeetCode 150 Arrays & Hashing (Python, Java, JS, C++)
+Seed Script: Ingest 15 Foundational Coding Problems
+- 10 Algorithmic DSA Problems (with industry-standard 3-file verification scripts)
 - 5 LeetCode SQL 50 Select Essentials (MySQL 8.0)
 
 Idempotent, robust error handling, sandboxed execution verification.

@@ -127,21 +127,29 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
             return referenceOutputs;
         }
 
-        // 3. Run verification script in batch across all testcases with formatted delimiter stdin
-        String verFileName = languageFileNameRegistry.resolveVerificationScriptFileName(request.verificationScriptLanguage());
-        List<String> verStdins = new ArrayList<>(testcases.size());
-        for (int i = 0; i < testcases.size(); i++) {
-            verStdins.add(formatVerificationInput(testcases.get(i).getStdin(), referenceOutputs.get(i)));
+        // 3. Run verification script in batch across all testcases with 3-file args
+        List<String> stdins = new ArrayList<>(testcases.size());
+        for (TestcaseRequest tc : testcases) {
+            stdins.add(tc.getStdin() != null ? tc.getStdin() : "");
         }
 
-        executeGenericBatch(
-                "Verification script",
+        BatchCodeExecutionResult verBatchResult = runVerificationBatch(
                 request.verificationScriptLanguage(),
-                verFileName,
                 request.verificationScript(),
                 request.verificationScriptConstraints(),
-                verStdins
+                stdins,
+                referenceOutputs,
+                referenceOutputs
         );
+
+        if (verBatchResult == null || verBatchResult.results() == null) {
+            throw new BadRequestException("Verification script batch execution returned null result");
+        }
+
+        for (int i = 0; i < testcases.size(); i++) {
+            SimpleCodeExecutionResult verResult = verBatchResult.results().get(i);
+            validateExecutionResult("Verification script", i + 1, verResult);
+        }
 
         // Expected output is always the reference solution output (never the verification script's output)
         return referenceOutputs;
@@ -278,13 +286,48 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
     }
 
     // =========================================================================
-    // Delimiter Formatting Contract
+    // Verification Batch Execution (3-File Arguments)
     // =========================================================================
 
-    public static String formatVerificationInput(String stdin, String referenceStdout) {
-        String input = stdin != null ? stdin : "";
-        String output = referenceStdout != null ? referenceStdout : "";
-        return input + "\n" + VERIFICATION_DELIMITER + "\n" + output;
+    private BatchCodeExecutionResult runVerificationBatch(
+            Language verLanguage,
+            String verCode,
+            CodeExecutionConstraints verConstraints,
+            List<String> inputs,
+            List<String> candidates,
+            List<String> expecteds
+    ) {
+        int count = inputs.size();
+        String verFileName = languageFileNameRegistry.resolveVerificationScriptFileName(verLanguage);
+        Map<String, String> files = new HashMap<>();
+        files.put(verFileName, verCode);
+
+        List<BatchExecutionItem> items = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            String inputFile = "input_" + i + ".txt";
+            String candFile = "candidate_" + i + ".txt";
+            String expectedFile = "expected_" + i + ".txt";
+
+            files.put(inputFile, inputs.get(i) != null ? inputs.get(i) : "");
+            files.put(candFile, candidates.get(i) != null ? candidates.get(i) : "");
+            files.put(expectedFile, expecteds.get(i) != null ? expecteds.get(i) : "");
+
+            items.add(BatchExecutionItem.builder()
+                    .executablePath(verFileName)
+                    .args(List.of(inputFile, candFile, expectedFile))
+                    .stdin("")
+                    .constraints(verConstraints)
+                    .build());
+        }
+
+        BatchCodeExecutionRequest batchRequest = BatchCodeExecutionRequest.builder()
+                .language(verLanguage)
+                .files(files)
+                .constraints(verConstraints)
+                .executions(items)
+                .build();
+
+        return codeExecutionService.run(batchRequest);
     }
 
     public static boolean compareOutputs(String actual, String expected) {
@@ -553,29 +596,27 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
         }
 
         // Run verification script in batch across all testcases
-        String verFileName = languageFileNameRegistry.resolveVerificationScriptFileName(request.verificationScriptLanguage());
-        List<BatchExecutionItem> verItems = new ArrayList<>(count);
+        List<String> stdins = new ArrayList<>(count);
+        List<String> candOutputs = new ArrayList<>(count);
+        List<String> expectedOutputs = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             PreviewTestcaseRequest tc = request.testcases().get(i);
             SimpleCodeExecutionResult refRes = i < refBatchResult.results().size() ? refBatchResult.results().get(i) : null;
             String refOut = refRes != null && refRes.stdout() != null ? refRes.stdout() : "";
-            String verStdin = formatVerificationInput(tc != null ? tc.getStdin() : null, refOut);
-
-            verItems.add(BatchExecutionItem.builder()
-                    .executablePath(verFileName)
-                    .stdin(verStdin)
-                    .constraints(request.verificationScriptConstraints())
-                    .build());
+            stdins.add(tc != null && tc.getStdin() != null ? tc.getStdin() : "");
+            candOutputs.add(refOut);
+            expectedOutputs.add(refOut);
         }
 
-        BatchCodeExecutionRequest verBatchRequest = BatchCodeExecutionRequest.builder()
-                .language(request.verificationScriptLanguage())
-                .files(Map.of(verFileName, request.verificationScript()))
-                .constraints(request.verificationScriptConstraints())
-                .executions(verItems)
-                .build();
+        BatchCodeExecutionResult verBatchResult = runVerificationBatch(
+                request.verificationScriptLanguage(),
+                request.verificationScript(),
+                request.verificationScriptConstraints(),
+                stdins,
+                candOutputs,
+                expectedOutputs
+        );
 
-        BatchCodeExecutionResult verBatchResult = codeExecutionService.run(verBatchRequest);
         if (verBatchResult == null || verBatchResult.results() == null) {
             return buildErrorResponse("Verification script execution returned null batch result", count);
         }
@@ -891,7 +932,7 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
         // 1. Check if reference solution outputs are needed:
         // - Always needed if verification script is required (as fallback expected output on failure).
         // - Needed for any testcase where expectedOutput is null (e.g. custom testcases).
-        boolean hasRef = request.referenceLanguage() != null && StringUtils.hasText(request.referenceSolution());
+        boolean hasRef = request.referenceLanguage() != null && request.referenceSolution() != null && !request.referenceSolution().isBlank();
         boolean needsRefRun = hasRef && (request.requireVerificationScript()
                 || request.testcases().stream().anyMatch(tc -> tc.expectedOutput() == null));
 
@@ -1013,8 +1054,9 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
         // 3. For testcases where candidate succeeded (exitCode 0) and verification script is required, run verifier:
         Map<Integer, SimpleCodeExecutionResult> verifierResults = new HashMap<>();
         if (request.requireVerificationScript()) {
-            String verFileName = languageFileNameRegistry.resolveVerificationScriptFileName(request.verificationScriptLanguage());
-            List<BatchExecutionItem> verItems = new ArrayList<>();
+            List<String> verInputs = new ArrayList<>();
+            List<String> verCands = new ArrayList<>();
+            List<String> verExpecteds = new ArrayList<>();
             List<Integer> verIndices = new ArrayList<>();
 
             for (int i = 0; i < count; i++) {
@@ -1026,27 +1068,28 @@ public class CodingProblemJudgeServiceImpl implements CodingProblemJudgeService 
 
                 if (candPassed) {
                     String candStdout = candRes.stdout() != null ? candRes.stdout() : "";
-                    String verStdin = formatVerificationInput(tc.stdin(), candStdout);
-                    verItems.add(BatchExecutionItem.builder()
-                            .executablePath(verFileName)
-                            .stdin(verStdin)
-                            .constraints(request.verificationScriptConstraints())
-                            .build());
+                    String expectedOut = tc.expectedOutput() != null ? tc.expectedOutput() : "";
+                    String stdinData = tc.stdin() != null ? tc.stdin() : "";
+
+                    verInputs.add(stdinData);
+                    verCands.add(candStdout);
+                    verExpecteds.add(expectedOut);
                     verIndices.add(i);
                 }
             }
 
-            if (!verItems.isEmpty()) {
-                BatchCodeExecutionRequest verBatchRequest = BatchCodeExecutionRequest.builder()
-                        .language(request.verificationScriptLanguage())
-                        .files(Map.of(verFileName, request.verificationScript()))
-                        .constraints(request.verificationScriptConstraints())
-                        .executions(verItems)
-                        .build();
+            if (!verInputs.isEmpty()) {
+                BatchCodeExecutionResult verBatchResult = runVerificationBatch(
+                        request.verificationScriptLanguage(),
+                        request.verificationScript(),
+                        request.verificationScriptConstraints(),
+                        verInputs,
+                        verCands,
+                        verExpecteds
+                );
 
-                BatchCodeExecutionResult verBatchResult = codeExecutionService.run(verBatchRequest);
                 if (verBatchResult != null && verBatchResult.results() != null) {
-                    for (int v = 0; v < verItems.size(); v++) {
+                    for (int v = 0; v < verIndices.size(); v++) {
                         int originalIndex = verIndices.get(v);
                         if (v < verBatchResult.results().size()) {
                             verifierResults.put(originalIndex, verBatchResult.results().get(v));

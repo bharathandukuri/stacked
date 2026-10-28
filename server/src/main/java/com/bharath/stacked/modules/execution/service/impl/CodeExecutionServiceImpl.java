@@ -388,7 +388,12 @@
                                 ? item.getExecutablePath()
                                 : defaultExecutable;
 
-                        List<String> runCommand = wrapWithBash(language.run(targetExecutable, effectiveConstraints));
+                        List<String> baseCommand = language.run(targetExecutable, effectiveConstraints);
+                        List<String> fullCommand = new ArrayList<>(baseCommand);
+                        if (item.getArgs() != null && !item.getArgs().isEmpty()) {
+                            fullCommand.addAll(item.getArgs());
+                        }
+                        List<String> runCommand = wrapWithBash(fullCommand);
                         String stdin = item.getStdin() != null ? item.getStdin() : "";
     
                         IsolateExecutionResult isolateResult = isolateExecutionService.executeWithConstraints(

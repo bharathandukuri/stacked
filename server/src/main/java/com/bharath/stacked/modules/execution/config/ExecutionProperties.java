@@ -152,7 +152,7 @@ public class ExecutionProperties {
         private int maxBatchSize = 50;
 
         @Positive
-        private int maxFileCount = 20;
+        private int maxFileCount = 200;
 
         @Positive
         private long maxFileSizeBytes = 10485760L; // 10 MB

@@ -137,13 +137,15 @@ class CodingProblemCreationFlowIntegrationTest extends AbstractIntegrationTest {
 
         request.setRequireVerificationScript(true);
         request.setVerificationScriptLanguage("python-3.12");
-        // Verification script reads stdin and ref stdout separated by delimiter, then outputs canonical expected output
+        // Verification script reads input, candidate output, and expected output from sys.argv files
         request.setVerificationScript("""
                 import sys
-                content = sys.stdin.read()
-                parts = content.split("---STACKED_INPUT_END---")
-                stdin_input = parts[0].strip()
-                ref_out = parts[1].strip()
+                with open(sys.argv[1]) as f:
+                    stdin_input = f.read().strip()
+                with open(sys.argv[2]) as f:
+                    cand_out = f.read().strip()
+                with open(sys.argv[3]) as f:
+                    ref_out = f.read().strip()
                 print(f"CANONICAL_{stdin_input}")
                 """);
 

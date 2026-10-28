@@ -269,8 +269,8 @@ class CodingProblemJudgeServiceImplTest {
     }
 
     @Test
-    @DisplayName("Case B: Verification script required runs reference solution first, then formats verification stdin with delimiter and sets final output")
-    void testVerificationScriptSuccessWithDelimiter() {
+    @DisplayName("Case B: Verification script required runs reference solution first, then stages 3-file args for verification")
+    void testVerificationScriptSuccessWith3Files() {
         List<TestcaseRequest> sampleTc = List.of(new TestcaseRequest("4\n1 2 3 4", null));
         List<TestcaseRequest> hiddenTc = List.of(new TestcaseRequest("2\n5 10", null));
 
@@ -281,7 +281,7 @@ class CodingProblemJudgeServiceImplTest {
                 new CodeExecutionConstraints(2000L, 262144L),
                 true,
                 pythonLanguage,
-                "import sys; lines = sys.stdin.read().split('---STACKED_INPUT_END---'); print('VERIFIED_OK')",
+                "import sys; print('VERIFIED_OK')",
                 new CodeExecutionConstraints(3000L, 262144L),
                 sampleTc,
                 hiddenTc
@@ -319,8 +319,17 @@ class CodingProblemJudgeServiceImplTest {
         BatchCodeExecutionRequest verCall = captor.getAllValues().get(1);
 
         assertThat(verCall.getLanguage()).isEqualTo(pythonLanguage);
-        assertThat(verCall.getExecutions().get(0).getStdin()).isEqualTo("4\n1 2 3 4\n---STACKED_INPUT_END---\nraw_out_1\n");
-        assertThat(verCall.getExecutions().get(1).getStdin()).isEqualTo("2\n5 10\n---STACKED_INPUT_END---\nraw_out_2\n");
+        assertThat(verCall.getFiles().get("input_0.txt")).isEqualTo("4\n1 2 3 4");
+        assertThat(verCall.getFiles().get("candidate_0.txt")).isEqualTo("raw_out_1\n");
+        assertThat(verCall.getFiles().get("expected_0.txt")).isEqualTo("raw_out_1\n");
+        assertThat(verCall.getExecutions().get(0).getArgs()).containsExactly("input_0.txt", "candidate_0.txt", "expected_0.txt");
+        assertThat(verCall.getExecutions().get(0).getStdin()).isEqualTo("");
+
+        assertThat(verCall.getFiles().get("input_1.txt")).isEqualTo("2\n5 10");
+        assertThat(verCall.getFiles().get("candidate_1.txt")).isEqualTo("raw_out_2\n");
+        assertThat(verCall.getFiles().get("expected_1.txt")).isEqualTo("raw_out_2\n");
+        assertThat(verCall.getExecutions().get(1).getArgs()).containsExactly("input_1.txt", "candidate_1.txt", "expected_1.txt");
+        assertThat(verCall.getExecutions().get(1).getStdin()).isEqualTo("");
     }
 
     @Test

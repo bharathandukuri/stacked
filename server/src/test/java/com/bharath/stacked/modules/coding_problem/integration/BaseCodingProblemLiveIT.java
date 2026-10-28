@@ -178,13 +178,10 @@ public abstract class BaseCodingProblemLiveIT extends AbstractIntegrationTest {
         String verifierScript = """
                 import sys
 
-                raw = sys.stdin.read()
-                parts = raw.split("---STACKED_INPUT_END---")
-                if len(parts) != 2:
-                    sys.exit(1)
-
-                stdin_data = parts[0].strip().split()
-                cand_stdout = parts[1].strip().split()
+                with open(sys.argv[1]) as f:
+                    stdin_data = f.read().strip().split()
+                with open(sys.argv[2]) as f:
+                    cand_stdout = f.read().strip().split()
 
                 if len(cand_stdout) != 2:
                     assert False, f"Expected 2 indices, got {cand_stdout}"
@@ -410,13 +407,10 @@ public abstract class BaseCodingProblemLiveIT extends AbstractIntegrationTest {
         String verifierScript = """
                 import sys, math
 
-                raw = sys.stdin.read()
-                parts = raw.split("---STACKED_INPUT_END---")
-                if len(parts) != 2:
-                    sys.exit(1)
-
-                in_tokens = [float(x) for x in parts[0].strip().split()]
-                out_tokens = [float(x) for x in parts[1].strip().split()]
+                with open(sys.argv[1], 'r') as f:
+                    in_tokens = [float(x) for x in f.read().strip().split()]
+                with open(sys.argv[2], 'r') as f:
+                    out_tokens = [float(x) for x in f.read().strip().split()]
 
                 assert len(out_tokens) == 1, f"Expected 1 float output, got {len(out_tokens)}"
 
@@ -481,13 +475,10 @@ public abstract class BaseCodingProblemLiveIT extends AbstractIntegrationTest {
         String verifierScript = """
                 import sys
 
-                raw = sys.stdin.read()
-                parts = raw.split("---STACKED_INPUT_END---")
-                if len(parts) != 2:
-                    sys.exit(1)
-
-                n = int(parts[0].strip())
-                cand_primes = set(int(x) for x in parts[1].strip().split())
+                with open(sys.argv[1], 'r') as f:
+                    n = int(f.read().strip())
+                with open(sys.argv[2], 'r') as f:
+                    cand_primes = set(int(x) for x in f.read().strip().split())
 
                 def get_factors(num):
                     d = 2

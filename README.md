@@ -21,7 +21,37 @@
 
 ## Quickstart
 
-### 1. Start Databases (Docker Compose)
+### 🚀 One-Command Deployment
+
+To deploy the entire stack (MongoDB, Redis, Backend, Frontend, and execution sandboxes) with health checks:
+
+```bash
+./deploy.sh
+```
+
+Or deploy and immediately seed 15 foundational coding problems:
+
+```bash
+./deploy.sh --seed
+```
+
+- **Web Application**: `http://localhost:3000`
+- **Backend API**: `http://localhost:8080/api`
+- **Default Admin Login**: `admin@stacked.com` / `Admin@123456`
+
+#### Useful Management Commands:
+```bash
+./deploy.sh --status    # Check status and health
+./deploy.sh --logs      # Follow live container logs
+./deploy.sh --restart   # Restart services
+./deploy.sh --down      # Stop all containers
+```
+
+---
+
+### Manual Development Setup
+
+#### 1. Start Databases (Docker Compose)
 
 ```bash
 docker compose up -d

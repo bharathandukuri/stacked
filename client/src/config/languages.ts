@@ -25,8 +25,24 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "javascript",
     defaultExtension: ".js",
-    defaultStarterCode: `// File: solution.js\n`,
-    defaultValidatorCode: `// File: verifier.js\n`,
+    defaultStarterCode: `// File: solution.js
+`,
+    defaultValidatorCode: `// File: verifier.js
+const fs = require('fs');
+
+// File paths passed via CLI arguments:
+// argv[2]: testcase input file
+// argv[3]: candidate output file
+// argv[4]: reference / expected output file
+const [,, inputFile, candidateOutputFile, expectedOutputFile] = process.argv;
+
+const input = fs.readFileSync(inputFile, 'utf-8');
+const candidateOutput = fs.readFileSync(candidateOutputFile, 'utf-8');
+// const expectedOutput = fs.readFileSync(expectedOutputFile, 'utf-8');
+
+// Exit 0 for ACCEPTED, process.exit(1) for WRONG ANSWER
+process.exit(0);
+`,
   },
   {
     id: "python-3.12",
@@ -34,8 +50,29 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "python",
     defaultExtension: ".py",
-    defaultStarterCode: `# File: solution.py\n`,
-    defaultValidatorCode: `# File: verifier.py\n`,
+    defaultStarterCode: `# File: solution.py
+`,
+    defaultValidatorCode: `# File: verifier.py
+import sys
+
+# File paths passed via CLI arguments:
+# sys.argv[1]: testcase input file
+# sys.argv[2]: candidate output file
+# sys.argv[3]: reference / expected output file
+input_path, candidate_path, expected_path = sys.argv[1], sys.argv[2], sys.argv[3]
+
+with open(input_path, 'r') as f:
+    testcase_input = f.read()
+
+with open(candidate_path, 'r') as f:
+    candidate_output = f.read()
+
+# with open(expected_path, 'r') as f:
+#     expected_output = f.read()
+
+# Exit 0 for ACCEPTED, sys.exit(1) for WRONG ANSWER
+sys.exit(0)
+`,
   },
   {
     id: "java-21",
@@ -43,8 +80,26 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "java",
     defaultExtension: ".java",
-    defaultStarterCode: `// File: Solution.java\n`,
-    defaultValidatorCode: `// File: Verifier.java\n`,
+    defaultStarterCode: `// File: Solution.java
+`,
+    defaultValidatorCode: `// File: Verifier.java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+public class Verifier {
+    public static void main(String[] args) throws Exception {
+        // args[0]: testcase input file
+        // args[1]: candidate output file
+        // args[2]: reference / expected output file
+        String input = Files.readString(Path.of(args[0]));
+        String candidateOutput = Files.readString(Path.of(args[1]));
+        // String expectedOutput = Files.readString(Path.of(args[2]));
+
+        // System.exit(0) for ACCEPTED, System.exit(1) for WRONG ANSWER
+        System.exit(0);
+    }
+}
+`,
   },
   {
     id: "cpp-23",
@@ -52,8 +107,28 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "cpp",
     defaultExtension: ".cpp",
-    defaultStarterCode: `// File: solution.cpp\n`,
-    defaultValidatorCode: `// File: verifier.cpp\n`,
+    defaultStarterCode: `// File: solution.cpp
+`,
+    defaultValidatorCode: `// File: verifier.cpp
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <cstdlib>
+
+int main(int argc, char* argv[]) {
+    // argv[1]: testcase input file
+    // argv[2]: candidate output file
+    // argv[3]: reference / expected output file
+    if (argc < 3) return 1;
+
+    std::ifstream in(argv[1]);
+    std::ifstream cand(argv[2]);
+    // std::ifstream exp(argv[3]);
+
+    // return 0 for ACCEPTED, exit(1) for WRONG ANSWER
+    return 0;
+}
+`,
   },
   {
     id: "c-17",
@@ -61,8 +136,28 @@ export const LANGUAGE_REGISTRY: readonly LanguageConfig[] = [
     category: "GENERIC",
     monacoLanguage: "c",
     defaultExtension: ".c",
-    defaultStarterCode: `// File: solution.c\n`,
-    defaultValidatorCode: `// File: verifier.c\n`,
+    defaultStarterCode: `// File: solution.c
+`,
+    defaultValidatorCode: `// File: verifier.c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char* argv[]) {
+    // argv[1]: testcase input file
+    // argv[2]: candidate output file
+    // argv[3]: reference / expected output file
+    if (argc < 3) return 1;
+
+    FILE* in = fopen(argv[1], "r");
+    FILE* cand = fopen(argv[2], "r");
+    // FILE* exp = fopen(argv[3], "r");
+
+    // return 0 for ACCEPTED, exit(1) for WRONG ANSWER
+    if (in) fclose(in);
+    if (cand) fclose(cand);
+    return 0;
+}
+`,
   },
 
   // --- Database Engines (4 supported by backend) ---
