@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
 export interface LineNumberedViewerProps {
   content?: string | null;
@@ -43,12 +43,10 @@ export function LineNumberedViewer({
 
   const handleCopy = React.useCallback(async () => {
     if (!rawText) return;
-    try {
-      await navigator.clipboard.writeText(rawText);
+    const ok = await copyToClipboard(rawText);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
     }
   }, [rawText]);
 

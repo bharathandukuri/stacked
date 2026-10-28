@@ -2,7 +2,7 @@
   <img src="client/public/logo.svg" width="96" height="96" alt="Stacked Logo" />
 </p>
 
-<h1 align="center">Stacked</h1>
+<h1 align="center">Stacked v1.0</h1>
 
 <p align="center">
   A clean, production-ready full-stack application built with <strong>Spring Boot 4</strong> (Java 25) and <strong>React 19</strong> (TanStack Router & Query, Tailwind CSS v4, shadcn/ui).

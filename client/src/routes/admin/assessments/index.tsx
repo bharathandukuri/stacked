@@ -45,6 +45,7 @@ import {
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { ConfirmActionDialog } from "@/components/common/confirm-action-dialog"
 import { toast } from "@/components/ui/toast"
+import { copyToClipboard } from "@/lib/utils"
 import {
   useIsAuthenticated,
   useIsInitialized,
@@ -134,27 +135,31 @@ export function AssessmentsPage() {
     setPage(0)
   }
 
-  const handleCopyCode = (code: string, id: string) => {
-    navigator.clipboard.writeText(code)
-    setCopiedId(`code-${id}`)
-    setTimeout(() => setCopiedId(null), 2000)
-    toast.add({
-      title: "Code Copied",
-      description: `Invitation code ${code} copied to clipboard!`,
-      type: "success",
-    })
+  const handleCopyCode = async (code: string, id: string) => {
+    const ok = await copyToClipboard(code)
+    if (ok) {
+      setCopiedId(`code-${id}`)
+      setTimeout(() => setCopiedId(null), 2000)
+      toast.add({
+        title: "Code Copied",
+        description: `Invitation code ${code} copied to clipboard!`,
+        type: "success",
+      })
+    }
   }
 
-  const handleCopyJoinLink = (code: string, id: string) => {
+  const handleCopyJoinLink = async (code: string, id: string) => {
     const url = `${window.location.origin}/assessments/join?code=${encodeURIComponent(code)}`
-    navigator.clipboard.writeText(url)
-    setCopiedId(`link-${id}`)
-    setTimeout(() => setCopiedId(null), 2000)
-    toast.add({
-      title: "Join Link Copied",
-      description: "Candidate invitation link copied to clipboard!",
-      type: "success",
-    })
+    const ok = await copyToClipboard(url)
+    if (ok) {
+      setCopiedId(`link-${id}`)
+      setTimeout(() => setCopiedId(null), 2000)
+      toast.add({
+        title: "Join Link Copied",
+        description: "Candidate invitation link copied to clipboard!",
+        type: "success",
+      })
+    }
   }
 
   const getStatusBadge = (status: AssessmentStatus) => {

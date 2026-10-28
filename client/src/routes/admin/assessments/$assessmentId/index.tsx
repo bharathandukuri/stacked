@@ -36,6 +36,7 @@ import {
   useAttemptAuditTrail,
 } from "@/hooks/use-assessments"
 import { toast } from "@/components/ui/toast"
+import { copyToClipboard } from "@/lib/utils"
 
 export const Route = createFileRoute("/admin/assessments/$assessmentId/")({
   component: AssessmentDetailPage,
@@ -110,27 +111,31 @@ export function AssessmentDetailPage() {
   const generateCodeMutation = useGenerateInvitationCode(assessmentId)
   const revokeCodeMutation = useRevokeInvitationCode(assessmentId)
 
-  const handleCopyCode = (code: string) => {
-    navigator.clipboard.writeText(code)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
-    toast.add({
-      title: "Code Copied",
-      description: `Invitation code ${code} copied to clipboard!`,
-      type: "success",
-    })
+  const handleCopyCode = async (code: string) => {
+    const ok = await copyToClipboard(code)
+    if (ok) {
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
+      toast.add({
+        title: "Code Copied",
+        description: `Invitation code ${code} copied to clipboard!`,
+        type: "success",
+      })
+    }
   }
 
-  const handleCopyJoinLink = (code: string) => {
+  const handleCopyJoinLink = async (code: string) => {
     const url = `${window.location.origin}/assessments/join?code=${encodeURIComponent(code)}`
-    navigator.clipboard.writeText(url)
-    setCopiedLink(true)
-    setTimeout(() => setCopiedLink(false), 2000)
-    toast.add({
-      title: "Join Link Copied",
-      description: "Candidate invitation link copied to clipboard!",
-      type: "success",
-    })
+    const ok = await copyToClipboard(url)
+    if (ok) {
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2000)
+      toast.add({
+        title: "Join Link Copied",
+        description: "Candidate invitation link copied to clipboard!",
+        type: "success",
+      })
+    }
   }
 
   // Parsed candidate emails

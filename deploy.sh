@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Stacked - Simplified One-Command Deployment Script
+# Stacked v1.0 - Simplified One-Command Deployment Script
 # ==============================================================================
 # Usage:
 #   ./deploy.sh             Deploy full stack (builds & starts all containers)
@@ -52,7 +52,7 @@ banner() {
     echo "  ███████╗   ██║   ███████║██║     █████╔╝ █████╗  ██║  ██║"
     echo "  ╚════██║   ██║   ██╔══██║██║     ██╔═██╗ ██╔══╝  ██║  ██║"
     echo "  ███████║   ██║   ██║  ██║╚██████╗██║  ██╗███████╗██████╔╝"
-    echo "  ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═════╝ "
+    echo "  ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═════╝   v1.0"
     echo -e "${NC}"
 }
 
@@ -187,7 +187,7 @@ seed_database() {
 print_summary() {
     echo ""
     echo -e "${BOLD}${GREEN}======================================================================${NC}"
-    echo -e "${BOLD}${GREEN}           🎉 STACKED APPLICATION DEPLOYED SUCCESSFULLY!             ${NC}"
+    echo -e "${BOLD}${GREEN}         🎉 STACKED v1.0 APPLICATION DEPLOYED SUCCESSFULLY!          ${NC}"
     echo -e "${BOLD}${GREEN}======================================================================${NC}"
     echo ""
     echo -e "  ${BOLD}Web Application:${NC}   ${CYAN}http://localhost:3000${NC}"

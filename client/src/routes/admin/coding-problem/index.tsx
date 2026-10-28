@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { toast } from "@/components/ui/toast"
+import { copyToClipboard } from "@/lib/utils"
 import {
   useIsAuthenticated,
   useIsInitialized,
@@ -188,15 +189,17 @@ export function AdminCodingProblemsPage() {
     }
   }
 
-  const handleCopySlug = (slug: string) => {
-    navigator.clipboard.writeText(slug)
-    setCopiedSlug(slug)
-    toast.add({
-      title: "Slug Copied",
-      description: `Copied "${slug}" to clipboard.`,
-      type: "info",
-    })
-    setTimeout(() => setCopiedSlug(null), 2000)
+  const handleCopySlug = async (slug: string) => {
+    const ok = await copyToClipboard(slug)
+    if (ok) {
+      setCopiedSlug(slug)
+      toast.add({
+        title: "Slug Copied",
+        description: `Copied "${slug}" to clipboard.`,
+        type: "info",
+      })
+      setTimeout(() => setCopiedSlug(null), 2000)
+    }
   }
 
   const hasActiveFilters =

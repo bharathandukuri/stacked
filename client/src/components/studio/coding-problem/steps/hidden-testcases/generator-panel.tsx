@@ -42,7 +42,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 import { useCodingProblemStore } from "../../store";
 import {
   getGenericLanguages,
@@ -179,13 +179,15 @@ export function GeneratorPanel({ className }: GeneratorPanelProps) {
   }, [actions]);
 
   // Copy current previewed testcase
-  const handleCopyPreview = useCallback(() => {
+  const handleCopyPreview = useCallback(async () => {
     if (!parseResult || !parseResult.testcases[selectedPreviewIndex]) return;
-    navigator.clipboard.writeText(
+    const ok = await copyToClipboard(
       parseResult.testcases[selectedPreviewIndex]
     );
-    setCopiedPreview(true);
-    setTimeout(() => setCopiedPreview(false), 1500);
+    if (ok) {
+      setCopiedPreview(true);
+      setTimeout(() => setCopiedPreview(false), 1500);
+    }
   }, [parseResult, selectedPreviewIndex]);
 
   // Clean-slate initial code for generator
