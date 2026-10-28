@@ -12,7 +12,7 @@ services:
     volumes:
       - mongodb_data:/data/db
     networks:
-      - stacked-network
+      - backend-network
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -33,7 +33,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - stacked-network
+      - backend-network
     healthcheck:
       test:
         [
@@ -48,13 +48,27 @@ services:
       retries: 5
       start_period: 5s
 
+  # Dedicated Docker-in-Docker (DinD) execution daemon
+  dind:
+    image: docker:27-dind
+    container_name: stacked-dind
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    ports:
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - dind_data:/var/lib/docker
+    networks:
+      - backend-network
+
+  # Application Backend (connected to both frontend-network and backend-network)
   server:
     build:
       context: ./server
       dockerfile: Dockerfile
     container_name: stacked-server
-    group_add:
-      - "${DOCKER_GID:-999}"
     restart: unless-stopped
     ports:
       - "${SERVER_PORT:-8080}:8080"
@@ -62,6 +76,7 @@ services:
       MONGODB_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME:-stacked_admin}:${MONGO_INITDB_ROOT_PASSWORD:-stacked_secret}@mongodb:27017/${MONGO_INITDB_DATABASE:-stacked_db}?authSource=admin
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-stacked_redis_secret}
+      DOCKER_HOST: ${DOCKER_HOST:-tcp://dind:2375}
       JWT_SECRET: ${JWT_SECRET:-}
       ADMIN_DEFAULT_ENABLED: ${ADMIN_DEFAULT_ENABLED:-true}
       ADMIN_DEFAULT_EMAIL: ${ADMIN_DEFAULT_EMAIL:-}
@@ -69,16 +84,19 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - server_uploads:/app/uploads
     depends_on:
       mongodb:
         condition: service_healthy
       redis:
         condition: service_healthy
+      dind:
+        condition: service_started
     networks:
-      - stacked-network
+      - frontend-network
+      - backend-network
 
+  # Application Frontend (isolated in frontend-network, cannot reach databases or dind)
   client:
     build:
       context: ./client
@@ -90,7 +108,7 @@ services:
     depends_on:
       - server
     networks:
-      - stacked-network
+      - frontend-network
 
 volumes:
   mongodb_data:
@@ -99,7 +117,11 @@ volumes:
     driver: local
   server_uploads:
     driver: local
+  dind_data:
+    driver: local
 
 networks:
-  stacked-network:
+  frontend-network:
+    driver: bridge
+  backend-network:
     driver: bridge

@@ -103,16 +103,6 @@ check_env() {
             log_success "Generated random 256-bit JWT_SECRET for security."
         fi
     fi
-
-    # Auto-detect host Docker socket GID so non-root container user can access it
-    if [ -S /var/run/docker.sock ]; then
-        local host_gid
-        host_gid=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || getent group docker | cut -d: -f3 || true)
-        if [ -n "${host_gid}" ]; then
-            export DOCKER_GID="${host_gid}"
-            log_info "Detected host Docker socket group ID: ${DOCKER_GID}"
-        fi
-    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -244,14 +234,39 @@ do_deploy() {
     detect_docker
     check_env
 
-    # 1. Ensure execution sandbox images exist
+    # 1. Start DinD execution service first
+    log_info "Starting DinD execution daemon on backend-network..."
+    ${COMPOSE_CMD} up -d dind
+
+    # Wait for DinD daemon readiness
+    log_info "Waiting for DinD daemon readiness on tcp://127.0.0.1:2375..."
+    local dind_ready=false
+    for i in {1..30}; do
+        if docker -H tcp://127.0.0.1:2375 version >/dev/null 2>&1; then
+            dind_ready=true
+            break
+        fi
+        sleep 1
+    done
+
+    if [ "${dind_ready}" = "true" ]; then
+        log_success "DinD daemon is ready."
+        export DOCKER_HOST="tcp://127.0.0.1:2375"
+    else
+        log_warn "DinD not responding on tcp://127.0.0.1:2375 yet; continuing with environment config."
+    fi
+
+    # 2. Ensure execution sandbox images exist in DinD
     if [ "${force_images}" = "true" ]; then
         ensure_execution_images --force
     else
         ensure_execution_images
     fi
 
-    # 2. Build & launch application stack
+    # Unset DOCKER_HOST so subsequent compose commands target the host Docker engine
+    unset DOCKER_HOST
+
+    # 3. Build & launch application stack
     echo ""
     log_info "Building and starting Stacked containers via ${COMPOSE_CMD}..."
     ${COMPOSE_CMD} up -d --build
