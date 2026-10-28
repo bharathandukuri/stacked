@@ -103,6 +103,16 @@ check_env() {
             log_success "Generated random 256-bit JWT_SECRET for security."
         fi
     fi
+
+    # Auto-detect host Docker socket GID so non-root container user can access it
+    if [ -S /var/run/docker.sock ]; then
+        local host_gid
+        host_gid=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || getent group docker | cut -d: -f3 || true)
+        if [ -n "${host_gid}" ]; then
+            export DOCKER_GID="${host_gid}"
+            log_info "Detected host Docker socket group ID: ${DOCKER_GID}"
+        fi
+    fi
 }
 
 # ------------------------------------------------------------------------------
